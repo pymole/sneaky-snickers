@@ -34,8 +34,10 @@ fn start() -> Status {
     Status::Ok
 }
 
-#[post("/move", data = "<req>")]
-fn movement(req: Json<requests::Turn>) -> Json<responses::Move> {
+#[post("/move", data = "<turn>")]
+fn movement(turn: Json<requests::Turn>) -> Json<responses::Move> {
+    
+
     let movement = responses::Move::new(responses::Movement::Right);
     // Logic goes here
     Json(movement)
