@@ -17,16 +17,15 @@ pub struct State {
 #[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
 pub struct Game {
     pub id: String,
-    // ruleset is not sent for some reason
-    // pub ruleset: Ruleset,
+    pub ruleset: Ruleset,
     pub timeout: i32,
 }
 
-// #[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
-// pub struct Ruleset {
-//     pub name: String,
-//     pub version: String,
-// }
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
+pub struct Ruleset {
+    pub name: String,
+    pub version: String,
+}
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
 pub struct Board {
@@ -43,7 +42,7 @@ pub struct Snake {
     pub name: String,
     pub health: i32,
     pub body: Vec<Point>,
-    pub latency: i32,
+    pub latency: String,
     pub head: Point,
     pub length: u32,
     pub shout: String,
