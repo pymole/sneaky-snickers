@@ -7,3 +7,5 @@ edition = "2018"
 [dependencies]
 rocket = { version = "0.5.0-rc.1", features = ["json"] }
 serde = {version = "1.0.126", features = ["derive"]}
+env_logger = "0.8.4"
+log = "0.4.14"
