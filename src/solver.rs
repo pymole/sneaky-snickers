@@ -12,7 +12,7 @@ const MOVEMENTS: [Movement; 4] = [
 pub fn get_best_movement(state: State) -> Movement {
     let head = state.you.head;
     let nearest_food = get_nearest_target(head, state.board.food);
-    
+
     let mut busy_positions = HashSet::new();
     for snake in state.board.snakes {
         for part in snake.body {
@@ -49,7 +49,7 @@ fn get_nearest_target(position: Point, targets: Vec<Point>) -> Point {
             nearest_distance = distance;
         }
     }
-    
+
     nearest
 }
 
