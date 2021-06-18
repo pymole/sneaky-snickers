@@ -53,8 +53,8 @@ fn end(body: String) -> Status {
 
 #[launch]
 fn rocket() -> _ {
-    use env_logger;
-    env_logger::init();
+    use env_logger::Env;
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
     rocket::build().mount("/", routes![index, start, movement, end])
 }
