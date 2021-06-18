@@ -1,12 +1,12 @@
 use serde::{Serialize, Deserialize};
 
-#[derive(Deserialize, PartialEq, Eq, Hash, Debug, Copy, Clone)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Hash, Debug, Copy, Clone)]
 pub struct Point {
     pub x: i32,
     pub y: i32,
 }
 
-#[derive(Deserialize, PartialEq, Eq, Debug, Clone)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
 pub struct State {
     pub game: Game,
     pub turn: u32,
@@ -14,20 +14,21 @@ pub struct State {
     pub you: Snake,
 }
 
-#[derive(Deserialize, PartialEq, Eq, Debug, Clone)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
 pub struct Game {
     pub id: String,
-    pub ruleset: Ruleset,
+    // ruleset is not sent for some reason
+    // pub ruleset: Ruleset,
     pub timeout: i32,
 }
 
-#[derive(Deserialize, PartialEq, Eq, Debug, Clone)]
-pub struct Ruleset {
-    pub name: String,
-    pub version: String,
-}
+// #[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
+// pub struct Ruleset {
+//     pub name: String,
+//     pub version: String,
+// }
 
-#[derive(Deserialize, PartialEq, Eq, Debug, Clone)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
 pub struct Board {
     pub height: i32,
     pub width: i32,
@@ -36,13 +37,13 @@ pub struct Board {
     pub snakes: Vec<Snake>,
 }
 
-#[derive(Deserialize, PartialEq, Eq, Debug, Clone)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
 pub struct Snake {
     pub id: String,
     pub name: String,
     pub health: i32,
     pub body: Vec<Point>,
-    pub latency: String,
+    pub latency: i32,
     pub head: Point,
     pub length: u32,
     pub shout: String,
