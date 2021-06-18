@@ -1,4 +1,5 @@
-use serde::{Deserialize, Serialize};
+use rocket::serde::{Deserialize, Serialize};
+use crate::objects::Movement;
 
 #[derive(Serialize, Debug)]
 pub struct Info {
@@ -89,81 +90,3 @@ impl Move {
     }
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
-#[serde(rename_all(serialize = "lowercase", deserialize = "lowercase"))]
-pub enum Movement {
-    Right,
-    Left,
-    Up,
-    Down,
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn serialize_start() {
-        let response = Start {
-            color: "#ff00ff".to_string(),
-            head_type: HeadType::Bendr,
-            tail_type: TailType::Pixel,
-        };
-
-        let correct_serialized_response =
-            "{\"color\":\"#ff00ff\",\"headType\":\"bendr\",\"tailType\":\"pixel\"}";
-
-        println!("{}", correct_serialized_response);
-
-        match serde_json::to_string(&response) {
-            Err(e) => {
-                eprintln!("Returned value is Err: {}", e);
-                assert!(false);
-            }
-            Ok(val) => {
-                assert_eq!(correct_serialized_response, val);
-            }
-        }
-    }
-
-    #[test]
-    fn serialize_move() {
-        let response = Move {
-            movement: Movement::Right,
-            shout: None
-        };
-
-        let correct_serialized_response = "{\"move\":\"right\"}";
-
-        match serde_json::to_string(&response) {
-            Err(e) => {
-                eprintln!("Returned value is Err: {}", e);
-                assert!(false);
-            }
-            Ok(val) => {
-                assert_eq!(correct_serialized_response, val);
-            }
-        }
-    }
-
-    #[test]
-    fn deserialize_start() {
-        let string = "{\"color\":\"#ff00ff\",\"headType\":\"bendr\",\"tailType\":\"pixel\"}";
-
-        let deserialized_start = serde_json::from_str(&string).unwrap();
-        let correct_start = Start::new(String::from("#ff00ff"), HeadType::Bendr, TailType::Pixel);
-        assert_eq!(correct_start, deserialized_start);
-    }
-
-    #[test]
-    fn deserialize_move() {
-        let string = "{\"move\":\"right\"}";
-
-        let deserialized_move = serde_json::from_str(&string).unwrap();
-        let correct_move = Move {
-            movement: Movement::Right,
-            shout: None,
-        };
-        assert_eq!(correct_move, deserialized_move);
-    }
-}

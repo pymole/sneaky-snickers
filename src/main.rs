@@ -1,21 +1,18 @@
 #![feature(proc_macro_hygiene, decl_macro)]
 
-// Modules
-#[allow(dead_code)]
-mod requests;
-#[allow(dead_code)]
+mod objects;
 mod responses;
-#[cfg(test)]
-mod test;
+mod solver;
 
-// External crates
 #[macro_use]
 extern crate rocket;
-extern crate rocket_contrib;
 
-// Uses
 use rocket::http::Status;
-use rocket_contrib::json::Json;
+use rocket::serde::json::Json;
+
+use crate::solver::get_best_movement;
+use crate::responses::Move;
+
 
 #[get("/")]
 fn index() -> Json<responses::Info> {
@@ -34,12 +31,9 @@ fn start() -> Status {
     Status::Ok
 }
 
-#[post("/move", data = "<turn>")]
-fn movement(turn: Json<requests::Turn>) -> Json<responses::Move> {
-    
-
-    let movement = responses::Move::new(responses::Movement::Right);
-    // Logic goes here
+#[post("/move", data = "<state>")]
+fn movement(state: Json<objects::State>) -> Json<responses::Move> {
+    let movement = Move::new(get_best_movement((*state).clone()));
     Json(movement)
 }
 
@@ -48,10 +42,7 @@ fn end() -> Status {
     Status::Ok
 }
 
-fn rocket() -> rocket::Rocket {
-    rocket::ignite().mount("/", routes![index, start, movement, end])
-}
-
-fn main() {
-    rocket().launch();
+#[launch]
+fn rocket() -> _ {
+    rocket::build().mount("/", routes![index, start, movement, end])
 }
