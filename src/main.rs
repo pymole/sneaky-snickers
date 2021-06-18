@@ -7,8 +7,11 @@ mod solver;
 #[macro_use]
 extern crate rocket;
 
+use log::{info};
+
 use rocket::http::Status;
 use rocket::serde::json::Json;
+use rocket::serde::json::serde_json;
 
 use crate::solver::get_best_movement;
 use crate::responses::Move;
@@ -26,19 +29,25 @@ fn index() -> Json<responses::Info> {
     })
 }
 
-#[post("/start", data = "<_state>")]
-fn start(_state: Json<objects::State>) -> Status {
+#[post("/start", data = "<body>")]
+fn start(body: String) -> Status {
+    info!("/start {}", body);
     Status::Ok
 }
 
-#[post("/move", data = "<state>")]
-fn movement(state: Json<objects::State>) -> Json<responses::Move> {
-    let movement = Move::new(get_best_movement((*state).clone()));
+#[post("/move", data = "<body>")]
+fn movement(body: String) -> Json<responses::Move> {
+    info!("/move {}", body);
+
+    let state = serde_json::from_str::<objects::State>(&body).unwrap();
+    let movement = Move::new(get_best_movement(state));
+
     Json(movement)
 }
 
-#[post("/end", data = "<_state>")]
-fn end(_state: Json<objects::State>) -> Status {
+#[post("/end", data = "<body>")]
+fn end(body: String) -> Status {
+    info!("/end {}", body);
     Status::Ok
 }
 
