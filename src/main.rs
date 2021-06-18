@@ -18,7 +18,7 @@ use crate::responses::Move;
 fn index() -> Json<responses::Info> {
     Json(responses::Info {
         apiversion: "1".to_string(),
-        author: None,
+        author: Some("Snickers".to_string()),
         color: Some("#b7410e".to_string()),
         head: None,
         tail: None,
@@ -26,8 +26,8 @@ fn index() -> Json<responses::Info> {
     })
 }
 
-#[post("/start")]
-fn start() -> Status {
+#[post("/start", data = "<_state>")]
+fn start(_state: Json<objects::State>) -> Status {
     Status::Ok
 }
 
@@ -37,8 +37,8 @@ fn movement(state: Json<objects::State>) -> Json<responses::Move> {
     Json(movement)
 }
 
-#[post("/end")]
-fn end() -> Status {
+#[post("/end", data = "<_state>")]
+fn end(_state: Json<objects::State>) -> Status {
     Status::Ok
 }
 

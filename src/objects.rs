@@ -17,7 +17,14 @@ pub struct State {
 #[derive(Deserialize, PartialEq, Eq, Debug, Clone)]
 pub struct Game {
     pub id: String,
+    pub ruleset: Ruleset,
     pub timeout: i32,
+}
+
+#[derive(Deserialize, PartialEq, Eq, Debug, Clone)]
+pub struct Ruleset {
+    pub name: String,
+    pub version: String,
 }
 
 #[derive(Deserialize, PartialEq, Eq, Debug, Clone)]
@@ -25,8 +32,8 @@ pub struct Board {
     pub height: i32,
     pub width: i32,
     pub food: Vec<Point>,
-    pub snakes: Vec<Snake>,
     pub hazards: Vec<Point>,
+    pub snakes: Vec<Snake>,
 }
 
 #[derive(Deserialize, PartialEq, Eq, Debug, Clone)]
@@ -35,10 +42,11 @@ pub struct Snake {
     pub name: String,
     pub health: i32,
     pub body: Vec<Point>,
+    pub latency: String,
     pub head: Point,
     pub length: u32,
     pub shout: String,
-    pub latency: String,
+    pub squad: String,
 }
 
 

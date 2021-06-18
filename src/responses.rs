@@ -4,7 +4,7 @@ use crate::objects::Movement;
 #[derive(Serialize, Debug)]
 pub struct Info {
     pub apiversion: String,
-    #[serde(skip_serializing_if = "Option::is_none")]    
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub author: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
@@ -16,30 +16,13 @@ pub struct Info {
     pub version: Option<String>,
 }
 
+// See https://play.battlesnake.com/references/customizations/ for images
 #[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
-pub struct Start {
-    pub color: String,
-    #[serde(rename = "headType")]
-    pub head_type: HeadType,
-    #[serde(rename = "tailType")]
-    pub tail_type: TailType,
-}
-
-impl Start {
-    pub fn new(color: String, head_type: HeadType, tail_type: TailType) -> Start {
-        Start {
-            color,
-            head_type,
-            tail_type,
-        }
-    }
-}
-
-// TODO: Make all the head types
-#[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "kebab-case")]
 pub enum HeadType {
-    Regular,
+    Default,
+
+    // Standard
     Beluga,
     Bendr,
     Dead,
@@ -47,33 +30,58 @@ pub enum HeadType {
     Fang,
     Pixel,
     Safe,
-    #[serde(rename = "sand-worm")]
     SandWorm,
     Shades,
+    Silly,
     Smile,
     Tongue,
+
+    // Battlesnake Winter Classic 2019
+    Bonhomme,
+    Earmuffs,
+    Rudolph,
+    Scarf,
+    Ski,
+    Snowman,
+    SnowWorm,
+
+    // Stay Home And Code 2020
+    Caffeine,
+    Gamer,
+    TigerKing,
+    Workout,
 }
 
-// TODO: Make all the tail types
+// See https://play.battlesnake.com/references/customizations/ for images
 #[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "kebab-case")]
 pub enum TailType {
-    Regular,
-    #[serde(rename = "block-bum")]
+    Default,
+
+    // Standard
     BlockBum,
     Bolt,
     Curled,
-    #[serde(rename = "fat-rattle")]
     FatRattle,
     Freckled,
     Hook,
     Pixel,
-    #[serde(rename = "round-bum")]
     RoundBum,
     Sharp,
     Skinny,
-    #[serde(rename = "small-rattle")]
     SmallRattle,
+
+    // Battlesnake Winter Classic 2019
+    Bonhomme,
+    Flake,
+    IceSkate,
+    Present,
+
+    // Stay Home And Code 2020
+    Coffee,
+    Mouse,
+    TigerTail,
+    Weight,
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
