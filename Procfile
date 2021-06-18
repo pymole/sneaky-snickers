@@ -1,1 +1,1 @@
-web: ROCKET_PORT=$PORT ROCKET_KEEP_ALIVE=0 ./target/debug/sneaky-snickers
+web: ROCKET_PORT=$PORT ROCKET_KEEP_ALIVE=0 ./target/release/sneaky-snickers
