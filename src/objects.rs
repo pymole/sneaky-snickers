@@ -46,7 +46,8 @@ pub struct Snake {
     pub head: Point,
     pub length: u32,
     pub shout: String,
-    pub squad: String,
+    // Present only in Squad Mode games
+    // pub squad: String,
 }
 
 
