@@ -62,7 +62,7 @@ fn get_movement_position(position: Point, movement: Movement) -> Point {
     }
 }
 
-fn is_outside_of_board(width: i32, height: i32, position: Point) -> bool{
+fn is_outside_of_board(width: i32, height: i32, position: Point) -> bool {
     position.x < 0 || position.x >= width || position.y < 0 || position.y >= height
 }
 

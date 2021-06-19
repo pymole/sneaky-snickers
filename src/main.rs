@@ -1,7 +1,9 @@
 #![feature(proc_macro_hygiene, decl_macro)]
 
 mod api;
+mod game;
 mod solver;
+mod vec2d;
 
 #[macro_use]
 extern crate rocket;
