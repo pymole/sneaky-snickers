@@ -1,7 +1,6 @@
 #![feature(proc_macro_hygiene, decl_macro)]
 
-mod objects;
-mod responses;
+mod api;
 mod solver;
 
 #[macro_use]
@@ -14,12 +13,11 @@ use rocket::serde::json::Json;
 use rocket::serde::json::serde_json;
 
 use crate::solver::get_best_movement;
-use crate::responses::Move;
 
 
 #[get("/")]
-fn index() -> Json<responses::Info> {
-    Json(responses::Info {
+fn index() -> Json<api::responses::Info> {
+    Json(api::responses::Info {
         apiversion: "1".to_string(),
         author: Some("Snickers".to_string()),
         color: Some("#b7410e".to_string()),
@@ -36,11 +34,11 @@ fn start(body: String) -> Status {
 }
 
 #[post("/move", data = "<body>")]
-fn movement(body: String) -> Json<responses::Move> {
+fn movement(body: String) -> Json<api::responses::Move> {
     info!("/move {}", body);
 
-    let state = serde_json::from_str::<objects::State>(&body).unwrap();
-    let movement = Move::new(get_best_movement(state));
+    let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
+    let movement = api::responses::Move::new(get_best_movement(state));
 
     Json(movement)
 }

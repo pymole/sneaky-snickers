@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use crate::objects::{State, Movement, Point};
+use crate::api::objects::{State, Movement, Point};
 
 const MOVEMENTS: [Movement; 4] = [
     Movement::Left,
