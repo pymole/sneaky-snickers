@@ -62,6 +62,10 @@ impl Board {
         }
     }
 
+    pub fn contains(&self, p: Point) -> bool {
+        Rectangle { p0: Point::ZERO, p1: self.size }.contains(p)
+    }
+
     fn calculate_squares(state_api: &api::objects::State) -> Vec2D<Square> {
         let board_api = &state_api.board;
 
@@ -144,6 +148,10 @@ impl Snake {
     pub fn is_alive(&self) -> bool {
         self.health > 0
     }
+}
+
+impl Point {
+    pub const ZERO: Point = Point { x: 0, y: 0 };
 }
 
 impl Add for Point {
@@ -267,6 +275,10 @@ pub fn advance_one_step(
         .filter(|&i| board.snakes[i].is_alive())
         .collect();
 
+    debug_assert!(
+        alive_snakes.iter().copied().all(|i| board.snakes[i].body.len() > 0)
+    );
+
     let actions: Vec<Action> = alive_snakes.iter().copied().map(|i| snake_strategy(i, &board)).collect();
 
     for (i, action) in alive_snakes.iter().copied().zip(actions) {
@@ -314,5 +326,15 @@ pub fn advance_one_step(
     //     - Collided with another Battlesnake
     //     - Collided head-to-head and lost
 
-    // TODO
+    for i in alive_snakes.iter().copied() {
+        let snake = &board.snakes[i];
+
+        let mut died = snake.health <= 0;
+        died |= !board.contains(snake.body[0]);
+        // ... TODO
+
+        if died {
+            board.snakes[i].health = 0;
+        }
+    }
 }
