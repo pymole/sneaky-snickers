@@ -1,5 +1,7 @@
 use std::ops::{Index, IndexMut};
 
+use crate::game::Point;
+
 pub struct Vec2D<T> {
     pub len1: usize,
     pub len2: usize,
@@ -30,8 +32,36 @@ impl<T> Index<(usize, usize)> for Vec2D<T> {
     }
 }
 
+impl<T> Index<(i32, i32)> for Vec2D<T> {
+    type Output = T;
+
+    fn index<'a>(&'a self, (i1, i2): (i32, i32)) -> &'a T {
+        &self[(i1 as usize, i2 as usize)]
+    }
+}
+
+impl<T> Index<Point> for Vec2D<T> {
+    type Output = T;
+
+    fn index<'a>(&'a self, p: Point) -> &'a T {
+        &self[(p.x, p.y)]
+    }
+}
+
 impl<T> IndexMut<(usize, usize)> for Vec2D<T> {
     fn index_mut<'a>(&'a mut self, (i1, i2): (usize, usize)) -> &'a mut T {
         &mut self.data[i1 + i2 * self.len1]
+    }
+}
+
+impl<T> IndexMut<(i32, i32)> for Vec2D<T> {
+    fn index_mut<'a>(&'a mut self, (i1, i2): (i32, i32)) -> &'a mut T {
+        &mut self[(i1 as usize, i2 as usize)]
+    }
+}
+
+impl<T> IndexMut<Point> for Vec2D<T> {
+    fn index_mut<'a>(&'a mut self, p: Point) -> &'a mut T {
+        &mut self[(p.x, p.y)]
     }
 }
