@@ -54,7 +54,7 @@ impl Board {
                 x: board_api.width,
                 y: board_api.height,
             },
-            food: board_api.food.iter().map(Point::from_api).collect(),
+            food: board_api.food.clone(),
             snakes: board_api.snakes.iter().map(Snake::from_api).collect(),
             turn: state_api.turn as i32,
             safe_zone: Self::calcualate_safe_zone(&squares),
@@ -137,18 +137,12 @@ impl Snake {
 
         Snake {
             health: snake_api.health,
-            body: snake_api.body.iter().map(Point::from_api).collect(),
+            body: snake_api.body.iter().copied().collect(),
         }
     }
 
     pub fn is_alive(&self) -> bool {
         self.health > 0
-    }
-}
-
-impl Point {
-    pub fn from_api(point_api: &api::objects::Point) -> Point {
-        Point { x: point_api.x, y: point_api.y }
     }
 }
 
