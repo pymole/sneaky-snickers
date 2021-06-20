@@ -205,7 +205,28 @@ pub mod food_spawner {
     use rand::seq::SliceRandom;
 
     fn spawn_one(rng: &mut impl rand::Rng, board: &mut Board) {
-        // TODO
+        let empty_squares_count = board.squares.data.iter().filter(|s| s.object == Object::Empty).count();
+
+        if empty_squares_count == 0 {
+            return
+        }
+
+        let needle = rng.gen_range(0..empty_squares_count);
+
+        let mut i = 0;
+        for x in 0..board.squares.len1 {
+            for y in 0..board.squares.len2 {
+                if let Object::Empty = board.squares[(x, y)].object {
+                    if i == needle {
+                        board.squares[(x, y)].object = Object::Food;
+                        board.food.push(Point { x: x as i32, y: y as i32 });
+                        return;
+                    }
+
+                    i += 1;
+                }
+            }
+        }
     }
 
     pub fn create_standard(mut rng: impl rand::Rng) -> impl FnMut(&mut Board) {
