@@ -263,12 +263,13 @@ pub fn advance_one_step(
     //     - A new body part is added to the board in the direction they moved.
     //     - Last body part (their tail) is removed from the board.
     //     - Health is reduced by 1.
-    let snakes_and_actions: Vec<(usize, Action)> = (0..board.snakes.len())
+    let alive_snakes: Vec<usize> = (0..board.snakes.len())
         .filter(|&i| board.snakes[i].is_alive())
-        .map(|i| (i, snake_strategy(i, &board)))
         .collect();
 
-    for (i, action) in snakes_and_actions {
+    let actions: Vec<Action> = alive_snakes.iter().copied().map(|i| snake_strategy(i, &board)).collect();
+
+    for (i, action) in alive_snakes.iter().copied().zip(actions) {
         if let Action::Move(movement) = action {
             let snake = &mut board.snakes[i];
 
@@ -295,16 +296,23 @@ pub fn advance_one_step(
     // 3. Any new food spawning will be placed in empty squares on the board.
     (engine_settings.food_spawner)(board);
 
+    // Battle Royale ruleset. Do in this order:
+    // - Deal out-of-safe-zone damage
+    // - Maybe shrink safe zone
+    for i in alive_snakes.iter().copied() {
+        if !board.safe_zone.contains(board.snakes[i].body[0]) {
+            board.snakes[i].health -= 15;
+        }
+    }
+
+    (engine_settings.safe_zone_shrinker)(board);
+
     // 4. Any Battlesnake that has been eliminated is removed from the game board:
     //     - Health less than or equal to 0
     //     - Moved out of bounds
     //     - Collided with themselves
     //     - Collided with another Battlesnake
     //     - Collided head-to-head and lost
-
-    // TODO
-
-    // Battle Royale: shrink safe zone and deal damage
 
     // TODO
 }
