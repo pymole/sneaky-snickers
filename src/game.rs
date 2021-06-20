@@ -8,8 +8,24 @@ pub struct Board {
     pub size: Point,
     pub food: Vec<Point>,
     pub snakes: Vec<Snake>,
-    pub turn: u32,
+    pub turn: u32, // TODO: i32 to allow negative turns?
     pub safe_zone: Rectangle,
+    pub squares: Vec2D<Square>,
+}
+
+#[derive(PartialEq, Eq, Debug, Copy, Clone)]
+pub enum Object {
+    Empty,
+    Food,
+    BodyPart {
+        spawn_turn: i32,
+    },
+}
+
+#[derive(PartialEq, Eq, Debug, Copy, Clone)]
+pub struct Square {
+    pub safe: bool,
+    pub object: Object,
 }
 
 pub struct Snake {
@@ -24,6 +40,7 @@ pub struct Point {
 }
 
 /// Represents [p0.x, p1.x) × [p0.y, p1.y)
+#[derive(PartialEq, Eq, Debug, Copy, Clone)]
 pub struct Rectangle {
     pub p0: Point,
     pub p1: Point,
@@ -35,6 +52,19 @@ impl Board {
 
         assert!(board_api.width > 0 && board_api.height > 0);
 
+        let mut squares = Vec2D::init_same(
+            board_api.width as usize,
+            board_api.height as usize,
+            Square {
+                safe: true,
+                object: Object::Empty,
+            }
+        );
+
+        for api::objects::Point{x, y} in board_api.hazards.iter() {
+            squares[(*x as usize, *y as usize)].safe = false;
+        }
+
         Board {
             size: Point {
                 x: board_api.width,
@@ -43,29 +73,24 @@ impl Board {
             food: board_api.food.iter().map(Point::from_api).collect(),
             snakes: board_api.snakes.iter().map(Snake::from_api).collect(),
             turn: state_api.turn,
-            safe_zone: Self::calcualate_safe_zone(&board_api),
+            safe_zone: Self::calcualate_safe_zone(&squares),
+            squares: squares,
         }
     }
 
-    fn calcualate_safe_zone(board_api: &api::objects::Board) -> Rectangle {
-        let mut has_hazard = Vec2D::init_same(board_api.width as usize, board_api.height as usize, false);
-
-        for api::objects::Point{x, y} in board_api.hazards.iter() {
-            has_hazard[(*x as usize, *y as usize)] = true;
-        }
-
+    fn calcualate_safe_zone(squares: &Vec2D<Square>) -> Rectangle {
         let mut safe_zone = Rectangle {
-            p0: Point { x: board_api.width, y: board_api.height },
+            p0: Point { x: squares.len1 as i32, y: squares.len2 as i32 },
             p1: Point { x: -1, y: -1 },
         };
 
-        for x in 0..board_api.width {
-            for y in 0..board_api.height {
-                if !has_hazard[(x as usize, y as usize)] {
-                    safe_zone.p0.x = safe_zone.p0.x.min(x);
-                    safe_zone.p1.x = safe_zone.p1.x.max(x);
-                    safe_zone.p0.y = safe_zone.p0.y.min(y);
-                    safe_zone.p1.y = safe_zone.p1.y.max(y);
+        for x in 0..squares.len1 {
+            for y in 0..squares.len2 {
+                if !squares[(x, y)].safe {
+                    safe_zone.p0.x = safe_zone.p0.x.min(x as i32);
+                    safe_zone.p1.x = safe_zone.p1.x.max(x as i32);
+                    safe_zone.p0.y = safe_zone.p0.y.min(y as i32);
+                    safe_zone.p1.y = safe_zone.p1.y.max(y as i32);
                 }
             }
         }
@@ -146,17 +171,49 @@ impl Movement {
     }
 }
 
-// TODO: all three types require random gen
-type SnakeStrategy = fn(snake_index: usize, board: &Board) -> Action;
-type FoodSpawner = fn(&Board) -> Vec<Point>; // TODO: хочется ли редактировать Board in-place?
-type SafeZoneShrinker = fn(turn: u32, safe_zone: Rectangle) -> Rectangle;
+pub struct EngineSettings<'a, 'b> {
+    // Can append elements to `board.food`, but must not mutate anything else.
+    pub food_spawner: &'a dyn FnMut(&mut Board),
+
+    // Can shrink `board.safe_zone`, but must not mutate anything else.
+    pub safe_zone_shrinker: &'b dyn FnMut(&mut Board),
+}
+
+pub mod food_spawner {
+    use super::*;
+    use rand;
+    use rand::seq::SliceRandom;
+
+    fn spawn_one(rng: &mut impl rand::Rng, board: &mut Board) {
+        // TODO
+    }
+
+    pub fn create_standard(mut rng: impl rand::Rng) -> impl FnMut(&mut Board) {
+        move |board: &mut Board| {
+            if board.food.len() < 1 || rng.gen_ratio(20, 100) {
+                spawn_one(&mut rng, board);
+            }
+        }
+    }
+
+    pub fn noop(_: &mut Board) {
+    }
+}
+
+pub mod safe_zone_shrinker {
+    use super::*;
+
+    // pub fn standard
+
+    pub fn noop(_: &mut Board) {
+    }
+}
 
 /// Dead snakes are kept in array to preserve indices of all other snakes
-pub fn advance_one(
+pub fn advance_one_step(
     board: &mut Board,
-    snake_strategy: SnakeStrategy,
-    food_spawner: FoodSpawner,
-    safe_zone_shrinker: SafeZoneShrinker,
+    engine_settings: &EngineSettings,
+    snake_strategy: &mut dyn FnMut(/*snake_index:*/ usize, &Board) -> Action,
 )
 {
     // From https://docs.battlesnake.com/references/rules
@@ -207,19 +264,4 @@ pub fn advance_one(
     // 5. If there are enough Battlesnakes still present, repeat steps 1-5 for next turn.
 
     // TODO
-}
-
-mod food_spawner {
-    use super::*;
-
-    fn standard(board: &Board) -> Vec<Point> {
-        // if board.food.len() < 1 ||
-        // TODO
-        vec![]
-
-    }
-
-    fn noop(board: &Board) -> Vec<Point> {
-        vec![]
-    }
 }
