@@ -8,7 +8,7 @@ pub struct Board {
     pub size: Point,
     pub food: Vec<Point>,
     pub snakes: Vec<Snake>,
-    pub turn: u32, // TODO: i32 to allow negative turns?
+    pub turn: i32,
     pub safe_zone: Rectangle,
     pub squares: Vec2D<Square>,
 }
@@ -33,11 +33,7 @@ pub struct Snake {
     pub body: VecDeque<Point>,
 }
 
-#[derive(PartialEq, Eq, Debug, Copy, Clone)]
-pub struct Point {
-    pub x: i32,
-    pub y: i32,
-}
+pub use crate::api::objects::Point;
 
 /// Represents [p0.x, p1.x) × [p0.y, p1.y)
 #[derive(PartialEq, Eq, Debug, Copy, Clone)]
@@ -49,8 +45,25 @@ pub struct Rectangle {
 impl Board {
     pub fn from_api(state_api: &api::objects::State) -> Board {
         let board_api = &state_api.board;
-
         assert!(board_api.width > 0 && board_api.height > 0);
+        // TODO: validate that everything is inbounds.
+        let squares = Self::calculate_squares(state_api);
+
+        Board {
+            size: Point {
+                x: board_api.width,
+                y: board_api.height,
+            },
+            food: board_api.food.iter().map(Point::from_api).collect(),
+            snakes: board_api.snakes.iter().map(Snake::from_api).collect(),
+            turn: state_api.turn as i32,
+            safe_zone: Self::calcualate_safe_zone(&squares),
+            squares: squares,
+        }
+    }
+
+    fn calculate_squares(state_api: &api::objects::State) -> Vec2D<Square> {
+        let board_api = &state_api.board;
 
         let mut squares = Vec2D::init_same(
             board_api.width as usize,
@@ -61,21 +74,34 @@ impl Board {
             }
         );
 
-        for api::objects::Point{x, y} in board_api.hazards.iter() {
-            squares[(*x as usize, *y as usize)].safe = false;
+        for p in board_api.hazards.iter() {
+            squares[*p].safe = false;
         }
 
-        Board {
-            size: Point {
-                x: board_api.width,
-                y: board_api.height,
-            },
-            food: board_api.food.iter().map(Point::from_api).collect(),
-            snakes: board_api.snakes.iter().map(Snake::from_api).collect(),
-            turn: state_api.turn,
-            safe_zone: Self::calcualate_safe_zone(&squares),
-            squares: squares,
+        for snake in board_api.snakes.iter() {
+            for (i, body_part) in snake.body.iter().enumerate() {
+                let spawn_turn = (state_api.turn as i32) - (i as i32);
+
+                match squares[*body_part].object {
+                    Object::Empty => squares[*body_part].object = Object::BodyPart { spawn_turn: spawn_turn },
+                    Object::BodyPart{spawn_turn: t} =>
+                        // A snake can intersect with itself in the begining and after eating a food.
+                        // This assert does not cover all possible invalid collisions.
+                        assert!(t > spawn_turn, "Can't have intersecting snakes"),
+                    Object::Food => unreachable!(),
+                }
+            }
         }
+
+        for food in board_api.food.iter() {
+            match squares[*food].object {
+                Object::Empty => squares[*food].object = Object::Food,
+                Object::BodyPart { .. } => unreachable!("Can't have food and snake body in the same square."),
+                Object::Food => unreachable!("Can't have two food pieces in the same square."),
+            }
+        }
+
+        squares
     }
 
     fn calcualate_safe_zone(squares: &Vec2D<Square>) -> Rectangle {
