@@ -193,16 +193,15 @@ impl Movement {
 
 pub struct EngineSettings<'a, 'b> {
     // Can append elements to `board.food`, but must not mutate anything else.
-    pub food_spawner: &'a dyn FnMut(&mut Board),
+    pub food_spawner: &'a mut dyn FnMut(&mut Board),
 
     // Can shrink `board.safe_zone`, but must not mutate anything else.
-    pub safe_zone_shrinker: &'b dyn FnMut(&mut Board),
+    pub safe_zone_shrinker: &'b mut dyn FnMut(&mut Board),
 }
 
 pub mod food_spawner {
     use super::*;
     use rand;
-    use rand::seq::SliceRandom;
 
     fn spawn_one(rng: &mut impl rand::Rng, board: &mut Board) {
         let empty_squares_count = board.squares.data.iter().filter(|s| s.object == Object::Empty).count();
@@ -227,6 +226,8 @@ pub mod food_spawner {
                 }
             }
         }
+
+        unreachable!();
     }
 
     pub fn create_standard(mut rng: impl rand::Rng) -> impl FnMut(&mut Board) {
@@ -253,7 +254,7 @@ pub mod safe_zone_shrinker {
 /// Dead snakes are kept in array to preserve indices of all other snakes
 pub fn advance_one_step(
     board: &mut Board,
-    engine_settings: &EngineSettings,
+    engine_settings: &mut EngineSettings,
     snake_strategy: &mut dyn FnMut(/*snake_index:*/ usize, &Board) -> Action,
 )
 {
@@ -272,11 +273,13 @@ pub fn advance_one_step(
             let snake = &mut board.snakes[i];
 
             if snake.is_alive() {
-                assert!(snake.body.len() > 0);
+                debug_assert!(snake.body.len() > 0);
 
                 snake.body.push_front(snake.body[0] + movement.to_direction());
                 snake.body.pop_back();
                 snake.health -= 1;
+
+                // TODO
             }
         }
     }
@@ -290,8 +293,7 @@ pub fn advance_one_step(
     // TODO
 
     // 3. Any new food spawning will be placed in empty squares on the board.
-
-    // TODO
+    (engine_settings.food_spawner)(board);
 
     // 4. Any Battlesnake that has been eliminated is removed from the game board:
     //     - Health less than or equal to 0
@@ -302,7 +304,7 @@ pub fn advance_one_step(
 
     // TODO
 
-    // 5. If there are enough Battlesnakes still present, repeat steps 1-5 for next turn.
+    // Battle Royale: shrink safe zone and deal damage
 
     // TODO
 }
