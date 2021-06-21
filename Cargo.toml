@@ -10,3 +10,4 @@ serde = {version = "1.0.126", features = ["derive"]}
 env_logger = "0.8.4"
 log = "0.4.14"
 rand = "0.8.4"
+arrayvec = "0.7.1"
