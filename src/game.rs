@@ -1,12 +1,16 @@
 use std::collections::VecDeque;
 use std::ops::{Add, AddAssign};
 
+use arrayvec::ArrayVec;
+
 use crate::api;
 use crate::vec2d::Vec2D;
 
+pub const MAX_SNAKE_COUNT : usize = 8;
+
 pub struct Board {
     pub size: Point,
-    pub food: Vec<Point>,
+    pub foods: Vec<Point>,
     pub snakes: Vec<Snake>,
     pub turn: i32,
     pub safe_zone: Rectangle,
@@ -54,7 +58,7 @@ impl Board {
                 x: board_api.width,
                 y: board_api.height,
             },
-            food: board_api.food.clone(),
+            foods: board_api.food.clone(),
             snakes: board_api.snakes.iter().map(Snake::from_api).collect(),
             turn: state_api.turn as i32,
             safe_zone: Self::calcualate_safe_zone(&squares),
@@ -180,13 +184,9 @@ impl Rectangle {
     }
 }
 
-pub use crate::api::objects::Movement;
+// TODO: Move everything below to engine crate
 
-pub enum Action {
-    // `DoNothing` allows freezing some snakes in places and while running others
-    DoNothing,
-    Move(Movement),
-}
+pub use crate::api::objects::Movement;
 
 impl Movement {
     pub fn to_direction(self) -> Point {
@@ -197,6 +197,12 @@ impl Movement {
             Self::Down  => Point {x:  0, y: -1},
         }
     }
+}
+
+pub enum Action {
+    // `DoNothing` allows freezing some snakes in places and while running others
+    DoNothing,
+    Move(Movement),
 }
 
 pub struct EngineSettings<'a, 'b> {
@@ -226,7 +232,7 @@ pub mod food_spawner {
                 if let Object::Empty = board.squares[(x, y)].object {
                     if i == needle {
                         board.squares[(x, y)].object = Object::Food;
-                        board.food.push(Point { x: x as i32, y: y as i32 });
+                        board.foods.push(Point { x: x as i32, y: y as i32 });
                         return;
                     }
 
@@ -240,7 +246,7 @@ pub mod food_spawner {
 
     pub fn create_standard(mut rng: impl rand::Rng) -> impl FnMut(&mut Board) {
         move |board: &mut Board| {
-            if board.food.len() < 1 || rng.gen_ratio(20, 100) {
+            if board.foods.len() < 1 || rng.gen_ratio(20, 100) {
                 spawn_one(&mut rng, board);
             }
         }
@@ -260,39 +266,54 @@ pub mod safe_zone_shrinker {
 }
 
 /// Dead snakes are kept in array to preserve indices of all other snakes
+/// WIP
 pub fn advance_one_step(
     board: &mut Board,
     engine_settings: &mut EngineSettings,
     snake_strategy: &mut dyn FnMut(/*snake_index:*/ usize, &Board) -> Action,
 )
 {
+    board.turn += 1;
+
+    let alive_snakes: ArrayVec<usize, MAX_SNAKE_COUNT> = (0..board.snakes.len())
+        .filter(|&i| board.snakes[i].is_alive())
+        .collect();
+
+    debug_assert!(
+        alive_snakes.iter().all(|&i| board.snakes[i].body.len() > 0)
+    );
+
     // From https://docs.battlesnake.com/references/rules
     // 1. Each Battlesnake will have its chosen move applied:
     //     - A new body part is added to the board in the direction they moved.
     //     - Last body part (their tail) is removed from the board.
     //     - Health is reduced by 1.
-    let alive_snakes: Vec<usize> = (0..board.snakes.len())
-        .filter(|&i| board.snakes[i].is_alive())
-        .collect();
+    {
+        let actions: ArrayVec<Action, MAX_SNAKE_COUNT> = alive_snakes.iter()
+            .map(|&i| snake_strategy(i, &board))
+            .collect();
 
-    debug_assert!(
-        alive_snakes.iter().copied().all(|i| board.snakes[i].body.len() > 0)
-    );
+        // TODO: bug with spawn_turn when snake is not moving. Is this field actually needed? It can be computed
+        // separately, if needed
+        for (i, action) in alive_snakes.iter().copied().zip(actions) {
+            if let Action::Move(movement) = action {
+                let snake = &mut board.snakes[i];
 
-    let actions: Vec<Action> = alive_snakes.iter().copied().map(|i| snake_strategy(i, &board)).collect();
+                if snake.is_alive() {
+                    debug_assert!(snake.body.len() > 0);
 
-    for (i, action) in alive_snakes.iter().copied().zip(actions) {
-        if let Action::Move(movement) = action {
-            let snake = &mut board.snakes[i];
+                    snake.body.push_front(snake.body[0] + movement.to_direction());
+                    let old_tail = snake.body.pop_back().unwrap();
+                    snake.health -= 1;
 
-            if snake.is_alive() {
-                debug_assert!(snake.body.len() > 0);
+                    debug_assert_eq!(
+                        board.squares[old_tail].object,
+                        Object::BodyPart { spawn_turn: board.turn - (snake.body.len() as i32) }
+                    );
 
-                snake.body.push_front(snake.body[0] + movement.to_direction());
-                snake.body.pop_back();
-                snake.health -= 1;
-
-                // TODO
+                    board.squares[old_tail].object = Object::Empty;
+                    board.squares[snake.body[0]].object = Object::BodyPart { spawn_turn: board.turn };
+                }
             }
         }
     }
@@ -302,22 +323,51 @@ pub fn advance_one_step(
     //     - Additional body part placed on top of current tail (this will extend their visible length by one on the
     //       next turn).
     //     - The food is removed from the board.
+    {
+        let mut eaten_food = ArrayVec::<Point, MAX_SNAKE_COUNT>::new();
 
-    // TODO
+        for i in alive_snakes.iter().copied() {
+            let head = board.snakes[i].body[0];
+
+            if board.squares[head].object != Object::Food {
+                continue;
+            }
+
+            board.snakes[i].health = 100;
+
+            let tail = *board.snakes[i].body.back().unwrap();
+            board.snakes[i].body.push_back(tail);
+            match &mut board.squares[tail].object {
+                Object::BodyPart { spawn_turn } => { *spawn_turn += 1; },
+                _ => unreachable!(),
+            }
+
+            eaten_food.push(head);
+        }
+
+        for food in eaten_food {
+            board.foods.swap_remove(board.foods.iter().position(|&x| x == food).unwrap());
+            board.squares[food].object = Object::Empty;
+        }
+    }
 
     // 3. Any new food spawning will be placed in empty squares on the board.
-    (engine_settings.food_spawner)(board);
+    {
+        (engine_settings.food_spawner)(board);
+    }
 
     // Battle Royale ruleset. Do in this order:
     // - Deal out-of-safe-zone damage
     // - Maybe shrink safe zone
-    for i in alive_snakes.iter().copied() {
-        if !board.safe_zone.contains(board.snakes[i].body[0]) {
-            board.snakes[i].health -= 15;
+    {
+        for i in alive_snakes.iter().copied() {
+            if !board.safe_zone.contains(board.snakes[i].body[0]) {
+                board.snakes[i].health -= 15;
+            }
         }
-    }
 
-    (engine_settings.safe_zone_shrinker)(board);
+        (engine_settings.safe_zone_shrinker)(board);
+    }
 
     // 4. Any Battlesnake that has been eliminated is removed from the game board:
     //     - Health less than or equal to 0
@@ -325,16 +375,43 @@ pub fn advance_one_step(
     //     - Collided with themselves
     //     - Collided with another Battlesnake
     //     - Collided head-to-head and lost
+    {
+        let mut died_snakes = ArrayVec::<usize, MAX_SNAKE_COUNT>::new();
 
-    for i in alive_snakes.iter().copied() {
-        let snake = &board.snakes[i];
+        for i in alive_snakes.iter().copied() {
+            let snake = &board.snakes[i];
 
-        let mut died = snake.health <= 0;
-        died |= !board.contains(snake.body[0]);
-        // ... TODO
+            let mut died = snake.health <= 0;
+            died = died || !board.contains(snake.body[0]);
+            died = died || matches!(board.squares[snake.body[0]].object, Object::BodyPart {..});
+            if !died {
+                for j in alive_snakes.iter().copied() {
+                    if i != j && snake.body[0] == board.snakes[j].body[0] {
+                        died = true;
+                        break;
+                    }
+                }
+            }
 
-        if died {
+            if died {
+                died_snakes.push(i);
+            }
+        }
+
+        for i in died_snakes {
             board.snakes[i].health = 0;
+            for p in board.snakes[i].body.iter().copied() {
+                // TODO: Wait, this is wrong in case of body collision
+                board.squares[p].object = Object::Empty;
+            }
+        }
+
+        // In case we removed alive head, here we restore it.
+        for i in alive_snakes.iter().copied() {
+            if board.snakes[i].is_alive() {
+                board.squares[board.snakes[i].body[0]].object = Object::BodyPart { spawn_turn: board.turn };
+            }
         }
     }
+
 }
