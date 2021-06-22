@@ -2,6 +2,7 @@
 
 mod api;
 mod game;
+mod engine;
 mod solver;
 mod vec2d;
 
