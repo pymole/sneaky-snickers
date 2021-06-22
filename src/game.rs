@@ -21,9 +21,7 @@ pub struct Board {
 pub enum Object {
     Empty,
     Food,
-    BodyPart {
-        spawn_turn: i32,
-    },
+    BodyPart,
 }
 
 #[derive(PartialEq, Eq, Debug, Copy, Clone)]
@@ -88,14 +86,9 @@ impl Board {
 
         for snake in board_api.snakes.iter() {
             for (i, body_part) in snake.body.iter().enumerate() {
-                let spawn_turn = (state_api.turn as i32) - (i as i32);
-
                 match squares[*body_part].object {
-                    Object::Empty => squares[*body_part].object = Object::BodyPart { spawn_turn: spawn_turn },
-                    Object::BodyPart{spawn_turn: t} =>
-                        // A snake can intersect with itself in the begining and after eating a food.
-                        // This assert does not cover all possible invalid collisions.
-                        assert!(t > spawn_turn, "Can't have intersecting snakes"),
+                    Object::Empty => squares[*body_part].object = Object::BodyPart,
+                    Object::BodyPart => {} // A snake can intersect with itself in the begining and after eating a food.
                     Object::Food => unreachable!(),
                 }
             }
@@ -298,22 +291,17 @@ pub fn advance_one_step(
         for (i, action) in alive_snakes.iter().copied().zip(actions) {
             if let Action::Move(movement) = action {
                 let snake = &mut board.snakes[i];
+                debug_assert!(snake.body.len() > 0);
 
-                if snake.is_alive() {
-                    debug_assert!(snake.body.len() > 0);
+                snake.body.push_front(snake.body[0] + movement.to_direction());
+                let old_tail = snake.body.pop_back().unwrap();
+                snake.health -= 1;
 
-                    snake.body.push_front(snake.body[0] + movement.to_direction());
-                    let old_tail = snake.body.pop_back().unwrap();
-                    snake.health -= 1;
+                debug_assert_eq!(board.squares[old_tail].object, Object::BodyPart);
 
-                    debug_assert_eq!(
-                        board.squares[old_tail].object,
-                        Object::BodyPart { spawn_turn: board.turn - (snake.body.len() as i32) }
-                    );
-
-                    board.squares[old_tail].object = Object::Empty;
-                    board.squares[snake.body[0]].object = Object::BodyPart { spawn_turn: board.turn };
-                }
+                board.squares[old_tail].object = Object::Empty;
+                // TODO: wrong! this conflicts with next step of consuming food
+                board.squares[snake.body[0]].object = Object::BodyPart;
             }
         }
     }
@@ -337,11 +325,7 @@ pub fn advance_one_step(
 
             let tail = *board.snakes[i].body.back().unwrap();
             board.snakes[i].body.push_back(tail);
-            match &mut board.squares[tail].object {
-                Object::BodyPart { spawn_turn } => { *spawn_turn += 1; },
-                _ => unreachable!(),
-            }
-
+            debug_assert_eq!(board.squares[tail].object, Object::BodyPart);
             eaten_food.push(head);
         }
 
@@ -409,7 +393,7 @@ pub fn advance_one_step(
         // In case we removed alive head, here we restore it.
         for i in alive_snakes.iter().copied() {
             if board.snakes[i].is_alive() {
-                board.squares[board.snakes[i].body[0]].object = Object::BodyPart { spawn_turn: board.turn };
+                board.squares[board.snakes[i].body[0]].object = Object::BodyPart;
             }
         }
     }
