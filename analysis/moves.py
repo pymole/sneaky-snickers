@@ -19,21 +19,15 @@
 """
 
 import argparse
-import json
-import matplotlib.pyplot as plt
-from matplotlib.ticker import MaxNLocator
 from collections import defaultdict
 
 
-
-def analize(frames_file):
-    frames = json.load(frames_file)
-
+def analize(game):
+    width, height = game['Game']['Game']['Width'], game['Game']['Game']['Height']
+    frames = game['Frames']
     data = defaultdict(list)
-    colors = {snake['Name']: snake['Color'] for snake in frames[0]['Snakes']}
 
     for frame in frames:
-        print('turn:', frame['Turn'])
         snakes = frame['Snakes']
         hazards = {point_to_tuple(hazard) for hazard in frame['Hazards']}
         obstacles = set()
@@ -54,18 +48,9 @@ def analize(frames_file):
         #     data[name].append(hunger_and_free_moves(food, health, head, obstacles, hazards, 11, 11))
 
         for name, (head, health) in snakes_by_name.items():
-            data[name].append(moves_availability(food, health, head, obstacles, hazards, 11, 11))
+            data[name].append(moves_availability(food, health, head, obstacles, hazards, width, height))
 
-    for name, values in data.items():
-        plt.plot(values, label=name, color=colors[name])
-    
-    plt.legend(title='Snakes')
-    plt.xlabel('Turn')
-    plt.ylabel('Value')
-    plt.grid(True)
-    plt.gca().xaxis.set_major_locator(MaxNLocator(20, integer=True))
-    plt.show()
-
+    return data
 
 def moves_availability(food, health, start, obstacles, hazards, width, height):
     stack = [(start, health, 0)]
