@@ -80,7 +80,7 @@ pub mod food_spawner {
 pub mod safe_zone_shrinker {
     use super::*;
 
-    // pub fn standard
+    // TODO: pub fn standard
 
     pub fn noop(_: &mut Board) {
     }
@@ -114,8 +114,6 @@ pub fn advance_one_step(
             .map(|&i| snake_strategy(i, &board))
             .collect();
 
-        // TODO: bug with spawn_turn when snake is not moving. Is this field actually needed? It can be computed
-        // separately, if needed
         for (i, action) in alive_snakes.iter().copied().zip(actions) {
             if let Action::Move(movement) = action {
                 let snake = &mut board.snakes[i];
@@ -128,8 +126,7 @@ pub fn advance_one_step(
                 debug_assert_eq!(board.squares[old_tail].object, Object::BodyPart);
 
                 board.squares[old_tail].object = Object::Empty;
-                // TODO: wrong! this conflicts with next step of consuming food
-                board.squares[snake.body[0]].object = Object::BodyPart;
+                // To simplify step 2 we will set board.squares[head] later, after step 2.
             }
         }
     }
@@ -160,6 +157,15 @@ pub fn advance_one_step(
         for food in eaten_food {
             board.foods.swap_remove(board.foods.iter().position(|&x| x == food).unwrap());
             board.squares[food].object = Object::Empty;
+        }
+    }
+
+    // As promised in step 1, we set board.squares[head] here.
+    {
+        for i in alive_snakes.iter().copied() {
+            let head = board.snakes[i].body[0];
+            debug_assert_eq!(board.squares[head].object, Object::Empty);
+            board.squares[head].object = Object::BodyPart;
         }
     }
 
@@ -225,5 +231,4 @@ pub fn advance_one_step(
             }
         }
     }
-
 }

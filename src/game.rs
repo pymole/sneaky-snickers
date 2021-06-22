@@ -54,7 +54,7 @@ impl Board {
                 x: board_api.width,
                 y: board_api.height,
             },
-            foods: board_api.food.clone(),
+            foods: board_api.food.clone(), // TODO: reserve capacity
             snakes: board_api.snakes.iter().map(Snake::from_api).collect(),
             turn: state_api.turn as i32,
             safe_zone: Self::calcualate_safe_zone(&squares),
@@ -121,7 +121,7 @@ impl Board {
         }
 
         if safe_zone.empty() {
-            Rectangle { p0: Point { x: 0, y: 0 }, p1: Point { x: 0, y: 0 } }
+            Rectangle { p0: Point::ZERO, p1: Point::ZERO }
         }
         else {
             safe_zone
@@ -136,7 +136,7 @@ impl Snake {
 
         Snake {
             health: snake_api.health,
-            body: snake_api.body.iter().copied().collect(),
+            body: snake_api.body.iter().copied().collect(), // TODO: reserve some capacity
         }
     }
 
