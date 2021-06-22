@@ -50,7 +50,7 @@ pub mod food_spawner {
         let mut i = 0;
         for x in 0..board.squares.len1 {
             for y in 0..board.squares.len2 {
-                if let Object::Empty = board.squares[(x, y)].object {
+                if board.squares[(x, y)].object == Object::Empty {
                     if i == needle {
                         board.squares[(x, y)].object = Object::Food;
                         board.foods.push(Point { x: x as i32, y: y as i32 });
@@ -140,16 +140,17 @@ pub fn advance_one_step(
         let mut eaten_food = ArrayVec::<Point, MAX_SNAKE_COUNT>::new();
 
         for i in alive_snakes.iter().copied() {
-            let head = board.snakes[i].body[0];
+            let snake = &mut board.snakes[i];
+            let head = snake.body[0];
 
             if board.squares[head].object != Object::Food {
                 continue;
             }
 
-            board.snakes[i].health = 100;
+            snake.health = 100;
 
-            let tail = *board.snakes[i].body.back().unwrap();
-            board.snakes[i].body.push_back(tail);
+            let tail = *snake.body.back().unwrap();
+            snake.body.push_back(tail);
             debug_assert_eq!(board.squares[tail].object, Object::BodyPart);
             eaten_food.push(head);
         }
@@ -198,13 +199,14 @@ pub fn advance_one_step(
 
         for i in alive_snakes.iter().copied() {
             let snake = &board.snakes[i];
+            let head = snake.body[0];
 
-            let mut died = snake.health <= 0;
-            died = died || !board.contains(snake.body[0]);
-            died = died || matches!(board.squares[snake.body[0]].object, Object::BodyPart {..});
+            let mut died = !snake.is_alive();
+            died = died || !board.contains(head);
+            died = died || matches!(board.squares[head].object, Object::BodyPart {..});
             if !died {
                 for j in alive_snakes.iter().copied() {
-                    if i != j && snake.body[0] == board.snakes[j].body[0] {
+                    if i != j && head == board.snakes[j].body[0] {
                         died = true;
                         break;
                     }
@@ -217,8 +219,9 @@ pub fn advance_one_step(
         }
 
         for i in died_snakes {
-            board.snakes[i].health = 0;
-            for p in board.snakes[i].body.iter().copied() {
+            let snake = &mut board.snakes[i];
+            snake.health = 0;
+            for p in snake.body.iter().copied() {
                 // TODO: Wait, this is wrong in case of body collision
                 board.squares[p].object = Object::Empty;
             }

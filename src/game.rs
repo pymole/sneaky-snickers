@@ -4,7 +4,7 @@ use std::ops::{Add, AddAssign};
 use crate::api;
 use crate::vec2d::Vec2D;
 
-pub const MAX_SNAKE_COUNT : usize = 8;
+pub const MAX_SNAKE_COUNT: usize = 8;
 
 pub struct Board {
     pub size: Point,
