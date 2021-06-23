@@ -174,3 +174,12 @@ impl Rectangle {
         self.p0.y >= self.p1.y
     }
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn board_from_api() {
+        // TODO
+    }
+}
+
