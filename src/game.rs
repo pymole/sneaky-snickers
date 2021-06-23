@@ -111,7 +111,7 @@ impl Board {
 
         for x in 0..squares.len1 {
             for y in 0..squares.len2 {
-                if !squares[(x, y)].safe {
+                if squares[(x, y)].safe {
                     safe_zone.p0.x = safe_zone.p0.x.min(x as i32);
                     safe_zone.p1.x = safe_zone.p1.x.max(x as i32);
                     safe_zone.p0.y = safe_zone.p0.y.min(y as i32);
