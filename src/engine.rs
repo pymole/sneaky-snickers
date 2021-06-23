@@ -161,12 +161,17 @@ pub fn advance_one_step(
         }
     }
 
-    // As promised in step 1, we set board.squares[head] here.
+    // As promised in step 1, we set board.squares[head] here. It is important that we do it before food spawning,
+    // because food_spawner may rely on it.
     {
         for i in alive_snakes.iter().copied() {
             let head = board.snakes[i].body[0];
-            debug_assert_eq!(board.squares[head].object, Object::Empty);
-            board.squares[head].object = Object::BodyPart;
+            // TODO: This check is annoying, and it is easy to make a mistake. Try extending board.squares by 1 line
+            //       from each side.
+            if board.contains(head) {
+                debug_assert_ne!(board.squares[head].object, Object::Food);
+                board.squares[head].object = Object::BodyPart;
+            }
         }
     }
 
@@ -197,13 +202,21 @@ pub fn advance_one_step(
     {
         let mut died_snakes = ArrayVec::<usize, MAX_SNAKE_COUNT>::new();
 
+        // Temporarily clear heads
+        for i in alive_snakes.iter().copied() {
+            let head = board.snakes[i].body[0];
+            if board.contains(head) {
+                board.squares[head].object = Object::Empty;
+            }
+        }
+
         for i in alive_snakes.iter().copied() {
             let snake = &board.snakes[i];
             let head = snake.body[0];
 
-            let mut died = !snake.is_alive();
+            let mut died = snake.health <= 0;
             died = died || !board.contains(head);
-            died = died || matches!(board.squares[head].object, Object::BodyPart {..});
+            died = died || board.squares[head].object == Object::BodyPart;
             if !died {
                 for j in alive_snakes.iter().copied() {
                     if i != j && head == board.snakes[j].body[0] {
@@ -218,19 +231,35 @@ pub fn advance_one_step(
             }
         }
 
-        for i in died_snakes {
-            let snake = &mut board.snakes[i];
-            snake.health = 0;
-            for p in snake.body.iter().copied() {
-                // TODO: Wait, this is wrong in case of body collision
+        // TODO: rewrite this
+        for i in died_snakes.iter().copied() {
+            board.snakes[i].health = 0;
+            for p in board.snakes[i].body.iter().skip(1).copied() {
+                debug_assert!(board.contains(p));
                 board.squares[p].object = Object::Empty;
             }
         }
 
-        // In case we removed alive head, here we restore it.
-        for i in alive_snakes.iter().copied() {
-            if board.snakes[i].is_alive() {
-                board.squares[board.snakes[i].body[0]].object = Object::BodyPart;
+        if died_snakes.len() > 0 {
+            for i in alive_snakes.iter().copied() {
+                let snake = &board.snakes[i];
+                if snake.is_alive() {
+                    for p in snake.body.iter().copied() {
+                        debug_assert!(board.contains(p));
+                        board.squares[p].object = Object::BodyPart;
+                    }
+                }
+            }
+        }
+        else {
+            // Optimized version of "then" branch.
+            for i in alive_snakes.iter().copied() {
+                let snake = &board.snakes[i];
+                if snake.is_alive() {
+                    let head = snake.body[0];
+                    debug_assert!(board.contains(head));
+                    board.squares[head].object = Object::BodyPart;
+                }
             }
         }
     }
