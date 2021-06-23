@@ -87,7 +87,6 @@ pub mod safe_zone_shrinker {
 }
 
 /// Dead snakes are kept in array to preserve indices of all other snakes
-/// WIP
 pub fn advance_one_step(
     board: &mut Board,
     engine_settings: &mut EngineSettings,
