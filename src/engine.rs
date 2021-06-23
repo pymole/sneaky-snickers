@@ -21,7 +21,7 @@ impl Movement {
 }
 
 pub enum Action {
-    // `DoNothing` allows freezing some snakes in places and while running others
+    // `DoNothing` allows freezing some snakes in place.
     DoNothing,
     Move(Movement),
 }
@@ -262,5 +262,78 @@ pub fn advance_one_step(
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn snake_moves_in_corect_direction() {
+        // TODO
+    }
+
+    #[test]
+    fn health_depletes_by_one_on_each_move() {
+        // TODO
+    }
+
+    #[test]
+    fn snake_eats_food() {
+        // TODO
+    }
+
+    #[test]
+    fn snake_dies_out_of_bounds() {
+        // TODO
+    }
+
+    #[test]
+    fn snake_dies_from_self_collision() {
+        // TODO
+    }
+
+    #[test]
+    fn snake_dies_from_enemy_collision() {
+        // TODO
+    }
+
+    #[test]
+    fn two_snakes_in_head_to_head_collision() {
+        // TODO
+    }
+
+    #[test]
+    fn three_snakes_in_head_to_head_collision() {
+        // TODO
+    }
+
+    #[test]
+    fn four_snakes_in_head_to_head_collision() {
+        // TODO
+    }
+
+    #[test]
+    fn multiple_simultaneous_deaths() {
+        // TODO
+    }
+
+    #[test]
+    fn can_move_behind_tail() {
+        // TODO
+    }
+
+    #[test]
+    fn snake_dies_from_hunger() {
+        // TODO
+    }
+
+    #[test]
+    fn hazard_zone_depletes_hunger() {
+        // TODO
+    }
+
+    #[test]
+    fn food_eaten_in_hazard_zone() {
+        // TODO
     }
 }
