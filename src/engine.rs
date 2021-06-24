@@ -272,8 +272,7 @@ mod tests {
     use super::*;
 
     fn create_board(api_str: &str) -> Board {
-        let state = serde_json::from_str::<api::objects::State>(&data::SINGLE_SHORT_SNAKE_IN_THE_CENTER).unwrap();
-        Board::from_api(&state)
+        Board::from_api(&serde_json::from_str::<api::objects::State>(api_str).unwrap())
     }
 
     fn test_transition(state_before: &str, state_after: &str, snake_strategy: SnakeStrategy) {
