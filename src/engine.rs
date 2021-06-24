@@ -89,8 +89,7 @@ pub mod safe_zone_shrinker {
 type SnakeStrategy<'a> = &'a mut dyn FnMut(/*snake_index:*/ usize, &Board) -> Action;
 
 /// Dead snakes are kept in array to preserve indices of all other snakes
-pub fn advance_one_step(board: &mut Board, engine_settings: &mut EngineSettings, snake_strategy: SnakeStrategy)
-{
+pub fn advance_one_step(board: &mut Board, engine_settings: &mut EngineSettings, snake_strategy: SnakeStrategy) {
     board.turn += 1;
 
     let alive_snakes: ArrayVec<usize, MAX_SNAKE_COUNT> = (0..board.snakes.len())
@@ -121,11 +120,19 @@ pub fn advance_one_step(board: &mut Board, engine_settings: &mut EngineSettings,
                 snake.health -= 1;
 
                 debug_assert_eq!(board.squares[old_tail].object, Object::BodyPart);
-
                 board.squares[old_tail].object = Object::Empty;
-                // To simplify step 2 we will set board.squares[head] later, after step 2.
+                // The head will be set in a separate loop.
             }
         }
+    }
+
+    // TODO: out of bounds head will
+    let objects_under_head: ArrayVec<Object, MAX_SNAKE_COUNT> = alive_snakes.iter().copied()
+        .map(|i| board.squares[board.snakes[i].body[0]].object)
+        .collect();
+
+    for i in alive_snakes.iter().copied() {
+        board.squares[board.snakes[i].body[0]].object = Object::BodyPart;
     }
 
     // 2. Any Battlesnake that has found food will consume it:
@@ -136,11 +143,11 @@ pub fn advance_one_step(board: &mut Board, engine_settings: &mut EngineSettings,
     {
         let mut eaten_food = ArrayVec::<Point, MAX_SNAKE_COUNT>::new();
 
-        for i in alive_snakes.iter().copied() {
+        for (&i, &object_under_head) in alive_snakes.iter().zip(&objects_under_head) {
             let snake = &mut board.snakes[i];
             let head = snake.body[0];
 
-            if board.squares[head].object != Object::Food {
+            if object_under_head != Object::Food {
                 continue;
             }
 
@@ -158,20 +165,6 @@ pub fn advance_one_step(board: &mut Board, engine_settings: &mut EngineSettings,
         }
     }
 
-    // As promised in step 1, we set board.squares[head] here. It is important that we do it before food spawning,
-    // because food_spawner may rely on it.
-    {
-        for i in alive_snakes.iter().copied() {
-            let head = board.snakes[i].body[0];
-            // TODO: This check is annoying, and it is easy to make a mistake. Try extending board.squares by 1 line
-            //       from each side.
-            if board.contains(head) {
-                debug_assert_ne!(board.squares[head].object, Object::Food);
-                board.squares[head].object = Object::BodyPart;
-            }
-        }
-    }
-
     // 3. Any new food spawning will be placed in empty squares on the board.
     {
         (engine_settings.food_spawner)(board);
@@ -181,7 +174,7 @@ pub fn advance_one_step(board: &mut Board, engine_settings: &mut EngineSettings,
     // - Deal out-of-safe-zone damage
     // - Maybe shrink safe zone
     {
-        for i in alive_snakes.iter().copied() {
+        for &i in alive_snakes.iter() {
             if !board.safe_zone.contains(board.snakes[i].body[0]) {
                 board.snakes[i].health -= 15;
             }
@@ -199,21 +192,13 @@ pub fn advance_one_step(board: &mut Board, engine_settings: &mut EngineSettings,
     {
         let mut died_snakes = ArrayVec::<usize, MAX_SNAKE_COUNT>::new();
 
-        // Temporarily clear heads
-        for i in alive_snakes.iter().copied() {
-            let head = board.snakes[i].body[0];
-            if board.contains(head) {
-                board.squares[head].object = Object::Empty;
-            }
-        }
-
-        for i in alive_snakes.iter().copied() {
+        for (&i, &object_under_head) in alive_snakes.iter().zip(&objects_under_head) {
             let snake = &board.snakes[i];
             let head = snake.body[0];
 
             let mut died = snake.health <= 0;
             died = died || !board.contains(head);
-            died = died || board.squares[head].object == Object::BodyPart;
+            died = died || object_under_head == Object::BodyPart;
             if !died {
                 for j in alive_snakes.iter().copied() {
                     if i != j && head == board.snakes[j].body[0] {
@@ -228,34 +213,24 @@ pub fn advance_one_step(board: &mut Board, engine_settings: &mut EngineSettings,
             }
         }
 
-        // TODO: rewrite this
-        for i in died_snakes.iter().copied() {
+        for (&i, &object_under_head) in died_snakes.iter().zip(&objects_under_head) {
             board.snakes[i].health = 0;
-            for p in board.snakes[i].body.iter().skip(1).copied() {
-                debug_assert!(board.contains(p));
+
+            if object_under_head != Object::BodyPart {
+                board.squares[board.snakes[i].body[0]].object = Object::Empty;
+            }
+
+            for &p in board.snakes[i].body.iter().skip(1) {
                 board.squares[p].object = Object::Empty;
             }
         }
 
+        // Restore heads, which would have been removed if it was a head-to-head collision.
         if died_snakes.len() > 0 {
-            for i in alive_snakes.iter().copied() {
+            for &i in alive_snakes.iter() {
                 let snake = &board.snakes[i];
                 if snake.is_alive() {
-                    for p in snake.body.iter().copied() {
-                        debug_assert!(board.contains(p));
-                        board.squares[p].object = Object::BodyPart;
-                    }
-                }
-            }
-        }
-        else {
-            // Optimized version of "then" branch.
-            for i in alive_snakes.iter().copied() {
-                let snake = &board.snakes[i];
-                if snake.is_alive() {
-                    let head = snake.body[0];
-                    debug_assert!(board.contains(head));
-                    board.squares[head].object = Object::BodyPart;
+                    board.squares[snake.body[0]].object = Object::BodyPart;
                 }
             }
         }
