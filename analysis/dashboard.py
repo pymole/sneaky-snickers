@@ -4,12 +4,12 @@ import dash
 import dash_core_components as dcc
 import dash_html_components as html
 from dash.dependencies import Input, Output, State
-import plotly.graph_objects as go
 import metrics
 
 GAMES_FOLDER = os.environ.get('DATA_FOLDER', 'data/')
 METRICS = {
     'move_availability': metrics.MovesAvailability,
+    'flood_fill': metrics.FloodFill,
 }
 GAME_FILES = os.listdir(GAMES_FOLDER)
 
@@ -53,37 +53,26 @@ app.layout = html.Div([
             'padding-top': '16px'
         }
     ),
-    dcc.Graph(id="snake-metrics"),
+    html.Div(id='metric-dashboard'),
 ])
 
 
-def get_figure(game_file_name, metric):
+@app.callback(
+    [Output('metric-dashboard', 'children'), Output('game-url', 'href')],
+    [Input('analyze-button', 'n_clicks'),
+    State('game-file-dropdown', 'value'),
+    State('metric-dropdown', 'value')])
+def load_game_file(button_clicks, game_file_name, metric):
     with open(f'data/{game_file_name}', 'r') as f:
         game = json.load(f)
 
-    colors = {snake['Name']: snake['Color'] for snake in game['Frames'][0]['Snakes']}
+    figures = METRICS[metric](game).analyze()
+    metric_dashboard = [
+        dcc.Graph(figure=figure)
+        for figure in figures
+    ]
 
-    fig = go.Figure()
-
-    for name, values in METRICS[metric](game).analyze().items():
-        fig.add_trace(go.Scatter(x=list(range(len(values))), y=values, line=dict(color=colors[name]), name=name))
-
-    fig.update_layout(
-        xaxis_title="Turn",
-        yaxis_title="State estimate",
-        legend_title="Snakes",
-    )
-
-    return fig, f'https://play.battlesnake.com/g/{os.path.splitext(game_file_name)[0]}/'
-
-
-@app.callback(
-    [Output("snake-metrics", "figure"), Output("game-url", "href")],
-    [Input('analyze-button', 'n_clicks'),
-    State("game-file-dropdown", "value"),
-    State("metric-dropdown", 'value')])
-def load_game_file(button, game_file_name, metric):
-    return get_figure(game_file_name, metric)
+    return metric_dashboard, f'https://play.battlesnake.com/g/{os.path.splitext(game_file_name)[0]}/'
 
 
 if __name__ == '__main__':
