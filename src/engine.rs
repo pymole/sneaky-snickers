@@ -294,6 +294,35 @@ mod tests {
             data::SINGLE_SHORT_SNAKE_IN_THE_CENTER_UP,
             &mut |_, _| Action::Move(Movement::Up)
         );
+
+        test_transition(
+            data::SINGLE_SHORT_SNAKE_IN_THE_CENTER,
+            data::SINGLE_SHORT_SNAKE_IN_THE_CENTER_LEFT,
+            &mut |_, _| Action::Move(Movement::Left)
+        );
+
+        test_transition(
+            data::SINGLE_SHORT_SNAKE_IN_THE_CENTER,
+            data::SINGLE_SHORT_SNAKE_IN_THE_CENTER_RIGHT,
+            &mut |_, _| Action::Move(Movement::Right)
+        );
+
+        {
+            let mut board = create_board(data::SINGLE_SHORT_SNAKE_IN_THE_CENTER);
+            let mut settings = EngineSettings {
+                food_spawner: &mut food_spawner::noop,
+                safe_zone_shrinker: &mut safe_zone_shrinker::noop,
+            };
+
+            advance_one_step(&mut board, &mut settings, &mut |_, _| Action::Move(Movement::Down));
+            assert!(!board.snakes[0].is_alive(), "{:?}", &board.snakes[0]);
+
+            for x in 0..board.size.x {
+                for y in 0..board.size.y {
+                    assert_eq!(board.squares[(x, y)].object, Object::Empty);
+                }
+            }
+        }
     }
 
     #[test]
