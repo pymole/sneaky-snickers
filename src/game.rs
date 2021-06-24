@@ -6,6 +6,7 @@ use crate::vec2d::Vec2D;
 
 pub const MAX_SNAKE_COUNT: usize = 8;
 
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Board {
     pub size: Point,
     pub foods: Vec<Point>,
@@ -28,6 +29,7 @@ pub struct Square {
     pub object: Object,
 }
 
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Snake {
     pub health: i32,
     pub body: VecDeque<Point>,

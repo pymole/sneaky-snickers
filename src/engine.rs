@@ -86,12 +86,10 @@ pub mod safe_zone_shrinker {
     }
 }
 
+type SnakeStrategy<'a> = &'a mut dyn FnMut(/*snake_index:*/ usize, &Board) -> Action;
+
 /// Dead snakes are kept in array to preserve indices of all other snakes
-pub fn advance_one_step(
-    board: &mut Board,
-    engine_settings: &mut EngineSettings,
-    snake_strategy: &mut dyn FnMut(/*snake_index:*/ usize, &Board) -> Action,
-)
+pub fn advance_one_step(board: &mut Board, engine_settings: &mut EngineSettings, snake_strategy: SnakeStrategy)
 {
     board.turn += 1;
 
@@ -273,13 +271,30 @@ mod tests {
 
     use super::*;
 
+    fn create_board(api_str: &str) -> Board {
+        let state = serde_json::from_str::<api::objects::State>(&data::SINGLE_SHORT_SNAKE_IN_THE_CENTER).unwrap();
+        Board::from_api(&state)
+    }
+
+    fn test_transition(state_before: &str, state_after: &str, snake_strategy: SnakeStrategy) {
+        let mut board_before = create_board(state_before);
+        let board_after = create_board(state_after);
+        let mut settings = EngineSettings {
+            food_spawner: &mut food_spawner::noop,
+            safe_zone_shrinker: &mut safe_zone_shrinker::noop,
+        };
+
+        advance_one_step(&mut board_before, &mut settings, snake_strategy);
+        assert_eq!(board_before, board_after);
+    }
+
     #[test]
     fn snake_moves_in_corect_direction() {
-        let state = serde_json::from_str::<api::objects::State>(&data::SINGLE_SHORT_SNAKE_IN_THE_CENTER).unwrap();
-        let board = Board::from_api(&state);
-        assert_eq!(board.size, Point{x: 11, y: 11 });
-
-        // TODO
+        test_transition(
+            data::SINGLE_SHORT_SNAKE_IN_THE_CENTER,
+            data::SINGLE_SHORT_SNAKE_IN_THE_CENTER_UP,
+            &mut |_, _| Action::Move(Movement::Up)
+        );
     }
 
     #[test]
