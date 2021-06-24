@@ -6,6 +6,9 @@ mod engine;
 mod solver;
 mod vec2d;
 
+#[cfg(test)]
+mod test_data;
+
 #[macro_use]
 extern crate rocket;
 

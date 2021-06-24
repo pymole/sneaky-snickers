@@ -269,17 +269,15 @@ mod tests {
     use rocket::serde::json::serde_json;
 
     use crate::api;
+    use crate::test_data as data;
 
     use super::*;
-
-    mod data {
-        pub const SINGLE_SHORT_SNAKE_IN_THE_CENTER: &str = include_str!("test-data/single_short_snake_in_the_center.json");
-    }
 
     #[test]
     fn snake_moves_in_corect_direction() {
         let state = serde_json::from_str::<api::objects::State>(&data::SINGLE_SHORT_SNAKE_IN_THE_CENTER).unwrap();
         let board = Board::from_api(&state);
+        assert_eq!(board.size, Point{x: 11, y: 11 });
 
         // TODO
     }
