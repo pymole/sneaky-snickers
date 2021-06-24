@@ -46,6 +46,7 @@ pub mod objects {
         pub latency: String,
         pub head: Point,
         pub length: u32,
+        #[serde(default)]
         pub shout: String,
         // Present only in Squad Mode games
         // pub squad: String,
