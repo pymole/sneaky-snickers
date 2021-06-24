@@ -201,7 +201,7 @@ pub fn advance_one_step(board: &mut Board, engine_settings: &mut EngineSettings,
             died = died || object_under_head == Object::BodyPart;
             if !died {
                 for j in alive_snakes.iter().copied() {
-                    if i != j && head == board.snakes[j].body[0] {
+                    if i != j && head == board.snakes[j].body[0] && board.snakes[j].body.len() >= snake.body.len() {
                         died = true;
                         break;
                     }
