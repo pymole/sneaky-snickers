@@ -6,6 +6,7 @@ use crate::vec2d::Vec2D;
 
 pub const MAX_SNAKE_COUNT: usize = 8;
 
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Board {
     pub size: Point,
     pub foods: Vec<Point>,
@@ -28,6 +29,7 @@ pub struct Square {
     pub object: Object,
 }
 
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Snake {
     pub health: i32,
     pub body: VecDeque<Point>,
@@ -83,7 +85,7 @@ impl Board {
         }
 
         for snake in board_api.snakes.iter() {
-            for (i, body_part) in snake.body.iter().enumerate() {
+            for (_, body_part) in snake.body.iter().enumerate() {
                 match squares[*body_part].object {
                     Object::Empty => squares[*body_part].object = Object::BodyPart,
                     Object::BodyPart => {} // A snake can intersect with itself in the begining and after eating a food.
