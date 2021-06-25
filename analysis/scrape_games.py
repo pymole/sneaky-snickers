@@ -50,6 +50,10 @@ def get_stored_game_ids(storage_path: Path) -> Set[GameId]:
     return set(p.stem for p in storage_path.glob('*.json'))
 
 
+def save_game(storage_path: Path, game_id: GameId, game: dict):
+    json.dump(game, open(storage_path / f'{game_id}.json', 'wt'))
+
+
 def main():
     logging.basicConfig(
         format='%(asctime)s | %(levelname)-8s | %(message)s',
