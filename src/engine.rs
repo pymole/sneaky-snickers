@@ -170,7 +170,53 @@ pub fn advance_one_step(board: &mut Board, engine_settings: &mut EngineSettings,
         (engine_settings.food_spawner)(board);
     }
 
-    // Battle Royale ruleset. Do in this order:
+    // 4. Any Battlesnake that has been eliminated is removed from the game board:
+    //     - Health less than or equal to 0
+    //     - Moved out of bounds
+    {
+        for &i in alive_snakes.iter() {
+            if !board.contains(board.snakes[i].body[0]) {
+                board.snakes[i].health = 0;
+            }
+        }
+    }
+
+    //     - Collided with themselves
+    //     - Collided with another Battlesnake
+    //     - Collided head-to-head and lost
+    {
+
+        let mut died_snakes = ArrayVec::<usize, MAX_SNAKE_COUNT>::new();
+
+        for (&i, &object_under_head) in alive_snakes.iter().zip(&objects_under_head) {
+            if !board.snakes[i].is_alive() {
+                continue;
+            }
+
+            // Collided with themselves or another battlesnake.
+            if object_under_head == Object::BodyPart {
+                died_snakes.push(i);
+                continue;
+            }
+
+            // Head-to-head.
+            for j in alive_snakes.iter().copied() {
+                let body_i = &board.snakes[i].body;
+                let body_j = &board.snakes[j].body;
+
+                if i != j && body_i[0] == body_j[0] && body_i.len() <= body_j.len() {
+                    died_snakes.push(i);
+                    break;
+                }
+            }
+        }
+
+        for &i in died_snakes.iter() {
+            board.snakes[i].health = 0;
+        }
+    }
+
+    // At last, aplly Battle Royale ruleset. Do in this order:
     // - Deal out-of-safe-zone damage
     // - Maybe shrink safe zone
     {
@@ -183,55 +229,26 @@ pub fn advance_one_step(board: &mut Board, engine_settings: &mut EngineSettings,
         (engine_settings.safe_zone_shrinker)(board);
     }
 
-    // 4. Any Battlesnake that has been eliminated is removed from the game board:
-    //     - Health less than or equal to 0
-    //     - Moved out of bounds
-    //     - Collided with themselves
-    //     - Collided with another Battlesnake
-    //     - Collided head-to-head and lost
+    // Remove dead snakes from board.squares.
     {
-        let mut died_snakes = ArrayVec::<usize, MAX_SNAKE_COUNT>::new();
-
         for (&i, &object_under_head) in alive_snakes.iter().zip(&objects_under_head) {
-            let snake = &board.snakes[i];
-            let head = snake.body[0];
+            if !board.snakes[i].is_alive() {
+                board.snakes[i].health = 0;
 
-            let mut died = snake.health <= 0;
-            died = died || !board.contains(head);
-            died = died || object_under_head == Object::BodyPart;
-            if !died {
-                for j in alive_snakes.iter().copied() {
-                    if i != j && head == board.snakes[j].body[0] && board.snakes[j].body.len() >= snake.body.len() {
-                        died = true;
-                        break;
-                    }
+                if object_under_head != Object::BodyPart {
+                    board.squares[board.snakes[i].body[0]].object = Object::Empty;
                 }
-            }
 
-            if died {
-                died_snakes.push(i);
+                for &p in board.snakes[i].body.iter().skip(1) {
+                    board.squares[p].object = Object::Empty;
+                }
             }
         }
 
-        for (&i, &object_under_head) in died_snakes.iter().zip(&objects_under_head) {
-            board.snakes[i].health = 0;
-
-            if object_under_head != Object::BodyPart {
-                board.squares[board.snakes[i].body[0]].object = Object::Empty;
-            }
-
-            for &p in board.snakes[i].body.iter().skip(1) {
-                board.squares[p].object = Object::Empty;
-            }
-        }
-
-        // Restore heads, which would have been removed if it was a head-to-head collision.
-        if died_snakes.len() > 0 {
-            for &i in alive_snakes.iter() {
-                let snake = &board.snakes[i];
-                if snake.is_alive() {
-                    board.squares[snake.body[0]].object = Object::BodyPart;
-                }
+        // Restore alive heads, which were removed in previous loop in case of a head-to-head collision.
+        for &i in alive_snakes.iter() {
+            if board.snakes[i].is_alive() {
+                board.squares[board.snakes[i].body[0]].object = Object::BodyPart;
             }
         }
     }
