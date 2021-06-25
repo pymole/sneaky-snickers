@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import json
 import os
 from pathlib import Path
@@ -7,7 +9,7 @@ import dash_core_components as dcc
 import dash_html_components as html
 from dash.dependencies import Input, Output, State
 import metrics
-import scrape_games
+import scrape
 
 
 STORAGE = Path(os.environ.get('STORAGE', 'data/'))
@@ -108,8 +110,8 @@ def estimate(button_clicks, game_file_name, game_id, metric, search_type):
         game_file_name = search_type + '.json'
 
     if game_file_name not in GAME_FILES:
-        game = scrape_games.download(game_id)
-        scrape_games.save_game(STORAGE, game_id, game)
+        game = scrape.download(game_id)
+        scrape.save_game(STORAGE, game_id, game)
     else:
         with open(f'data/{game_file_name}', 'r') as f:
             game = json.load(f)
