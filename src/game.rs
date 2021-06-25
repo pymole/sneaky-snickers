@@ -131,6 +131,12 @@ impl Board {
     }
 }
 
+impl Default for Object {
+    fn default() -> Object {
+        Object::Empty
+    }
+}
+
 impl Snake {
     pub fn from_api(snake_api: &api::objects::Snake) -> Snake {
         assert!(snake_api.body.len() > 0);
