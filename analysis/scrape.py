@@ -2,17 +2,17 @@
 
 from argparse import ArgumentParser
 from pathlib import Path
-from typing import List, Set, Iterator, TypedDict
+from typing import List, Set, Iterator, TypedDict, Union
 from urllib.request import urlopen
 import datetime
 import json
 import logging
 import re
 
+from match import SnickersMatch
 
 GameId = str
-Frames = dict
-SnickersFrames = dict
+
 
 ENGINE_HOST = 'https://engine.battlesnake.com'
 ARENA_URL = 'https://play.battlesnake.com/arena/summer-league-2021'
@@ -32,7 +32,7 @@ def download_frames_iter(game_id: GameId) -> Iterator[dict]:
         offset += len(r['Frames'])
 
 
-def download(game_id: GameId) -> Frames:
+def download(game_id: GameId) -> dict:
     game = json.load(urlopen(f'{ENGINE_HOST}/games/{game_id}'))
     frames = list(download_frames_iter(game_id))
 
@@ -43,73 +43,6 @@ def download(game_id: GameId) -> Frames:
     }
 
 
-def frames_to_snickers_frames(data: Frames) -> SnickersFrames:
-    game = data['Game']['Game']
-    game_id = game['ID']
-    width = game['Width']
-    height = game['Height']
-    game_ruleset = game['Ruleset']
-    ruleset = {
-        'damage_per_turn': game_ruleset['damagePerTurn'],
-        'food_spawn_chance': game_ruleset['foodSpawnChance'],
-        'name': game_ruleset['name'],
-        'minimum_food': game_ruleset['minimumFood'],
-        'shrink_every_n_turns': game_ruleset['shrinkEveryNTurns'],
-    }
-
-    game_frames = data['Frames']
-    snakes_meta = [
-        {'id': snake['ID'], 'name': snake['Name'], 'color': snake['Color']}
-        for snake in game_frames[0]['Snakes']
-    ]
-
-    frames = []
-    for game_frame in game_frames:
-        snakes = [
-            {
-                'id': snake['ID'],
-                'body': [
-                    {'x': body_part['X'], 'y': body_part['Y']}
-                    for body_part in snake['Body']
-                ],
-                'health': snake['Health'],
-            }
-            for snake in game_frame['Snakes']
-        ]
-
-        food = [
-            {'x': f['X'], 'y': f['Y']}
-            for f in game_frame['Food']
-        ]
-
-        hazards = [
-            {'x': hazard['X'], 'y': hazard['Y']}
-            for hazard in game_frame['Hazards']
-        ]
-
-        frame = {
-            'turn': game_frame['Turn'],
-            'snakes': snakes,
-            'hazards': hazards,
-            'food': food,
-        }
-
-        frames.append(frame)
-
-    snickers_frames = {
-        'game': {
-            'game_id': game_id,
-            'width': width,
-            'height': height,
-            'snakes': snakes_meta,
-            'ruleset': ruleset,
-        },
-        'frames': frames,
-    }
-
-    return snickers_frames
-
-
 def list_recent_game_ids() -> List[GameId]:
     return RECENT_GAMES_REGEX.findall(urlopen(ARENA_URL).read().decode('utf-8'))
 
@@ -118,7 +51,7 @@ def get_stored_game_ids(storage_path: Path) -> Set[GameId]:
     return set(p.stem for p in storage_path.glob('*.json'))
 
 
-def save_game(storage_path: Path, game_id: GameId, game: dict):
+def save_game(storage_path: Path, game_id: GameId, game: Union[dict, SnickersMatch]):
     json.dump(game, open(storage_path / f'{game_id}.json', 'wt'))
 
 

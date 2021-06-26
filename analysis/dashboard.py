@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+import dataclasses
 import json
 import os
 from pathlib import Path
@@ -10,10 +10,13 @@ import dash_html_components as html
 from dash.dependencies import Input, Output, State
 import metrics
 import scrape
+import match
+import dacite
 
 
 STORAGE = Path(os.environ.get('STORAGE', 'data/'))
 METRICS = {
+    'flavored_flood_fill': metrics.FlavoredFloodFill,
     'move_availability': metrics.MovesAvailability,
     'flood_fill': metrics.FloodFill,
 }
@@ -110,15 +113,19 @@ def estimate(button_clicks, game_file_name, game_id, metric, search_type):
         game_file_name = search_type + '.json'
 
     if game_file_name not in GAME_FILES:
-        game = scrape.download(game_id)
-        scrape.save_game(STORAGE, game_id, game)
+        snickers_match = match.battlesnake_frames_to_snickers_match(scrape.download(game_id))
+        scrape.save_game(STORAGE, game_id, dataclasses.asdict(snickers_match))
     else:
         with open(f'data/{game_file_name}', 'r') as f:
-            game = json.load(f)
+            data = json.load(f)
+            try:
+                snickers_match = dacite.from_dict(match.SnickersMatch, data)
+            except:
+                snickers_match = match.battlesnake_frames_to_snickers_match(data)
 
         game_id = os.path.splitext(game_file_name)[0]
 
-    figures = METRICS[metric](game).analyze()
+    figures = METRICS[metric](snickers_match).analyze()
     metric_dashboard = [
         dcc.Graph(figure=figure)
         for figure in figures
