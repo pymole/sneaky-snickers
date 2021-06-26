@@ -432,7 +432,42 @@ mod tests {
 
     #[test]
     fn can_move_behind_tail() {
-        // TODO
+        let mut board = create_board(data::FOLLOW_TAIL);
+        let mut board_copy = board.clone();
+        assert!(board.snakes[0].is_alive());
+        // Make a full loop
+        advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Left));
+        board_copy.turn += 1;
+        board_copy.snakes[0].health -= 1;
+        assert_ne!(board, board_copy);
+        advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Up));
+        board_copy.turn += 1;
+        board_copy.snakes[0].health -= 1;
+        assert_ne!(board, board_copy);
+        advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Up));
+        board_copy.turn += 1;
+        board_copy.snakes[0].health -= 1;
+        assert_ne!(board, board_copy);
+        advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Right));
+        board_copy.turn += 1;
+        board_copy.snakes[0].health -= 1;
+        assert_ne!(board, board_copy);
+        advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Right));
+        board_copy.turn += 1;
+        board_copy.snakes[0].health -= 1;
+        assert_ne!(board, board_copy);
+        advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Down));
+        board_copy.turn += 1;
+        board_copy.snakes[0].health -= 1;
+        assert_ne!(board, board_copy);
+        advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Down));
+        board_copy.turn += 1;
+        board_copy.snakes[0].health -= 1;
+        assert_ne!(board, board_copy);
+        advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Left));
+        board_copy.turn += 1;
+        board_copy.snakes[0].health -= 1;
+        assert_eq!(board, board_copy);
     }
 
     #[test]

@@ -16,6 +16,23 @@
 pub const BOTTOM_LEFT_CORNER: &str = include_str!("test_data/bottom_left_corner.json");
 
 /*
+ turn=200
+ A: health=100
+ . . . . . . . . . . .
+ . . . . . . . . . . .
+ . . . . . . . . . . .
+ . . . . . . . . . . .
+ . . . a a a . . . . .
+ . . . a . a . . . . .
+ . . . a A a . . . . .
+ . . . . . . . . . . .
+ . . . . . . . . . . .
+ . . . . . . . . . . .
+ . . . . . . . . . . .
+*/
+pub const FOLLOW_TAIL: &str = include_str!("test_data/follow_tail.json");
+
+/*
  turn=202
  A: health=99
  . . . . . . . . . . .
