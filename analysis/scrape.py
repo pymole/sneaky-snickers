@@ -144,7 +144,7 @@ def main():
             game_id = args.game_id
 
         if not re.fullmatch(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', game_id):
-            raise Exception('Bad game-id format')
+            raise Exception('Bad game id format')
 
         save_game(args.output, game_id, download(game_id))
     else:
