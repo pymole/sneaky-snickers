@@ -8,6 +8,7 @@ from pathlib import Path
 
 # Example:
 #
+# turn=200
 # A: health=100
 # B: health=20
 # ░░░░░░░░░░░░░░░░░░░░░░
@@ -54,6 +55,8 @@ def to_ascii(state):
         [ EMPTY for _ in range(state['board']['width']) ]
         for _ in range(state['board']['height'])
     ]
+
+    header.append(f' turn={state["turn"]}')
 
     for p in state['board']['hazards']:
         board[p['y']][p['x']] = HAZARD
