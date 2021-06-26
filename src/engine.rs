@@ -407,7 +407,12 @@ mod tests {
 
     #[test]
     fn snake_dies_from_enemy_collision() {
-        // TODO
+        let mut board = create_board(data::BODY_COLLISION);
+        assert!(board.snakes[0].is_alive());
+        assert!(board.snakes[1].is_alive());
+        advance_one_step(&mut board, &mut |i, _| Action::Move(Movement::Right));
+        assert!(!board.snakes[0].is_alive());
+        assert!(board.snakes[1].is_alive());
     }
 
     #[test]
