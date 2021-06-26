@@ -337,7 +337,17 @@ mod tests {
 
     #[test]
     fn snake_eats_food() {
-        // TODO
+        let mut board = create_board(data::FOOD_IN_FRONT);
+        assert_eq!(board.foods.len(), 3);
+        assert_eq!(board.snakes[0].body.len(), 4);
+        let food_point = board.foods[1];
+        advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Up));
+        assert_eq!(board.snakes[0].body[0], food_point);
+        assert_eq!(board.foods.len(), 2);
+        assert_eq!(board.snakes[0].body.len(), 5);
+        assert_eq!(board.snakes[0].body[3], board.snakes[0].body[4]);
+        advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Up));
+        assert_eq!(board, create_board(data::FOOD_IN_FRONT_UP_UP));
     }
 
     #[test]
