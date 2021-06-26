@@ -327,7 +327,10 @@ mod tests {
 
     #[test]
     fn health_depletes_by_one_on_each_move() {
-        // TODO
+        let mut board = create_board(data::SINGLE_SHORT_SNAKE_IN_THE_CENTER);
+        assert_eq!(board.snakes[0].health, 100);
+        advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Up));
+        assert_eq!(board.snakes[0].health, 99);
     }
 
     #[test]
