@@ -88,8 +88,21 @@ pub mod safe_zone_shrinker {
 
 type SnakeStrategy<'a> = &'a mut dyn FnMut(/*snake_index:*/ usize, &Board) -> Action;
 
+pub fn advance_one_step(board: &mut Board, snake_strategy: SnakeStrategy) {
+    let mut settings = EngineSettings {
+        food_spawner: &mut food_spawner::noop,
+        safe_zone_shrinker: &mut safe_zone_shrinker::noop,
+    };
+
+    advance_one_step_with_settings(board, &mut settings, snake_strategy);
+}
+
 /// Dead snakes are kept in array to preserve indices of all other snakes
-pub fn advance_one_step(board: &mut Board, engine_settings: &mut EngineSettings, snake_strategy: SnakeStrategy) {
+pub fn advance_one_step_with_settings(
+    board: &mut Board,
+    engine_settings: &mut EngineSettings,
+    snake_strategy: SnakeStrategy
+) {
     board.turn += 1;
 
     let alive_snakes: ArrayVec<usize, MAX_SNAKE_COUNT> = (0..board.snakes.len())
@@ -126,13 +139,18 @@ pub fn advance_one_step(board: &mut Board, engine_settings: &mut EngineSettings,
         }
     }
 
-    // TODO: out of bounds head will
-    let objects_under_head: ArrayVec<Object, MAX_SNAKE_COUNT> = alive_snakes.iter().copied()
-        .map(|i| board.squares[board.snakes[i].body[0]].object)
-        .collect();
+    let mut objects_under_head = ArrayVec::<Object, MAX_SNAKE_COUNT>::new();
 
-    for i in alive_snakes.iter().copied() {
-        board.squares[board.snakes[i].body[0]].object = Object::BodyPart;
+    for &i in alive_snakes.iter() {
+        let head = board.snakes[i].body[0];
+        if board.contains(head) {
+            objects_under_head.push(board.squares[head].object);
+            board.squares[head].object = Object::BodyPart;
+        } else {
+            // Note: Object::Empty will also work in current implementation
+            // Note: If board.squares would allow out of bounds access, only "then" branch will suffice.
+            objects_under_head.push(Object::BodyPart);
+        }
     }
 
     // 2. Any Battlesnake that has found food will consume it:
@@ -270,12 +288,7 @@ mod tests {
     fn test_transition(state_before: &str, state_after: &str, snake_strategy: SnakeStrategy) {
         let mut board_before = create_board(state_before);
         let board_after = create_board(state_after);
-        let mut settings = EngineSettings {
-            food_spawner: &mut food_spawner::noop,
-            safe_zone_shrinker: &mut safe_zone_shrinker::noop,
-        };
-
-        advance_one_step(&mut board_before, &mut settings, snake_strategy);
+        advance_one_step(&mut board_before, snake_strategy);
         assert_eq!(board_before, board_after);
     }
 
@@ -301,12 +314,7 @@ mod tests {
 
         {
             let mut board = create_board(data::SINGLE_SHORT_SNAKE_IN_THE_CENTER);
-            let mut settings = EngineSettings {
-                food_spawner: &mut food_spawner::noop,
-                safe_zone_shrinker: &mut safe_zone_shrinker::noop,
-            };
-
-            advance_one_step(&mut board, &mut settings, &mut |_, _| Action::Move(Movement::Down));
+            advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Down));
             assert!(!board.snakes[0].is_alive(), "{:?}", &board.snakes[0]);
 
             for x in 0..board.size.x {
