@@ -120,6 +120,23 @@ pub const SINGLE_SHORT_SNAKE_IN_THE_CENTER: &str = include_str!("test_data/singl
 /*
  turn=200
  A: health=100
+ . . . . . . . . . . .
+ . . . . . . . . . . .
+ . . . . . . . . . . .
+ . . . . . . . . . . .
+ . . . a a a . . . . .
+ . . . a . a . . . . .
+ . . . a A a . . . . .
+ . . . a . . . . . . .
+ . . . . . . . . . . .
+ . . . . . . . . . . .
+ . . . . . . . . . . .
+*/
+pub const STEP_ON_TAIL: &str = include_str!("test_data/step_on_tail.json");
+
+/*
+ turn=200
+ A: health=100
  . . . . . . . . a a A
  . . . . . . . . a . .
  . . . . . . . . a . .

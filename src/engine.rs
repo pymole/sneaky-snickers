@@ -126,22 +126,22 @@ pub fn advance_one_step_with_settings(
             .collect();
 
         for (i, action) in alive_snakes.iter().copied().zip(actions) {
-            if let Action::Move(movement) = action {
-                let snake = &mut board.snakes[i];
-                debug_assert!(snake.body.len() > 0);
+            let Action::Move(movement) = action;
 
-                snake.body.push_front(snake.body[0] + movement.to_direction());
-                let old_tail = snake.body.pop_back().unwrap();
-                snake.health -= 1;
+            let snake = &mut board.snakes[i];
+            debug_assert!(snake.body.len() > 0);
 
-                debug_assert_eq!(board.squares[old_tail].object, Object::BodyPart);
+            snake.body.push_front(snake.body[0] + movement.to_direction());
+            let old_tail = snake.body.pop_back().unwrap();
+            snake.health -= 1;
 
-                // TODO: benchmark alternative: if *snake.body.back().unwrap() != old_tail {
-                board.squares[old_tail].object = Object::Empty;
-                board.squares[*snake.body.back().unwrap()].object = Object::BodyPart;
+            debug_assert_eq!(board.squares[old_tail].object, Object::BodyPart);
 
-                // The head will be set in a separate loop.
-            }
+            // TODO: benchmark alternative: if *snake.body.back().unwrap() != old_tail {
+            board.squares[old_tail].object = Object::Empty;
+            board.squares[*snake.body.back().unwrap()].object = Object::BodyPart;
+
+            // The head will be set in a separate loop.
         }
     }
 
@@ -398,7 +398,11 @@ mod tests {
 
     #[test]
     fn snake_dies_from_self_collision() {
-        // TODO
+        let mut board = create_board(data::STEP_ON_TAIL);
+        assert!(board.snakes[0].is_alive());
+        advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Left));
+        assert!(!board.snakes[0].is_alive());
+        assert!(is_empty(&board));
     }
 
     #[test]
