@@ -298,6 +298,18 @@ mod tests {
         assert_eq!(board_before, board_after);
     }
 
+    fn is_empty(board: &Board) -> bool {
+        for x in 0..board.size.x {
+            for y in 0..board.size.y {
+                if board.squares[(x, y)].object != Object::Empty {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
     #[test]
     fn snake_moves_in_corect_direction() {
         test_transition(
@@ -322,12 +334,7 @@ mod tests {
             let mut board = create_board(data::SINGLE_SHORT_SNAKE_IN_THE_CENTER);
             advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Down));
             assert!(!board.snakes[0].is_alive(), "{:?}", &board.snakes[0]);
-
-            for x in 0..board.size.x {
-                for y in 0..board.size.y {
-                    assert_eq!(board.squares[(x, y)].object, Object::Empty);
-                }
-            }
+            assert!(is_empty(&board));
         }
     }
 
@@ -356,7 +363,37 @@ mod tests {
 
     #[test]
     fn snake_dies_out_of_bounds() {
-        // TODO
+        {
+            let mut board = create_board(data::TOP_RIGHT_CORNER);
+            assert!(board.snakes[0].is_alive());
+            advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Up));
+            assert!(!board.snakes[0].is_alive());
+            assert!(is_empty(&board));
+        }
+
+        {
+            let mut board = create_board(data::TOP_RIGHT_CORNER);
+            assert!(board.snakes[0].is_alive());
+            advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Right));
+            assert!(!board.snakes[0].is_alive());
+            assert!(is_empty(&board));
+        }
+
+        {
+            let mut board = create_board(data::BOTTOM_LEFT_CORNER);
+            assert!(board.snakes[0].is_alive());
+            advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Left));
+            assert!(!board.snakes[0].is_alive());
+            assert!(is_empty(&board));
+        }
+
+        {
+            let mut board = create_board(data::BOTTOM_LEFT_CORNER);
+            assert!(board.snakes[0].is_alive());
+            advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Down));
+            assert!(!board.snakes[0].is_alive());
+            assert!(is_empty(&board));
+        }
     }
 
     #[test]
