@@ -135,7 +135,11 @@ pub fn advance_one_step_with_settings(
                 snake.health -= 1;
 
                 debug_assert_eq!(board.squares[old_tail].object, Object::BodyPart);
+
+                // TODO: benchmark alternative: if *snake.body.back().unwrap() != old_tail {
                 board.squares[old_tail].object = Object::Empty;
+                board.squares[*snake.body.back().unwrap()].object = Object::BodyPart;
+
                 // The head will be set in a separate loop.
             }
         }
