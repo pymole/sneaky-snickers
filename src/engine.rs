@@ -22,7 +22,9 @@ impl Movement {
 
 pub enum Action {
     // `DoNothing` allows freezing some snakes in place.
-    DoNothing,
+    // Not implemented, until use case is clear. Right now it is not clear, if health should deplete and how
+    // head-to-head collisions with frozen snake should be resolved.
+    // DoNothing,
     Move(Movement),
 }
 
