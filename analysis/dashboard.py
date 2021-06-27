@@ -116,7 +116,7 @@ def estimate(button_clicks, game_file_name, game_id, metric, search_type):
         snickers_match = match.battlesnake_frames_to_snickers_match(scrape.download(game_id))
         scrape.save_game(STORAGE, game_id, dataclasses.asdict(snickers_match))
     else:
-        with open(f'data/{game_file_name}', 'r') as f:
+        with open(f'{STORAGE}/{game_file_name}', 'r') as f:
             data = json.load(f)
             try:
                 snickers_match = dacite.from_dict(match.SnickersMatch, data)
