@@ -22,7 +22,9 @@ from collections import defaultdict, deque
 import plotly.graph_objects as go
 from plotly.colors import hex_to_rgb
 import numpy as np
-from match import SnickersMatch, State, Point
+import requests
+import dacite
+from match import SnickersMatch, State, Point, snickers_state_to_battlesnake_turn
 
 
 class BaseGameAnalyzer:
@@ -58,7 +60,7 @@ class BaseGameAnalyzer:
     def extra_data(self, state: State):
         obstacles = set()
         for snake in state.snakes:
-            if not snake.is_dead:
+            if snake.health > 0:
                 obstacles.update(snake.body)
 
         return {
@@ -105,7 +107,7 @@ class MovesAvailability(LineGraphAnalyzer):
     def get_estimates(self, state: State, extra_data: dict) -> dict[str, float]:
         estimates = {}
         for snake in state.snakes:
-            if not snake.is_dead:
+            if snake.health > 0:
                 estimates[snake.id] = self.estimate_snake(
                     snake.body[0], snake.health, state.hazards, extra_data['obstacles'], state.food)
 
@@ -169,7 +171,7 @@ class FloodFill(LineGraphAnalyzer):
                         matrix[p.y, p.x] = rgb_colors[snake_meta.id]
 
             for snake in self.match.states[turn].snakes:
-                if snake.is_dead:
+                if snake.health <= 0:
                     continue
 
                 for p in snake.body:
@@ -223,7 +225,7 @@ class FloodFill(LineGraphAnalyzer):
         floods = {
             snake.id: (deque([snake.body[0]]), set())
             for snake in state.snakes
-            if not snake.is_dead
+            if snake.health > 0
         }
 
         frontiers = set()
@@ -276,7 +278,7 @@ class FlavoredFloodFill(FloodFill):
         body_part_empty_at = {}
         sizes = {}
         for snake in state.snakes:
-            if snake.is_dead:
+            if snake.health <= 0:
                 continue
 
             for empty_at, body_part in enumerate(reversed(snake.body), start=1):
@@ -289,87 +291,10 @@ class FlavoredFloodFill(FloodFill):
             'sizes': sizes,
         }
 
-    def get_estimates(self, state: State, extra_data: dict) -> dict[str, set]:
-        print('actual turn:', state.turn)
-        body_part_empty_at = extra_data['body_part_empty_at']
-        sizes = extra_data['sizes']
-
-        floods = {
-            snake.id: ([snake.body[0]], [])
-            for snake in state.snakes
-            if not snake.is_dead
-        }
-
-        visited = set()
-        turn = 1
-
-        while True:
-            contested_points = defaultdict(list)
-            for snake_id, (flood_front, _) in floods.items():
-                while flood_front:
-                    point = flood_front.pop()
-
-                    for movement_position in self.movement_positions(point):
-                        hueta = False
-                        if movement_position.x == 0 and movement_position.y == 10 or movement_position.x == 1 and movement_position.y == 10:
-                            hueta = True
-
-                        if movement_position in visited:
-                            # Somebody already seized this point
-                            if hueta:
-                                print('HUETA VISITED')
-                            continue
-                        if movement_position in contested_points and snake_id in contested_points[movement_position]:
-                            # Already contesting for this point
-                            if hueta:
-                                print('HUETA CONTESTED')
-                            continue
-                        if movement_position in body_part_empty_at and turn < body_part_empty_at[movement_position]:
-                            # This body part is not ready for contest because it's not empty yet
-                            if hueta:
-                                print('HUETA BODY')
-                            continue
-
-                        contested_points[movement_position].append(snake_id)
-
-            all_fronts_empty = True
-            for point, contenders in contested_points.items():
-                visited.add(point)
-
-                if len(contenders) == 1:
-                    winner_id = contenders[0]
-                    # print('single')
-                else:
-                    # Largest snake get the point
-                    print(turn, [(self.names[c], sizes[c]) for c in contenders])
-                    winner_id = None
-                    largest_size = 0
-                    several_largest = False
-                    for contender in contenders:
-                        size = sizes[contender]
-                        if largest_size < size:
-                            winner_id = contender
-                            several_largest = False
-                            largest_size = size
-                        elif largest_size == size:
-                            several_largest = True
-
-                    # If there is multiple snakes that bigger than others then no one get the point
-                    if several_largest:
-                        # print('several')
-                        continue
-
-                flood_front, seized = floods[winner_id]
-                flood_front.append(point)
-                seized.append(point)
-                all_fronts_empty = False
-
-            if all_fronts_empty:
-                break
-
-            turn += 1
-
+    def get_estimates(self, state: State, extra_data: dict) -> dict[str, list[Point]]:
+        turn = snickers_state_to_battlesnake_turn(self.match.game, state)
+        response = requests.post('http://localhost:8000/flavored_flood_fill', json=turn)
         return {
-            name: visited
-            for name, (_, visited) in floods.items()
+            snake_id: [dacite.from_dict(Point, point) for point in visited]
+            for snake_id, visited in response.json().items()
         }

@@ -22,7 +22,8 @@ use log4rs::append::file::FileAppender;
 use log4rs::encode::pattern::PatternEncoder;
 use log4rs::config::{Appender, Config, Root};
 
-use crate::solver::get_best_movement;
+use crate::game::Board;
+
 
 #[get("/")]
 fn index() -> Json<api::responses::Info> {
@@ -47,7 +48,7 @@ fn movement(body: String) -> Json<api::responses::Move> {
     info!("MOVE - {}", body);
 
     let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
-    let movement = api::responses::Move::new(get_best_movement(state));
+    let movement = api::responses::Move::new(solver::get_best_movement(state));
 
     Json(movement)
 }
@@ -56,6 +57,15 @@ fn movement(body: String) -> Json<api::responses::Move> {
 fn end(body: String) -> Status {
     info!("END - {}", body);
     Status::Ok
+}
+
+#[post("/flavored_flood_fill", data = "<body>")]
+fn flavored_flood_fill(body: String) -> Json<solver::FloodFill> {
+    info!("FLOOD - {}", body);
+    let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
+    let board = Board::from_api(&state);
+    
+    Json(solver::flavored_flood_fill(&board))
 }
 
 #[launch]
@@ -72,5 +82,5 @@ fn rocket() -> _ {
 
     log4rs::init_config(config).unwrap();
 
-    rocket::build().mount("/", routes![index, start, movement, end])
+    rocket::build().mount("/", routes![index, start, movement, end, flavored_flood_fill])
 }

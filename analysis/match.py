@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 
 
 @dataclass(unsafe_hash=True)
@@ -12,7 +12,6 @@ class Snake:
     id: str
     body: list[Point]
     health: int
-    is_dead: bool
 
 
 @dataclass
@@ -83,8 +82,7 @@ def battlesnake_frames_to_snickers_match(data: dict) -> SnickersMatch:
                     Point(x=body_part['X'], y=body_part['Y'])
                     for body_part in snake['Body']
                 ],
-                health=snake['Health'],
-                is_dead=bool(snake['Death'])
+                health=0 if snake['Death'] else snake['Health'],
             )
             for snake in game_frame['Snakes']
         ]
@@ -120,3 +118,42 @@ def battlesnake_frames_to_snickers_match(data: dict) -> SnickersMatch:
     )
 
     return snickers_match
+
+
+def snickers_state_to_battlesnake_turn(game: Game, state: State):
+    snakes = [
+        {
+            'id': snake.id,
+            'name': snake.id,
+            'health': snake.health,
+            'body': [asdict(body_part) for body_part in snake.body],
+            'latency': '1',
+            'head': asdict(snake.body[0]),
+            'length': len(snake.body),
+        }
+        for snake in state.snakes
+    ]
+
+    battlesnake_turn = {
+        'game': {
+            'id': game.id,
+            'ruleset': {
+                'name': game.ruleset.name,
+                'version': 'unknown',
+            },
+            # Random timeout
+            'timeout': 500,
+        },
+        'turn': state.turn,
+        'board': {
+            'width': game.width,
+            'height': game.height,
+            'hazards': [asdict(hazard) for hazard in state.hazards],
+            'food': [asdict(f) for f in state.food],
+            'snakes': snakes,
+        },
+        # Random snake
+        'you': snakes[0],
+    }
+
+    return battlesnake_turn

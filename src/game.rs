@@ -31,6 +31,7 @@ pub struct Square {
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Snake {
+    pub id: String,
     pub health: i32,
     pub body: VecDeque<Point>,
 }
@@ -143,6 +144,7 @@ impl Snake {
         assert_eq!(snake_api.head, snake_api.body[0]);
 
         Snake {
+            id: snake_api.id.clone(),
             health: snake_api.health,
             body: snake_api.body.iter().copied().collect(), // TODO: reserve some capacity
         }
