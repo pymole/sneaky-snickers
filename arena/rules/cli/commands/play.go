@@ -190,7 +190,7 @@ func getRuleset(seed int64, gameTurn int32, snakes []Battlesnake) rules.Ruleset 
 	var royale rules.RoyaleRuleset
 
 	standard := rules.StandardRuleset{
-		FoodSpawnChance: 15,
+		FoodSpawnChance: 20,
 		MinimumFood:     1,
 	}
 
@@ -200,8 +200,8 @@ func getRuleset(seed int64, gameTurn int32, snakes []Battlesnake) rules.Ruleset 
 			StandardRuleset:   standard,
 			Seed:              seed,
 			Turn:              gameTurn,
-			ShrinkEveryNTurns: 10,
-			DamagePerTurn:     1,
+			ShrinkEveryNTurns: 20,
+			DamagePerTurn:     15,
 		}
 		ruleset = &royale
 	case "squad":
