@@ -43,7 +43,7 @@ class BotFromCommit(BotI):
         self._build_commit : str = bot_config['build']['commit']
         self._build_flags : list[str] = bot_config['build']['flags']
         self._launch : str = bot_config['launch']
-        self._bot_process : Optional[subprocess.Popen] = None
+        self._bot_processes : set[subprocess.Popen] = set()
 
     def __repr__(self) -> str:
         return f'BotFromCommit(commit={self._build_commit})'
@@ -61,38 +61,58 @@ class BotFromCommit(BotI):
 
     def up(self, ports_iter, copies=1) -> list[Address]:
         logging.info(f'{self}.up(copies={copies})')
-        port = next(ports_iter)
-        self._bot_process = subprocess.Popen(
-            [self._launch],
-            cwd=self._build_dir,
-            env={ 'ROCKET_PORT': str(port) }
-        )
+
+        for i, port in zip(range(copies), ports_iter):
+            self._bot_processes.add(
+                subprocess.Popen(
+                    [self._launch],
+                    cwd=self._build_dir,
+                    env={ 'ROCKET_PORT': str(port) }
+                )
+            )
 
     def down(self) -> None:
         logging.info(f'{self}.down()')
-        if self._bot_process is None:
-            return
 
-        if self._bot_process.returncode is not None:
-            return
+        for p in self._bot_processes:
+            p.terminate()
 
-        self._bot_process.terminate()
+        while self._bot_processes:
+            p = self._bot_processes.pop()
 
-        try:
-            self._bot_process.wait(timeout=BotFromCommit.TERMINATE_TIMEOUT)
-        except subprocess.TimeoutExpired:
-            logging.info(
-                f"{self}.down(): Process didn't in {BotFromCommit.TERMINATE_TIMEOUT} seconds. Killing forcefully."
-            )
-            self._bot_process.kill()
-            self._bot_process.wait()
+            try:
+                p.wait(timeout=BotFromCommit.TERMINATE_TIMEOUT)
+            except subprocess.TimeoutExpired:
+                logging.info(
+                    f"{self}.down(): Process didn't in {BotFromCommit.TERMINATE_TIMEOUT} seconds. Killing forcefully."
+                )
+                p.kill()
+                p.wait()
+
+
+class BotUnmanaged(BotI):
+    def __init__(self, bot_config):
+        assert bot_config['type'] == 'unmanaged'
+        self._addresses : list[str] = bot_config['addresses']
+
+    def __repr__(self) -> str:
+        return f'BotUnmanaged(addresses={self._addresses})'
+
+    def prepare(self) -> None:
+        return
+
+    def up(self, ports_iter, copies=1) -> list[Address]:
+        return self._addresses
+
+    def down(self) -> None:
+        return
 
 
 def create_bot_from_config(bot_config) -> BotI:
     if bot_config['type'] == 'from_commit':
         return BotFromCommit(bot_config)
-    elif bot_config['type'] == 'external':
-        return None # TODO
+    elif bot_config['type'] == 'unmanaged':
+        return BotUnmanaged(bot_config)
 
     return None
 

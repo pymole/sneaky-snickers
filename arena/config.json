@@ -10,12 +10,8 @@
             "launch": "target/release/sneaky-snickers"
         },
         "current": {
-            "type": "external",
-            "address": "127.0.0.1:8000"
-        },
-        "from_docker": {
-            "type": "docker",
-            "image": "some_image"
+            "type": "unmanaged",
+            "addresses": ["127.0.0.1:8000"]
         }
     },
 
