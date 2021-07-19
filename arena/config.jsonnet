@@ -4,6 +4,7 @@
             type: "from_commit",
             build: {
                 dir: "./build_dir/v1",
+                // Branch names are not properly implemented yet.
                 commit: "v1",
                 flags: ["--release"]
             },
