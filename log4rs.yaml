@@ -6,11 +6,11 @@ appenders:
     encoder:
       pattern: "{d(%Y-%m-%d %H:%M:%S)} {h({l})} {M} - {m}{n}"
 
-  dashboard:
-    kind: file
-    path: "dashboard.log"
-    encoder:
-      pattern: "{l} - {m}{n}"
+  # dashboard:
+  #   kind: file
+  #   path: "dashboard.log"
+  #   encoder:
+  #     pattern: "{l} - {m}{n}"
 
 root:
   level: info
