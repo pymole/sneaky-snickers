@@ -21,7 +21,7 @@ impl Movement {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Action {
     // `DoNothing` allows freezing some snakes in place.
     // Not implemented, until use case is clear. Right now it is not clear, if health should deplete and how

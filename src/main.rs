@@ -18,6 +18,7 @@ use rocket::serde::json::Json;
 use rocket::serde::json::serde_json;
 
 use log::{info};
+use std::env;
 
 use crate::game::Board;
 use crate::mcts::MCTS;
@@ -45,10 +46,13 @@ fn movement(body: String) -> Json<api::responses::Move> {
     info!("MOVE - {}", body);
 
     let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
-    let mut board = Board::from_api(&state);
+    let board = Board::from_api(&state);
     
     let mut mcts = MCTS::new(2.0);
-    mcts.search(&mut board, 10);
+
+    // TODO: Config
+    let iterations = env::var("MCTS_ITERATIONS").unwrap().parse().unwrap();
+    mcts.search(&board, iterations);
 
     let my_index = state.board.snakes
         .iter()
