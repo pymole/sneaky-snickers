@@ -204,15 +204,15 @@ class RatingJsonEncoder(json.JSONEncoder):
         return json.JSONEncoder.default(self, obj)
 
 
-def load_ranks(filename) -> dict[str, trueskill.Rating]:
+def load_ratings(filename) -> dict[str, trueskill.Rating]:
     return {
         name: trueskill.Rating(mu=rating['mu'], sigma=rating['sigma'])
         for name, rating in json.load(open(filename)).items()
     }
 
 
-def dump_ranks(ranks, filename) -> None:
-    json.dump(ranks, open(filename, 'w'), indent=4, cls=RatingJsonEncoder)
+def dump_ratings(ratings, filename) -> None:
+    json.dump(ratings, open(filename, 'w'), indent=4, cls=RatingJsonEncoder)
 
 
 class Arena:
@@ -224,7 +224,7 @@ class Arena:
             if (bot := create_bot_from_config(bot_config)) is not None
         }
         self._running_bots : list[RunningBot] = None
-        self._ranks_file : Path = Path(config['arena']['ranks_file'])
+        self._ratings_file : Path = Path(config['arena']['ratings_file'])
         self._ports_iter = iter(range(config['ports']['from'], config['ports']['to'] + 1))
         self._number_of_players : int = config['arena']['number_of_players']
         self._ladder_games : int = config['arena']['ladder_games']
@@ -248,9 +248,9 @@ class Arena:
         if self._number_of_players > len(self._running_bots):
             raise Exception(f'Not enough players to host {self._number_of_players}-players matches')
 
-        ranks = load_ranks(self._ranks_file)
+        ratings = load_ratings(self._ratings_file)
         for bot in self._running_bots:
-            ranks.setdefault(bot.name, trueskill.Rating())
+            ratings.setdefault(bot.name, trueskill.Rating())
 
         logging.info(f'Running ladder for {self._ladder_games} games')
 
@@ -258,11 +258,13 @@ class Arena:
             selected_bots = random.sample(self._running_bots, k=self._number_of_players)
             players = [Player(name=bot.name, address=bot.addresses[0]) for bot in selected_bots]
             logging.info(f'[{i} / {self._ladder_games}] Starting game. Players: {players}')
-            result = self._rules.play(players)
-            # TODO: recalculate ranks
-            logging.info(f'Result: {result}')
+            ranks = self._rules.play(players)
+            logging.info(f'Ranks: {ranks}')
+            new_ratings = trueskill.rate([(ratings[player.name],) for player in players], ranks=ranks)
+            for (new_rating,), player in zip(new_ratings, players):
+                ratings[player.name] = new_rating
 
-        dump_ranks(ranks, self._ranks_file)
+        dump_ratings(ratings, self._ratings_file)
 
     def down(self):
         assert self._running_bots is not None

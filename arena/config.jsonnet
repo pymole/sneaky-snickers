@@ -8,6 +8,8 @@
                 flags: ["--release"]
             },
             mute: true,
+
+            // Relative to build.dir
             launch: "target/release/sneaky-snickers"
         },
         current: {
@@ -26,8 +28,8 @@
     },
 
     arena: {
-        ranks_file: "./ranks.json",
-        ladder_games: 10,
-        number_of_players: 2,
+        ratings_file: "./ratings.json",
+        ladder_games: 10, // number of games to run
+        number_of_players: 2, // per game
     }
 }
