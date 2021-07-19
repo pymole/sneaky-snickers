@@ -7,6 +7,7 @@
                 "commit": "v1",
                 "flags": ["--release"]
             },
+            "mute": true,
             "launch": "target/release/sneaky-snickers"
         },
         "current": {
@@ -18,6 +19,10 @@
     "ports": {
         "from": 9000,
         "to": 9100
+    },
+
+    "rules": {
+        "build_dir": "./build_dir"
     },
 
     "arena": {
