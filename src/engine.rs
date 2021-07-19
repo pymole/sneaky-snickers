@@ -1,5 +1,6 @@
 use arrayvec::ArrayVec;
-
+use rand::distributions::{Distribution, Standard};
+use rand::Rng;
 use crate::game::{
     Board,
     MAX_SNAKE_COUNT,
@@ -20,12 +21,25 @@ impl Movement {
     }
 }
 
+#[derive(Clone, Copy)]
 pub enum Action {
     // `DoNothing` allows freezing some snakes in place.
     // Not implemented, until use case is clear. Right now it is not clear, if health should deplete and how
     // head-to-head collisions with frozen snake should be resolved.
     // DoNothing,
     Move(Movement),
+}
+
+impl Distribution<Action> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Action {
+        match rng.gen_range(0..4) {
+            0 => Action::Move(Movement::Down),
+            1 => Action::Move(Movement::Up),
+            2 => Action::Move(Movement::Right),
+            3 => Action::Move(Movement::Left),
+            _ => unreachable!(),
+        }
+    }
 }
 
 pub struct EngineSettings<'a, 'b> {
@@ -90,13 +104,13 @@ pub mod safe_zone_shrinker {
 
 type SnakeStrategy<'a> = &'a mut dyn FnMut(/*snake_index:*/ usize, &Board) -> Action;
 
-pub fn advance_one_step(board: &mut Board, snake_strategy: SnakeStrategy) {
+pub fn advance_one_step(board: &mut Board, snake_strategy: SnakeStrategy) -> Vec<(usize, Action)> {
     let mut settings = EngineSettings {
         food_spawner: &mut food_spawner::noop,
         safe_zone_shrinker: &mut safe_zone_shrinker::noop,
     };
 
-    advance_one_step_with_settings(board, &mut settings, snake_strategy);
+    advance_one_step_with_settings(board, &mut settings, snake_strategy)
 }
 
 /// Dead snakes are kept in array to preserve indices of all other snakes
@@ -104,7 +118,7 @@ pub fn advance_one_step_with_settings(
     board: &mut Board,
     engine_settings: &mut EngineSettings,
     snake_strategy: SnakeStrategy
-) {
+) -> Vec<(usize, Action)> {
     board.turn += 1;
 
     let alive_snakes: ArrayVec<usize, MAX_SNAKE_COUNT> = (0..board.snakes.len())
@@ -120,12 +134,14 @@ pub fn advance_one_step_with_settings(
     //     - A new body part is added to the board in the direction they moved.
     //     - Last body part (their tail) is removed from the board.
     //     - Health is reduced by 1.
-    {
-        let actions: ArrayVec<Action, MAX_SNAKE_COUNT> = alive_snakes.iter()
-            .map(|&i| snake_strategy(i, &board))
-            .collect();
 
-        for (i, action) in alive_snakes.iter().copied().zip(actions) {
+    let actions: Vec<(usize, Action)> = alive_snakes
+        .iter()
+        .map(|&i| (i, snake_strategy(i, &board)))
+        .collect();
+
+    {
+        for &(i, action) in actions.iter() {
             let Action::Move(movement) = action;
 
             let snake = &mut board.snakes[i];
@@ -276,6 +292,8 @@ pub fn advance_one_step_with_settings(
             }
         }
     }
+
+    actions
 }
 
 #[cfg(test)]
@@ -410,7 +428,7 @@ mod tests {
         let mut board = create_board(data::BODY_COLLISION);
         assert!(board.snakes[0].is_alive());
         assert!(board.snakes[1].is_alive());
-        advance_one_step(&mut board, &mut |i, _| Action::Move(Movement::Right));
+        advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Right));
         assert!(!board.snakes[0].is_alive());
         assert!(board.snakes[1].is_alive());
     }

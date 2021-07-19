@@ -6,7 +6,7 @@ use crate::vec2d::Vec2D;
 
 pub const MAX_SNAKE_COUNT: usize = 8;
 
-#[derive(PartialEq, Eq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone, Hash)]
 pub struct Board {
     pub size: Point,
     pub foods: Vec<Point>,
@@ -16,20 +16,20 @@ pub struct Board {
     pub squares: Vec2D<Square>,
 }
 
-#[derive(PartialEq, Eq, Debug, Copy, Clone)]
+#[derive(PartialEq, Eq, Debug, Copy, Clone, Hash)]
 pub enum Object {
     Empty,
     Food,
     BodyPart,
 }
 
-#[derive(PartialEq, Eq, Debug, Copy, Clone)]
+#[derive(PartialEq, Eq, Debug, Copy, Clone, Hash)]
 pub struct Square {
     pub safe: bool,
     pub object: Object,
 }
 
-#[derive(PartialEq, Eq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone, Hash)]
 pub struct Snake {
     pub id: String,
     pub health: i32,
@@ -39,7 +39,7 @@ pub struct Snake {
 pub use crate::api::objects::Point;
 
 /// Represents [p0.x, p1.x) × [p0.y, p1.y)
-#[derive(PartialEq, Eq, Debug, Copy, Clone)]
+#[derive(PartialEq, Eq, Debug, Copy, Clone, Hash)]
 pub struct Rectangle {
     pub p0: Point,
     pub p1: Point,

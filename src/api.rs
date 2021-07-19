@@ -55,10 +55,22 @@ pub mod objects {
     #[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Copy, Clone)]
     #[serde(rename_all(serialize = "lowercase", deserialize = "lowercase"))]
     pub enum Movement {
-        Right,
-        Left,
-        Up,
-        Down,
+        Right = 0,
+        Left = 1,
+        Up = 2,
+        Down = 3,
+    }
+
+    impl Movement {
+        pub fn from_usize(value: usize) -> Movement {
+            match value {
+                0 => Movement::Right,
+                1 => Movement::Left,
+                2 => Movement::Up,
+                3 => Movement::Down,
+                _ => panic!("Out of range movement value"),
+            }
+        }
     }
 }
 

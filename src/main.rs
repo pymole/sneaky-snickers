@@ -5,6 +5,7 @@ mod game;
 mod engine;
 mod solver;
 mod vec2d;
+mod mcts;
 
 #[cfg(test)]
 mod test_data;
@@ -23,7 +24,7 @@ use log4rs::encode::pattern::PatternEncoder;
 use log4rs::config::{Appender, Config, Root};
 
 use crate::game::Board;
-
+use crate::mcts::MCTS;
 
 #[get("/")]
 fn index() -> Json<api::responses::Info> {
@@ -48,8 +49,17 @@ fn movement(body: String) -> Json<api::responses::Move> {
     info!("MOVE - {}", body);
 
     let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
-    let movement = api::responses::Move::new(solver::get_best_movement(state));
+    let mut board = Board::from_api(&state);
+    
+    let mut mcts = MCTS::new(2.0);
+    mcts.search(&mut board, 10);
 
+    let my_index = state.board.snakes
+        .iter()
+        .position(|snake| snake.id == state.you.id)
+        .unwrap();
+
+    let movement = api::responses::Move::new(mcts.get_movement(&board, my_index));
     Json(movement)
 }
 

@@ -2,7 +2,7 @@ use std::ops::{Index, IndexMut};
 
 use crate::game::Point;
 
-#[derive(PartialEq, Eq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone, Hash)]
 pub struct Vec2D<T> {
     pub len1: usize,
     pub len2: usize,

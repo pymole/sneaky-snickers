@@ -74,7 +74,7 @@ fn distance(p1: Point, p2: Point) -> f64 {
 }
 
 
-pub type FloodFill = HashMap<String, Vec<Point>>;
+pub type FloodFill = HashMap<usize, Vec<Point>>;
 pub fn flavored_flood_fill(board: &Board) -> FloodFill {
     let mut body_part_empty_at = HashMap::new();
     let mut sizes = Vec::with_capacity(board.snakes.len());
@@ -173,7 +173,19 @@ pub fn flavored_flood_fill(board: &Board) -> FloodFill {
         turn += 1;
     }
 
-    board.snakes.iter().filter(|snake| snake.health > 0).map(|snake| snake.id.clone()).zip(seized_points).collect()
+    (0..board.snakes.len())
+        .filter(|&snake_id| board.snakes[snake_id].is_alive())
+        .zip(seized_points)
+        .collect()
+}
+
+pub fn flavored_flood_fill_estimate(board: &Board) -> Vec<(usize, f32)> {
+    let fff = flavored_flood_fill(board);
+    let squares_count = board.squares.len1 * board.squares.len2;
+
+    fff.into_iter()
+        .map(|(id, seized)| (id, (seized.len()/squares_count) as f32))
+        .collect()
 }
 
 fn movement_positions(width: i32, height: i32, position: Point) -> Vec<Point> {
