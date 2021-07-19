@@ -18,10 +18,6 @@ use rocket::serde::json::Json;
 use rocket::serde::json::serde_json;
 
 use log::{info};
-use log::LevelFilter;
-use log4rs::append::file::FileAppender;
-use log4rs::encode::pattern::PatternEncoder;
-use log4rs::config::{Appender, Config, Root};
 
 use crate::game::Board;
 use crate::mcts::MCTS;
@@ -74,23 +70,12 @@ fn flavored_flood_fill(body: String) -> Json<solver::FloodFill> {
     info!("FLOOD - {}", body);
     let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
     let board = Board::from_api(&state);
-    
+
     Json(solver::flavored_flood_fill(&board))
 }
 
 #[launch]
 fn rocket() -> _ {
-    let logfile = FileAppender::builder()
-        .encoder(Box::new(PatternEncoder::new("{l} - {m}{n}")))
-        .build("dashboard.log").unwrap();
-
-    let config = Config::builder()
-        .appender(Appender::builder().build("logfile", Box::new(logfile)))
-        .build(Root::builder()
-                   .appender("logfile")
-                   .build(LevelFilter::Info)).unwrap();
-
-    log4rs::init_config(config).unwrap();
-
+    log4rs::init_file("log4rs.yaml", Default::default()).unwrap();
     rocket::build().mount("/", routes![index, start, movement, end, flavored_flood_fill])
 }
