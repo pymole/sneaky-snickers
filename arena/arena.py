@@ -1,20 +1,25 @@
 #!/usr/bin/env python3
 
 from argparse import ArgumentParser
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, NamedTuple
+import _jsonnet
 import atexit
 import json
 import logging
+import random
 import re
 import shlex
 import subprocess
 import textwrap
+import trueskill
+import urllib.request
 
 
 ARENA_DIR = Path(__file__).parent
 ROOT_DIR = ARENA_DIR.parent
-CONFIG_PATH = ARENA_DIR / 'config.json'
+CONFIG_PATH = ARENA_DIR / 'config.jsonnet'
 
 
 Address = str
@@ -111,12 +116,17 @@ class BotUnmanaged(BotI):
     def __init__(self, bot_config):
         assert bot_config['type'] == 'unmanaged'
         self._addresses : list[str] = bot_config['addresses']
+        assert len(self._addresses) > 0
 
     def __repr__(self) -> str:
         return f'BotUnmanaged(addresses={self._addresses})'
 
     def prepare(self) -> None:
-        return
+        # Check if addresses are up
+        for address in self._addresses:
+            response = json.load(urllib.request.urlopen(address))
+            if not response['apiversion'] == '1':
+                raise Exception(f'Invalid apiversion on {address}')
 
     def up(self, ports_iter, copies=1) -> list[Address]:
         return self._addresses
@@ -170,6 +180,7 @@ class Rules:
         return Rules.RESULT_PATTERN.search(log).group(1)
 
 
+# Bot factory
 def create_bot_from_config(bot_config) -> BotI:
     if bot_config['type'] == 'from_commit':
         return BotFromCommit(bot_config)
@@ -179,6 +190,89 @@ def create_bot_from_config(bot_config) -> BotI:
     return None
 
 
+@dataclass
+class RunningBot:
+    name: str
+    bot: BotI
+    addresses: list[Address]
+
+
+class RatingJsonEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, trueskill.Rating):
+            return { 'mu': obj.mu, 'sigma': obj.sigma }
+        return json.JSONEncoder.default(self, obj)
+
+
+def load_ranks(filename) -> dict[str, trueskill.Rating]:
+    return {
+        name: trueskill.Rating(mu=rating['mu'], sigma=rating['sigma'])
+        for name, rating in json.load(open(filename)).items()
+    }
+
+
+def dump_ranks(ranks, filename) -> None:
+    json.dump(ranks, open(filename, 'w'), indent=4, cls=RatingJsonEncoder)
+
+
+class Arena:
+    def __init__(self, config):
+        self._rules : Rules = Rules(config['rules'])
+        self._bots : dict[str, BotI] = {
+            name: bot
+            for name, bot_config in config['bots'].items()
+            if (bot := create_bot_from_config(bot_config)) is not None
+        }
+        self._running_bots : list[RunningBot] = None
+        self._ranks_file : Path = Path(config['arena']['ranks_file'])
+        self._ports_iter = iter(range(config['ports']['from'], config['ports']['to'] + 1))
+        self._number_of_players : int = config['arena']['number_of_players']
+        self._ladder_games : int = config['arena']['ladder_games']
+
+    def prepare(self):
+        self._rules.prepare()
+        for bot in self._bots.values():
+            bot.prepare()
+
+    def up(self):
+        self._running_bots = []
+        for name, bot in self._bots.items():
+            addresses = bot.up(self._ports_iter)
+            assert len(addresses) > 0
+            self._running_bots.append(RunningBot(name=name, bot=bot, addresses=addresses))
+
+    # TODO: want to calculate win-rates
+    def run_ladder(self):
+        assert self._running_bots is not None, 'Call up() before run_ladder()'
+
+        if self._number_of_players > len(self._running_bots):
+            raise Exception(f'Not enough players to host {self._number_of_players}-players matches')
+
+        ranks = load_ranks(self._ranks_file)
+        for bot in self._running_bots:
+            ranks.setdefault(bot.name, trueskill.Rating())
+
+        logging.info(f'Running ladder for {self._ladder_games} games')
+
+        for i in range(1, self._ladder_games + 1):
+            selected_bots = random.sample(self._running_bots, k=self._number_of_players)
+            players = [Player(name=bot.name, address=bot.addresses[0]) for bot in selected_bots]
+            logging.info(f'[{i} / {self._ladder_games}] Starting game. Players: {players}')
+            result = self._rules.play(players)
+            # TODO: recalculate ranks
+            logging.info(f'Result: {result}')
+
+        dump_ranks(ranks, self._ranks_file)
+
+    def down(self):
+        assert self._running_bots is not None
+
+        for running_bot in self._running_bots:
+            running_bot.bot.down()
+
+        self._running_bots = None
+
+
 def main():
     logging.basicConfig(
         format='%(asctime)s | %(levelname)-8s | %(message)s',
@@ -186,38 +280,14 @@ def main():
         level=logging.INFO,
     )
 
-    parser = ArgumentParser()
-    subparsers = parser.add_subparsers(dest='command')
-    build_parser = subparsers.add_parser('build', help='...')
-    args = parser.parse_args()
-
-    config = json.load(open(CONFIG_PATH))
-
+    config = json.loads(_jsonnet.evaluate_file(str(CONFIG_PATH)))
     logging.info(f'Loaded config\n{textwrap.indent(json.dumps(config, indent=2), "    ")}')
 
-    bots = {
-        name: bot
-        for name, bot_config in config['bots'].items()
-        if (bot := create_bot_from_config(bot_config)) is not None
-    }
-
-    logging.info(bots)
-
-    rules = Rules(config['rules'])
-    rules.prepare()
-
-    ports = iter(range(config['ports']['from'], config['ports']['to']))
-    bots['v1'].prepare()
-    addresses = bots['v1'].up(ports)
-    player_v1 = Player('v1', addresses[0])
-    print(rules.play([player_v1, player_v1, player_v1, player_v1]))
-    # import time; time.sleep(5)
-    bots['v1'].down()
-
-    if args.command == 'build':
-        pass
-    else:
-        parser.print_help()
+    arena = Arena(config)
+    arena.prepare()
+    arena.up()
+    arena.run_ladder()
+    arena.down()
 
 
 if __name__ == '__main__':
