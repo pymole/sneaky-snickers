@@ -7,7 +7,8 @@ import json
 import logging
 import textwrap
 import shlex
-from typing import Optional
+import atexit
+from typing import Optional, NamedTuple
 
 
 ARENA_DIR = Path(__file__).parent
@@ -19,7 +20,7 @@ Address = str
 
 
 def run(*args, **kwargs):
-    logging.info(f'$ {shlex.join(args)} # {kwargs}')
+    logging.info(f'$ {shlex.join(map(str, args))} # {kwargs}')
     return subprocess.run(args, check=True, **kwargs)
 
 
@@ -27,6 +28,7 @@ class BotI:
     def prepare(self) -> None:
         raise NotImplementedError
 
+    # TODO: rename to spawn?
     def up(self, ports_iter, copies=1) -> list[Address]:
         raise NotImplementedError
 
@@ -43,6 +45,7 @@ class BotFromCommit(BotI):
         self._build_commit : str = bot_config['build']['commit']
         self._build_flags : list[str] = bot_config['build']['flags']
         self._launch : str = bot_config['launch']
+        self._mute : bool = bot_config['mute']
         self._bot_processes : set[subprocess.Popen] = set()
 
     def __repr__(self) -> str:
@@ -62,18 +65,26 @@ class BotFromCommit(BotI):
     def up(self, ports_iter, copies=1) -> list[Address]:
         logging.info(f'{self}.up(copies={copies})')
 
+        addresses = []
         for i, port in zip(range(copies), ports_iter):
-            self._bot_processes.add(
-                subprocess.Popen(
-                    [self._launch],
-                    cwd=self._build_dir,
-                    env={ 'ROCKET_PORT': str(port) }
-                )
+            process = subprocess.Popen(
+                [self._launch],
+                cwd=self._build_dir,
+                env={ 'ROCKET_PORT': str(port) },
+                stderr=subprocess.DEVNULL if self._mute else None,
+                stdout=subprocess.DEVNULL if self._mute else None
             )
+            atexit.register(process.kill)
+            self._bot_processes.add(process)
+            addresses.append(f'http://127.0.0.1:{port}')
+
+        return addresses
 
     def down(self) -> None:
         logging.info(f'{self}.down()')
+        self._down()
 
+    def _down(self) -> None:
         for p in self._bot_processes:
             p.terminate()
 
@@ -88,6 +99,11 @@ class BotFromCommit(BotI):
                 )
                 p.kill()
                 p.wait()
+
+            atexit.unregister(p.kill)
+
+    def __del__(self):
+        self._down()
 
 
 class BotUnmanaged(BotI):
@@ -106,6 +122,44 @@ class BotUnmanaged(BotI):
 
     def down(self) -> None:
         return
+
+
+class Player(NamedTuple):
+    name: str
+    address: Address
+
+
+class Rules:
+    def __init__(self, rules_config):
+        self._build_dir : Path = Path(rules_config['build_dir'])
+        self._engine : Path = (self._build_dir / 'official_engine').resolve()
+
+    def prepare(self) -> None:
+        run('go', 'build', '-o', self._engine, './cli/battlesnake/main.go', cwd=ARENA_DIR / 'rules')
+
+    def play(self, players: list[Player]) -> None:
+        assert len(players) <= 8
+
+        args = [
+            str(self._engine),
+            'play',
+            '--width', '11',
+            '--height', '11',
+            '--gametype', 'royale'
+        ]
+
+        for i, player in enumerate(players):
+            args += ['--name', f'{i}_{player.name}', '--url', player.address]
+
+        logging.info(f'$ {shlex.join(args)}')
+
+        r = subprocess.run(args, capture_output=True, check=False, text=True)
+        import time; time.sleep(2)
+        print('--------------------- stdout:')
+        print(r.stdout)
+        print('--------------------- stderr')
+        print(r.stderr)
+        print('---------------------')
 
 
 def create_bot_from_config(bot_config) -> BotI:
@@ -141,9 +195,14 @@ def main():
 
     logging.info(bots)
 
+    rules = Rules(config['rules'])
+    rules.prepare()
+
     ports = iter(range(config['ports']['from'], config['ports']['to']))
     bots['v1'].prepare()
-    bots['v1'].up(ports)
+    addresses = bots['v1'].up(ports)
+    player_v1 = Player('v1', addresses[0])
+    rules.play([player_v1, player_v1, player_v1, player_v1])
     import time; time.sleep(5)
     bots['v1'].down()
 
