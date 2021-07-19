@@ -2,13 +2,14 @@
 
 from argparse import ArgumentParser
 from pathlib import Path
-import subprocess
+from typing import Optional, NamedTuple
+import atexit
 import json
 import logging
-import textwrap
+import re
 import shlex
-import atexit
-from typing import Optional, NamedTuple
+import subprocess
+import textwrap
 
 
 ARENA_DIR = Path(__file__).parent
@@ -130,6 +131,11 @@ class Player(NamedTuple):
 
 
 class Rules:
+    RESULT_PATTERN : re.Pattern = re.compile(
+        r'\[DONE\]: Game completed after \d+ turns. (.*) is the winner.|'
+        r'\[DONE\]: Game completed after \d+ turns. It was a draw.'
+    )
+
     def __init__(self, rules_config):
         self._build_dir : Path = Path(rules_config['build_dir'])
         self._engine : Path = (self._build_dir / 'official_engine').resolve()
@@ -137,7 +143,7 @@ class Rules:
     def prepare(self) -> None:
         run('go', 'build', '-o', self._engine, './cli/battlesnake/main.go', cwd=ARENA_DIR / 'rules')
 
-    def play(self, players: list[Player]) -> None:
+    def play(self, players: list[Player]) -> list[int]:
         assert len(players) <= 8
 
         args = [
@@ -148,18 +154,20 @@ class Rules:
             '--gametype', 'royale'
         ]
 
-        for i, player in enumerate(players):
-            args += ['--name', f'{i}_{player.name}', '--url', player.address]
+        game_names = [f'{i}_{player.name}' for i, player in enumerate(players)]
+        for name, player in zip(game_names, players):
+            args += ['--name', name, '--url', player.address]
 
         logging.info(f'$ {shlex.join(args)}')
 
         r = subprocess.run(args, capture_output=True, check=False, text=True)
-        import time; time.sleep(2)
-        print('--------------------- stdout:')
-        print(r.stdout)
-        print('--------------------- stderr')
-        print(r.stderr)
-        print('---------------------')
+        # Note: This only distinguishes between winner or looser.
+        winner = self._parse_log(r.stderr)
+        return [ (0 if name == winner else 1) for name in game_names ]
+
+    @staticmethod
+    def _parse_log(log : str):
+        return Rules.RESULT_PATTERN.search(log).group(1)
 
 
 def create_bot_from_config(bot_config) -> BotI:
@@ -202,8 +210,8 @@ def main():
     bots['v1'].prepare()
     addresses = bots['v1'].up(ports)
     player_v1 = Player('v1', addresses[0])
-    rules.play([player_v1, player_v1, player_v1, player_v1])
-    import time; time.sleep(5)
+    print(rules.play([player_v1, player_v1, player_v1, player_v1]))
+    # import time; time.sleep(5)
     bots['v1'].down()
 
     if args.command == 'build':
