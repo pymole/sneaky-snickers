@@ -167,7 +167,6 @@ pub fn advance_one_step_with_settings(
         let head = board.snakes[i].body[0];
         if board.contains(head) {
             objects_under_head.push(board.squares[head].object);
-            board.squares[head].object = Object::BodyPart;
         } else {
             // Note: Object::Empty will also work in current implementation
             // Note: If board.squares would allow out of bounds access, only "then" branch will suffice.
@@ -200,8 +199,10 @@ pub fn advance_one_step_with_settings(
         }
 
         for food in eaten_food {
-            board.foods.swap_remove(board.foods.iter().position(|&x| x == food).unwrap());
-            board.squares[food].object = Object::Empty;
+            if let Some(food_position) = board.foods.iter().position(|&x| x == food) {
+                board.foods.swap_remove(food_position);
+                board.squares[food].object = Object::Empty;
+            }
         }
     }
 
@@ -435,7 +436,28 @@ mod tests {
 
     #[test]
     fn two_snakes_in_head_to_head_collision() {
-        // TODO
+        let mut board = create_board(data::HEAD_TO_HEAD_BIG_AND_SMALL);
+        advance_one_step(&mut board, &mut |i, _| {
+            match i {
+                0 => Action::Move(Movement::Down),
+                1 => Action::Move(Movement::Right),
+                _ => unreachable!(),
+            }
+        });
+        assert!(!board.snakes[0].is_alive());
+        assert!(board.snakes[1].is_alive());
+
+
+        let mut board = create_board(data::FOOD_HEAD_TO_HEAD_EQUAL);
+        advance_one_step(&mut board, &mut |i, _| {
+            match i {
+                0 => Action::Move(Movement::Right),
+                1 => Action::Move(Movement::Left),
+                _ => unreachable!(),
+            }
+        });
+        assert!(!board.snakes[0].is_alive());
+        assert!(!board.snakes[1].is_alive());
     }
 
     #[test]
