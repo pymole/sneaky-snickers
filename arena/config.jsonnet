@@ -15,16 +15,72 @@
             },
         },
         {
-            name: "v2",
+            name: "v2.1#10",
             type: "from_commit",
             build: {
                 dir: "./build_dir/v2",
-                commit: "v2",
+                commit: "v2.1",
+                flags: ["--release"]
+            },
+            run: {
+                exe: "target/release/sneaky-snickers",
+                env: { "MCTS_ITERATIONS": "10" },
+                mute: true,
+            },
+        },
+        {
+            name: "v2.1#50",
+            type: "from_commit",
+            build: {
+                dir: "./build_dir/v2",
+                commit: "v2.1",
+                flags: ["--release"]
+            },
+            run: {
+                exe: "target/release/sneaky-snickers",
+                env: { "MCTS_ITERATIONS": "50" },
+                mute: true,
+            },
+        },
+        {
+            name: "v2.1#100",
+            type: "from_commit",
+            build: {
+                dir: "./build_dir/v2",
+                commit: "v2.1",
+                flags: ["--release"]
+            },
+            run: {
+                exe: "target/release/sneaky-snickers",
+                env: { "MCTS_ITERATIONS": "100" },
+                mute: true,
+            },
+        },
+        {
+            name: "v2.1#500",
+            type: "from_commit",
+            build: {
+                dir: "./build_dir/v2",
+                commit: "v2.1",
                 flags: ["--release"]
             },
             run: {
                 exe: "target/release/sneaky-snickers",
                 env: { "MCTS_ITERATIONS": "500" },
+                mute: true,
+            },
+        },
+        {
+            name: "v2.1#1000",
+            type: "from_commit",
+            build: {
+                dir: "./build_dir/v2",
+                commit: "v2.1",
+                flags: ["--release"]
+            },
+            run: {
+                exe: "target/release/sneaky-snickers",
+                env: { "MCTS_ITERATIONS": "1000" },
                 mute: true,
             },
         },
