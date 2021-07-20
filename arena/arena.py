@@ -31,15 +31,22 @@ def run(*args, **kwargs):
 
 
 class BotI:
-    def prepare(self) -> None:
-        raise NotImplementedError
+    @property
+    def name(self) -> str:
+        raise NotImplementedError()
 
-    # TODO: rename to spawn?
-    def up(self, ports_iter, copies=1) -> list[Address]:
-        raise NotImplementedError
+    @property
+    def addresses(self) -> list[Address]:
+        raise NotImplementedError()
+
+    def prepare(self) -> None:
+        raise NotImplementedError()
+
+    def up(self, ports_iter, copies=1) -> None:
+        raise NotImplementedError()
 
     def down(self) -> None:
-        raise NotImplementedError
+        raise NotImplementedError()
 
 
 class BotFromCommit(BotI):
@@ -47,15 +54,30 @@ class BotFromCommit(BotI):
 
     def __init__(self, bot_config):
         assert bot_config['type'] == 'from_commit'
-        self._build_dir : Path = Path(bot_config['build']['dir'])
-        self._build_commit : str = bot_config['build']['commit']
-        self._build_flags : list[str] = bot_config['build']['flags']
-        self._launch : str = bot_config['launch']
-        self._mute : bool = bot_config['mute']
+
+        self._name : str = bot_config['name']
+        self._addresses : list[Address] = []
+
+        self._build_dir    : Path      = Path(bot_config['build']['dir'])
+        self._build_commit : str       = bot_config['build']['commit']
+        self._build_flags  : list[str] = bot_config['build']['flags']
+
+        self._run_exe  : str            = bot_config['run']['exe']
+        self._run_env  : dict[str, str] = bot_config['run']['env']
+        self._run_mute : bool           = bot_config['run']['mute']
+
         self._bot_processes : set[subprocess.Popen] = set()
 
     def __repr__(self) -> str:
         return f'BotFromCommit(commit={self._build_commit})'
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def addresses(self) -> list[Address]:
+        return self._addresses
 
     def prepare(self) -> None:
         logging.info(f'{self}.prepare()')
@@ -68,23 +90,20 @@ class BotFromCommit(BotI):
 
         run('cargo', 'build', *self._build_flags, cwd=self._build_dir)
 
-    def up(self, ports_iter, copies=1) -> list[Address]:
+    def up(self, ports_iter, copies=1) -> None:
         logging.info(f'{self}.up(copies={copies})')
 
-        addresses = []
-        for i, port in zip(range(copies), ports_iter):
+        for _, port in zip(range(copies), ports_iter):
             process = subprocess.Popen(
-                [self._launch],
+                [self._run_exe],
                 cwd=self._build_dir,
-                env={ 'ROCKET_PORT': str(port) },
-                stderr=subprocess.DEVNULL if self._mute else None,
-                stdout=subprocess.DEVNULL if self._mute else None
+                env={ 'ROCKET_PORT': str(port) } | self._run_env,
+                stderr=subprocess.DEVNULL if self._run_mute else None,
+                stdout=subprocess.DEVNULL if self._run_mute else None
             )
             atexit.register(process.kill)
             self._bot_processes.add(process)
-            addresses.append(f'http://127.0.0.1:{port}')
-
-        return addresses
+            self._addresses.append(f'http://127.0.0.1:{port}')
 
     def down(self) -> None:
         logging.info(f'{self}.down()')
@@ -108,6 +127,8 @@ class BotFromCommit(BotI):
 
             atexit.unregister(p.kill)
 
+        self._addresses.clear()
+
     def __del__(self):
         self._down()
 
@@ -115,21 +136,29 @@ class BotFromCommit(BotI):
 class BotUnmanaged(BotI):
     def __init__(self, bot_config):
         assert bot_config['type'] == 'unmanaged'
+        self._name      : str       = bot_config['name']
         self._addresses : list[str] = bot_config['addresses']
         assert len(self._addresses) > 0
 
     def __repr__(self) -> str:
         return f'BotUnmanaged(addresses={self._addresses})'
 
+    @property
+    def name(self) -> str:
+        return self._name
+
+    @property
+    def addresses(self) -> list[Address]:
+        return self._addresses
+
     def prepare(self) -> None:
-        # Check if addresses are up
+        return
+
+    def up(self, ports_iter, copies=1) -> None:
         for address in self._addresses:
             response = json.load(urllib.request.urlopen(address))
             if not response['apiversion'] == '1':
                 raise Exception(f'Invalid apiversion on {address}')
-
-    def up(self, ports_iter, copies=1) -> list[Address]:
-        return self._addresses
 
     def down(self) -> None:
         return
@@ -190,13 +219,6 @@ def create_bot_from_config(bot_config) -> BotI:
     return None
 
 
-@dataclass
-class RunningBot:
-    name: str
-    bot: BotI
-    addresses: list[Address]
-
-
 class RatingJsonEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, trueskill.Rating):
@@ -218,12 +240,11 @@ def dump_ratings(ratings, filename) -> None:
 class Arena:
     def __init__(self, config):
         self._rules : Rules = Rules(config['rules'])
-        self._bots : dict[str, BotI] = {
-            name: bot
-            for name, bot_config in config['bots'].items()
+        self._bots : list[BotI] = [
+            bot
+            for bot_config in config['bots']
             if (bot := create_bot_from_config(bot_config)) is not None
-        }
-        self._running_bots : list[RunningBot] = None
+        ]
         self._ratings_file : Path = Path(config['arena']['ratings_file'])
         self._ports_iter = iter(range(config['ports']['from'], config['ports']['to'] + 1))
         self._number_of_players : int = config['arena']['number_of_players']
@@ -231,31 +252,27 @@ class Arena:
 
     def prepare(self):
         self._rules.prepare()
-        for bot in self._bots.values():
+        for bot in self._bots:
             bot.prepare()
 
     def up(self):
-        self._running_bots = []
-        for name, bot in self._bots.items():
-            addresses = bot.up(self._ports_iter)
-            assert len(addresses) > 0
-            self._running_bots.append(RunningBot(name=name, bot=bot, addresses=addresses))
+        for bot in self._bots:
+            bot.up(self._ports_iter)
+            assert len(bot.addresses) > 0
 
     # TODO: want to calculate win-rates
     def run_ladder(self):
-        assert self._running_bots is not None, 'Call up() before run_ladder()'
-
-        if self._number_of_players > len(self._running_bots):
+        if self._number_of_players > len(self._bots):
             raise Exception(f'Not enough players to host {self._number_of_players}-players matches')
 
         ratings = load_ratings(self._ratings_file)
-        for bot in self._running_bots:
+        for bot in self._bots:
             ratings.setdefault(bot.name, trueskill.Rating())
 
         logging.info(f'Running ladder for {self._ladder_games} games')
 
         for i in range(1, self._ladder_games + 1):
-            selected_bots = random.sample(self._running_bots, k=self._number_of_players)
+            selected_bots = random.sample(self._bots, k=self._number_of_players)
             players = [Player(name=bot.name, address=bot.addresses[0]) for bot in selected_bots]
             logging.info(f'[{i} / {self._ladder_games}] Starting game. Players: {players}')
             ranks = self._rules.play(players)
@@ -267,12 +284,8 @@ class Arena:
         dump_ratings(ratings, self._ratings_file)
 
     def down(self):
-        assert self._running_bots is not None
-
-        for running_bot in self._running_bots:
-            running_bot.bot.down()
-
-        self._running_bots = None
+        for bot in self._bots:
+            bot.down()
 
 
 def main():
