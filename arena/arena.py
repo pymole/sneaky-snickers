@@ -201,12 +201,17 @@ class Rules:
 
         r = subprocess.run(args, capture_output=True, check=False, text=True)
         # Note: This only distinguishes between winner or looser.
-        winner = self._parse_log(r.stderr)
+        winner = self._parse_winner(r.stderr)
         return [ (0 if name == winner else 1) for name in game_names ]
 
     @staticmethod
-    def _parse_log(log : str):
-        return Rules.RESULT_PATTERN.search(log).group(1)
+    def _parse_winner(log : str):
+        match = Rules.RESULT_PATTERN.search(log)
+        if match is None:
+            logging.error("Can't parse log.")
+            print(log)
+            raise Exception("Can't parse log.")
+        return match.group(1)
 
 
 # Bot factory
