@@ -69,14 +69,14 @@ impl MCTS {
         //     }));
 
         let ucb_instance = node.ucb_instances.get_mut(&snake).unwrap();
-        
+
         let (movement, _) = ucb_instance.visits
             .iter()
             .enumerate()
             .filter(|(movement, _)| ucb_instance.mask[*movement])
             .max_by_key(|(_, &visit_count)| visit_count)
-            .unwrap();
-        
+            .unwrap_or((0, &0));
+
         Movement::from_usize(movement)
     }
 
@@ -91,7 +91,7 @@ impl MCTS {
     fn search_iteration(&mut self, board: &Board) {
         let mut board = board.clone();
         let mut path = Vec::new();
-        
+
         let c = self.c;
         while let Some(node_cell) = self.nodes.get(&board) {
             // info!("Selection");
@@ -103,18 +103,18 @@ impl MCTS {
                 let available_moves = (0..4)
                     .filter(|&i| ucb.mask[i])
                     .map(|i| (i, ucb.rewards[i], ucb.visits[i]));
-                
+
                 let (best_action, _) = available_moves.fold((0, 0f32), |(best, best_ucb), (action, r, n)| {
                     let ucb;
                     if n > 0 {
                         let exploit = r/(n as f32);
                         let explore = c * ((node.visits as f32).ln() / n as f32).sqrt();
-                        
+
                         ucb = exploit + explore;
                     } else {
                         ucb = f32::INFINITY;
                     }
-                    
+
                     if ucb > best_ucb {
                         (action, ucb)
                     } else {
@@ -124,7 +124,7 @@ impl MCTS {
 
                 Action::Move(Movement::from_usize(best_action))
             });
-            
+
             path.push((node, joint_action));
         }
 
@@ -176,7 +176,7 @@ fn rollout(board: &mut Board) -> Vec<f32> {
             .collect();
         advance_one_step(board, &mut |snake, _| *actions.get(&snake).unwrap());
     }
-    
+
     board.snakes
         .iter()
         .map(|snake| snake.is_alive() as u32 as f32)
@@ -197,7 +197,7 @@ fn get_masks(board: &Board) -> Vec<(usize, [bool; 4])> {
         .iter()
         .map(|snake| snake.body[snake.body.len() - 1])
         .collect();
-    
+
     board.snakes
         .iter()
         .enumerate()
