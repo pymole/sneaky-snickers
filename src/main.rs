@@ -13,6 +13,8 @@ mod test_data;
 #[macro_use]
 extern crate rocket;
 
+use rocket::fairing::AdHoc;
+use rocket::http::Header;
 use rocket::http::Status;
 use rocket::serde::json::Json;
 use rocket::serde::json::serde_json;
@@ -41,13 +43,19 @@ fn start(body: String) -> Status {
     Status::Ok
 }
 
+// This route is needed for CORS
+#[options("/move")]
+fn movement_options() -> Status {
+    Status::Ok
+}
+
 #[post("/move", data = "<body>")]
 fn movement(body: String) -> Json<api::responses::Move> {
     info!("MOVE - {}", body);
 
     let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
     let board = Board::from_api(&state);
-    
+
     let mut mcts = MCTS::new(2.0);
 
     // TODO: Config
@@ -81,5 +89,13 @@ fn flavored_flood_fill(body: String) -> Json<solver::FloodFill> {
 #[launch]
 fn rocket() -> _ {
     log4rs::init_file("log4rs.yaml", Default::default()).unwrap();
-    rocket::build().mount("/", routes![index, start, movement, end, flavored_flood_fill])
+
+    rocket::build()
+        .attach(AdHoc::on_response("Cors", |_, response| Box::pin(async move {
+            response.set_header(Header::new("Access-Control-Allow-Origin", "*"));
+            response.set_header(Header::new("Access-Control-Allow-Methods", "POST, GET, PATCH, OPTIONS"));
+            response.set_header(Header::new("Access-Control-Allow-Headers", "*"));
+            response.set_header(Header::new("Access-Control-Allow-Credentials", "true"));
+        })))
+        .mount("/", routes![index, start, movement, movement_options, end, flavored_flood_fill])
 }
