@@ -2,10 +2,12 @@
 
 import matplotlib.pyplot as plt
 import json
+import sys
 
 
 def main():
-    ratings = json.load(open('ratings.json'))
+    filename = 'ratings.json' if len(sys.argv) <= 1 else sys.argv[1]
+    ratings = json.load(open(filename))
     if len(ratings) == 0:
         print('No ratings')
         return
