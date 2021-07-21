@@ -56,7 +56,8 @@ fn movement(body: String) -> Json<api::responses::Move> {
     let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
     let board = Board::from_api(&state);
 
-    let mut mcts = MCTS::new(2.0);
+    let mcts_c = env::var("MCTS_C").unwrap_or("2.0".to_string()).parse().unwrap();
+    let mut mcts = MCTS::new(mcts_c);
 
     // TODO: Config
     let iterations = env::var("MCTS_ITERATIONS").unwrap().parse().unwrap();
