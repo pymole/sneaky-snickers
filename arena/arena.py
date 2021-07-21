@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from argparse import ArgumentParser
+from concurrent.futures import ThreadPoolExecutor, Future
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, NamedTuple
@@ -240,6 +241,7 @@ def load_ratings(filename) -> dict[str, trueskill.Rating]:
 
 def dump_ratings(ratings, filename) -> None:
     json.dump(ratings, open(filename, 'w'), indent=4, cls=RatingJsonEncoder)
+    logging.info(f'Updated ratings in {filename}')
 
 
 class Arena:
@@ -254,6 +256,7 @@ class Arena:
         self._ports_iter = iter(range(config['ports']['from'], config['ports']['to'] + 1))
         self._number_of_players : int = config['arena']['number_of_players']
         self._ladder_games : int = config['arena']['ladder_games']
+        self._parallel : int = config ['arena']['parallel']
 
     def prepare(self):
         self._rules.prepare()
@@ -265,6 +268,17 @@ class Arena:
             bot.up(self._ports_iter)
             assert len(bot.addresses) > 0
 
+    def _run_random_game(self, i) -> tuple[list[Player], list[int]]:
+        try:
+            selected_bots = random.sample(self._bots, k=self._number_of_players)
+            players = [Player(name=bot.name, address=bot.addresses[0]) for bot in selected_bots]
+            logging.info(f'[{i} / {self._ladder_games}] Starting game. Players: {players}')
+            ranks = self._rules.play(players)
+            return players, ranks
+        except Exception as e:
+            logging.exception(e)
+            raise
+
     # TODO: want to calculate win-rates
     def run_ladder(self):
         if self._number_of_players > len(self._bots):
@@ -274,19 +288,40 @@ class Arena:
         for bot in self._bots:
             ratings.setdefault(bot.name, trueskill.Rating())
 
-        logging.info(f'Running ladder for {self._ladder_games} games')
+        logging.info(f'Running ladder for {self._ladder_games} games in {self._parallel} threads')
 
-        for i in range(1, self._ladder_games + 1):
-            selected_bots = random.sample(self._bots, k=self._number_of_players)
-            players = [Player(name=bot.name, address=bot.addresses[0]) for bot in selected_bots]
-            logging.info(f'[{i} / {self._ladder_games}] Starting game. Players: {players}')
-            ranks = self._rules.play(players)
-            logging.info(f'Ranks: {ranks}')
-            new_ratings = trueskill.rate([(ratings[player.name],) for player in players], ranks=ranks)
-            for (new_rating,), player in zip(new_ratings, players):
-                ratings[player.name] = new_rating
+        game_results : list[Future] = []
 
-        dump_ratings(ratings, self._ratings_file)
+        with ThreadPoolExecutor(max_workers=self._parallel) as executor:
+            try:
+                for i in range(1, self._ladder_games + 1):
+                    game_results.append(executor.submit(self._run_random_game, i))
+                executor.shutdown()
+            except:
+                executor.shutdown(cancel_futures=True)
+                raise
+            finally:
+                completed = 0
+                cancelled = 0
+                failed = 0
+
+                for game_result in game_results:
+                    assert game_result.done()
+
+                    if game_result.cancelled():
+                        cancelled += 1
+                        continue
+
+                    if game_result.exception() is not None:
+                        failed += 1
+                        continue
+
+                    players, ranks = game_result.result()
+                    new_ratings = trueskill.rate([(ratings[player.name],) for player in players], ranks=ranks)
+                    for (new_rating,), player in zip(new_ratings, players):
+                        ratings[player.name] = new_rating
+
+                dump_ratings(ratings, self._ratings_file)
 
     def down(self):
         for bot in self._bots:

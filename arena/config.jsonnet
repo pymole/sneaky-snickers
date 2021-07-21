@@ -15,48 +15,6 @@
             },
         },
         {
-            name: "v2.1#10",
-            type: "from_commit",
-            build: {
-                dir: "./build_dir/v2",
-                commit: "v2.1",
-                flags: ["--release"]
-            },
-            run: {
-                exe: "target/release/sneaky-snickers",
-                env: { "MCTS_ITERATIONS": "10" },
-                mute: true,
-            },
-        },
-        {
-            name: "v2.1#50",
-            type: "from_commit",
-            build: {
-                dir: "./build_dir/v2",
-                commit: "v2.1",
-                flags: ["--release"]
-            },
-            run: {
-                exe: "target/release/sneaky-snickers",
-                env: { "MCTS_ITERATIONS": "50" },
-                mute: true,
-            },
-        },
-        {
-            name: "v2.1#100",
-            type: "from_commit",
-            build: {
-                dir: "./build_dir/v2",
-                commit: "v2.1",
-                flags: ["--release"]
-            },
-            run: {
-                exe: "target/release/sneaky-snickers",
-                env: { "MCTS_ITERATIONS": "100" },
-                mute: true,
-            },
-        },
-        {
             name: "v2.1#500",
             type: "from_commit",
             build: {
@@ -84,6 +42,34 @@
                 mute: true,
             },
         },
+                {
+            name: "v2.2#500",
+            type: "from_commit",
+            build: {
+                dir: "./build_dir/v2.2",
+                commit: "v2.2",
+                flags: ["--release"]
+            },
+            run: {
+                exe: "target/release/sneaky-snickers",
+                env: { "MCTS_ITERATIONS": "500" },
+                mute: true,
+            },
+        },
+        {
+            name: "v2.2#1000",
+            type: "from_commit",
+            build: {
+                dir: "./build_dir/v2.2",
+                commit: "v2.2",
+                flags: ["--release"]
+            },
+            run: {
+                exe: "target/release/sneaky-snickers",
+                env: { "MCTS_ITERATIONS": "1000" },
+                mute: true,
+            },
+        },
         // {
         //     name: "current",
         //     type: "unmanaged",
@@ -102,7 +88,8 @@
 
     arena: {
         ratings_file: "./ratings.json",
-        ladder_games: 100, // number of games to run
+        ladder_games: 10, // number of games to run
         number_of_players: 2, // per game
+        parallel: 4,
     }
 }
