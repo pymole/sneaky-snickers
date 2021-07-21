@@ -202,6 +202,7 @@ class Rules:
 
         r = subprocess.run(args, capture_output=True, check=False, text=True)
         # Note: This only distinguishes between winner or looser.
+        # TODO: parse warnings (e.g. move failed)
         winner = self._parse_winner(r.stderr)
         return [ (0 if name == winner else 1) for name in game_names ]
 
@@ -233,6 +234,9 @@ class RatingJsonEncoder(json.JSONEncoder):
 
 
 def load_ratings(filename) -> dict[str, trueskill.Rating]:
+    if not Path(filename).exists():
+        return {}
+
     return {
         name: trueskill.Rating(mu=rating['mu'], sigma=rating['sigma'])
         for name, rating in json.load(open(filename)).items()
