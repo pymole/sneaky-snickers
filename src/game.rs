@@ -86,11 +86,13 @@ impl Board {
         }
 
         for snake in board_api.snakes.iter() {
-            for (_, body_part) in snake.body.iter().enumerate() {
-                match squares[*body_part].object {
-                    Object::Empty => squares[*body_part].object = Object::BodyPart,
-                    Object::BodyPart => {} // A snake can intersect with itself in the begining and after eating a food.
-                    Object::Food => unreachable!(),
+            if snake.health > 0 {
+                for body_part in snake.body.iter() {
+                    match squares[*body_part].object {
+                        Object::Empty => squares[*body_part].object = Object::BodyPart,
+                        Object::BodyPart => {} // A snake can intersect with itself in the begining and after eating a food.
+                        Object::Food => unreachable!(),
+                    }
                 }
             }
         }
