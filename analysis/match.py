@@ -138,6 +138,7 @@ def snickers_state_to_battlesnake_turn(game: Game, state: State):
             'length': len(snake.body),
         }
         for snake in state.snakes
+        if snake.health > 0
     ]
 
     snake_by_name = { snake['name']: snake for snake in snakes }
