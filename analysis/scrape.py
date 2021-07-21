@@ -9,7 +9,7 @@ import json
 import logging
 import re
 
-from match import SnickersMatch
+from match import SnickersMatch, snickers_state_to_battlesnake_turn, battlesnake_frames_to_snickers_match
 
 GameId = str
 
@@ -18,6 +18,9 @@ ENGINE_HOST = 'https://engine.battlesnake.com'
 ARENA_URL = 'https://play.battlesnake.com/arena/summer-league-2021'
 RECENT_GAMES_REGEX = re.compile('href="/g/([^"]+)/"')
 
+
+def download_frame(game_id: GameId, i: int):
+    return json.load(urlopen(f'{ENGINE_HOST}/games/{game_id}/frames?offset={i}&limit=1'))['Frames'][0]
 
 def download_frames_iter(game_id: GameId) -> Iterator[dict]:
     offset = 0
@@ -31,14 +34,13 @@ def download_frames_iter(game_id: GameId) -> Iterator[dict]:
 
         offset += len(r['Frames'])
 
+def download_game(game_id: GameId) -> dict:
+    return json.load(urlopen(f'{ENGINE_HOST}/games/{game_id}'))
 
 def download(game_id: GameId) -> dict:
-    game = json.load(urlopen(f'{ENGINE_HOST}/games/{game_id}'))
-    frames = list(download_frames_iter(game_id))
-
     return {
-        'Game': game,
-        'Frames': frames,
+        'Game': download_game(game_id),
+        'Frames': list(download_frames_iter(game_id)),
         'ScrapeTimestamp': datetime.datetime.now().astimezone().isoformat(),
     }
 
@@ -67,6 +69,7 @@ def main():
     argparser_recent.add_argument('--storage', required=True, help='Place to dump files', type=Path)
     argparser_game = subparsers.add_parser('game', help='Download game by its id')
     argparser_game.add_argument('game_id')
+    argparser_game.add_argument('frame', nargs='?')
     argparser_game.add_argument('-o', '--output', required=False, default=Path('.'), help='Output folder', type=Path)
     args = argparser.parse_args()
 
@@ -79,7 +82,17 @@ def main():
         if not re.fullmatch(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', game_id):
             raise Exception('Bad game id format')
 
-        save_game(args.output, game_id, download(game_id))
+        if args.frame is None:
+            save_game(args.output, game_id, download(game_id))
+        else:
+            snickers_match = battlesnake_frames_to_snickers_match(
+                {
+                    'Game': download_game(game_id),
+                    'Frames': [ download_frame(game_id, args.frame) ]
+                }
+            )
+            turn = snickers_state_to_battlesnake_turn(snickers_match.game, snickers_match.states[0])
+            json.dump(turn, open(args.output / f'{game_id}_{args.frame}.json', 'wt'))
     else:
         assert args.command == 'recent'
 
