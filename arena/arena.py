@@ -7,6 +7,7 @@ import _jsonnet
 import atexit
 import json
 import logging
+import os
 import random
 import re
 import shlex
@@ -87,7 +88,11 @@ class BotFromCommit(BotI):
         else:
             run('git', 'checkout', self._build_commit, cwd=self._build_dir)
 
-        run('cargo', 'build', *self._build_flags, cwd=self._build_dir)
+        run(
+            'cargo', 'build', *self._build_flags,
+            cwd=self._build_dir,
+            env=os.environ | { 'RUSTFLAGS': '-Awarnings' }
+        )
 
     def up(self, ports_iter, copies=1) -> None:
         logging.info(f'{self}.up(copies={copies})')
