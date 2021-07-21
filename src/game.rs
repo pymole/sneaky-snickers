@@ -123,12 +123,20 @@ impl Board {
             }
         }
 
+        // Add one to include borders ( rectangle represents [p0.x, p1.x) × [p0.y, p1.y) )
+        safe_zone.p1.x += 1;
+        safe_zone.p1.y += 1;
+
         if safe_zone.empty() {
             Rectangle { p0: Point::ZERO, p1: Point::ZERO }
         }
         else {
             safe_zone
         }
+    }
+
+    pub fn is_terminal(&self) -> bool {
+        self.snakes.iter().filter(|snake| snake.is_alive()).count() > 1
     }
 }
 

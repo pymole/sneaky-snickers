@@ -230,6 +230,7 @@ pub fn advance_one_step_with_settings(
         let mut died_snakes = ArrayVec::<usize, MAX_SNAKE_COUNT>::new();
 
         for (&i, &object_under_head) in alive_snakes.iter().zip(&objects_under_head) {
+
             if !board.snakes[i].is_alive() {
                 continue;
             }
@@ -274,6 +275,7 @@ pub fn advance_one_step_with_settings(
     {
         for (&i, &object_under_head) in alive_snakes.iter().zip(&objects_under_head) {
             if !board.snakes[i].is_alive() {
+
                 board.snakes[i].health = 0;
 
                 if object_under_head != Object::BodyPart {

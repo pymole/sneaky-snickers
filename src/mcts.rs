@@ -131,7 +131,10 @@ impl MCTS {
         let expansion_board = board.clone();
         let rewards = rollout(&mut board);
         self.backpropagate(path, rewards);
-        self.expansion(&expansion_board);
+
+        if expansion_board.is_terminal() {
+            self.expansion(&expansion_board);
+        }
     }
 
     fn expansion(&mut self, board: &Board) {
@@ -159,7 +162,7 @@ impl MCTS {
 
 fn rollout(board: &mut Board) -> Vec<f32> {
     let random = &mut rand::thread_rng();
-    while board.snakes.iter().filter(|snake| snake.is_alive()).count() > 1 {
+    while board.is_terminal() {
         let actions: HashMap<_, _> = get_masks(board)
             .into_iter()
             .map(|(snake, movement_masks)| {
@@ -195,7 +198,8 @@ const MOVEMENTS: [Movement; 4] = [
 fn get_masks(board: &Board) -> Vec<(usize, [bool; 4])> {
     let tails: Vec<_> = board.snakes
         .iter()
-        .map(|snake| snake.body[snake.body.len() - 1])
+        .filter(|snake| snake.is_alive())
+        .map(|snake| *snake.body.back().unwrap())
         .collect();
 
     board.snakes
