@@ -1,80 +1,36 @@
+local Bots = {
+    from_commit(name, commit, env={}, mute=true): {
+        name: name,
+        type: "from_commit",
+        build: {
+            dir: "./build_dir/" + commit,
+            // Should be tag or hash. Branch names are not properly implemented yet.
+            commit: commit,
+            flags: ["--release"]
+        },
+        run: {
+            exe: "target/release/sneaky-snickers", // Relative to build.dir
+            env: env,
+            mute: mute,
+        },
+    },
+
+    current(name="current", host="http://127.0.0.1", port="8000"): {
+        name: name,
+        type: "unmanaged",
+        addresses: [host + ":" + port]
+    }
+};
+
 {
     bots: [
-        {
-            name: "v1",
-            type: "from_commit",
-            build: {
-                dir: "./build_dir/v1",
-                commit: "v1", // Should be tag or hash. Branch names are not properly implemented yet.
-                flags: ["--release"]
-            },
-            run: {
-                exe: "target/release/sneaky-snickers", // Relative to build.dir
-                env: {},
-                mute: true,
-            },
-        },
-        {
-            name: "v2.1#500",
-            type: "from_commit",
-            build: {
-                dir: "./build_dir/v2",
-                commit: "v2.1",
-                flags: ["--release"]
-            },
-            run: {
-                exe: "target/release/sneaky-snickers",
-                env: { "MCTS_ITERATIONS": "500" },
-                mute: true,
-            },
-        },
-        {
-            name: "v2.1#1000",
-            type: "from_commit",
-            build: {
-                dir: "./build_dir/v2",
-                commit: "v2.1",
-                flags: ["--release"]
-            },
-            run: {
-                exe: "target/release/sneaky-snickers",
-                env: { "MCTS_ITERATIONS": "1000" },
-                mute: true,
-            },
-        },
-                {
-            name: "v2.2#500",
-            type: "from_commit",
-            build: {
-                dir: "./build_dir/v2.2",
-                commit: "v2.2",
-                flags: ["--release"]
-            },
-            run: {
-                exe: "target/release/sneaky-snickers",
-                env: { "MCTS_ITERATIONS": "500" },
-                mute: true,
-            },
-        },
-        {
-            name: "v2.2#1000",
-            type: "from_commit",
-            build: {
-                dir: "./build_dir/v2.2",
-                commit: "v2.2",
-                flags: ["--release"]
-            },
-            run: {
-                exe: "target/release/sneaky-snickers",
-                env: { "MCTS_ITERATIONS": "1000" },
-                mute: true,
-            },
-        },
-        // {
-        //     name: "current",
-        //     type: "unmanaged",
-        //     addresses: ["http://127.0.0.1:8000"]
-        // }
+        Bots.from_commit("v1", "v1"),
+        Bots.from_commit("v2.1#500", "v2.1", { "MCTS_ITERATIONS": "500" }),
+        Bots.from_commit("v2.1#1000", "v2.1", { "MCTS_ITERATIONS": "1000" }),
+        Bots.from_commit("v2.2#500", "v2.2", { "MCTS_ITERATIONS": "500" }),
+        Bots.from_commit("v2.2#1000", "v2.2", { "MCTS_ITERATIONS": "1000" }),
+        Bots.from_commit("v2.3#500", "v2.3", { "MCTS_ITERATIONS": "500" }),
+        // Bots.current(),
     ],
 
     ports: {
@@ -87,9 +43,9 @@
     },
 
     arena: {
-        ratings_file: "./ratings.json",
-        ladder_games: 10, // number of games to run
-        number_of_players: 2, // per game
-        parallel: 4,
+        ratings_file: "./ratings_4.json",
+        ladder_games: 300, // number of games to run
+        number_of_players: 4, // per game
+        parallel: 2,
     }
 }
