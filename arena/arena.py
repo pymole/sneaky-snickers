@@ -216,7 +216,7 @@ class Rules:
             if '[WARN]' in line:
                 logging.warn(f'{line} (players={players})')
                 with self._warning_count.lock:
-                    self._warning_count += 1
+                    self._warning_count.value += 1
 
         # Note: This only distinguishes between winner or looser.
         winner = self._parse_winner(r.stderr)
