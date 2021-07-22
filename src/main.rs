@@ -60,9 +60,17 @@ fn movement(body: String) -> Json<api::responses::Move> {
     let mut mcts = MCTS::new(mcts_c);
 
     // TODO: Config
-    let iterations = env::var("MCTS_ITERATIONS").unwrap().parse().unwrap();
-    mcts.search(&board, iterations);
-
+    if let Ok(search_time_string) = env::var("MCTS_SEARCH_TIME") {
+        let search_time = search_time_string.parse().expect("Invalid MCTS_SEARCH_TIME");
+        mcts.search_with_time(&board, search_time);
+    } else {
+        let iterations = env::var("MCTS_ITERATIONS")
+            .expect("Provide MCTS_SEARCH_TIME or MCTS_ITERATIONS")
+            .parse()
+            .expect("Invalid MCTS_ITERATIONS");
+        mcts.search(&board, iterations);
+    }
+    
     let my_index = state.board.snakes
         .iter()
         .position(|snake| snake.id == state.you.id)

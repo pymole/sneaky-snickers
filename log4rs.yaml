@@ -6,14 +6,14 @@ appenders:
     encoder:
       pattern: "{d(%Y-%m-%d %H:%M:%S)} {h({l})} {M} - {m}{n}"
 
-  # dashboard:
+  # stdout:
   #   kind: file
-  #   path: "dashboard.log"
+  #   path: "log.log"
   #   encoder:
-  #     pattern: "{l} - {m}{n}"
+  #     pattern: "{d(%Y-%m-%d %H:%M:%S)} {h({l})} {M} - {m}{n}"
+
 
 root:
   level: info
   appenders:
     - stdout
-    # - dashboard

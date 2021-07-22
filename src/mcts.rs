@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::cell::{RefCell, RefMut};
+use std::time::{Duration, Instant};
 use rand;
 use rand::seq::SliceRandom;
 
@@ -59,18 +60,18 @@ impl MCTS {
 
     pub fn get_movement(&self, board: &Board, snake: usize) -> Movement {
         let mut node = self.nodes.get(board).unwrap().borrow_mut();
-        // node.ucb_instances
-        //     .iter()
-        //     .for_each(|(i, ucb)| {
-        //         info!("Snake {}", i);
-        //         ucb.visits
-        //             .iter()
-        //             .zip(ucb.rewards)
-        //             .enumerate()
-        //             .for_each(|(a, (v, r))| {
-        //                 info!("{} - r: {}; v: {}", Movement::from_usize(a), r, v);
-        //             })
-        //     });
+        node.ucb_instances
+            .iter()
+            .for_each(|(i, ucb)| {
+                info!("Snake {}", i);
+                ucb.visits
+                    .iter()
+                    .zip(ucb.rewards)
+                    .enumerate()
+                    .for_each(|(a, (v, r))| {
+                        info!("{} - r: {}; v: {}", Movement::from_usize(a), r, v);
+                    })
+            });
 
         let ucb_instance = node.ucb_instances.get_mut(&snake).unwrap();
 
@@ -85,11 +86,21 @@ impl MCTS {
     }
 
     pub fn search(&mut self, board: &Board, iterations_count: u32) {
-        // TODO: Искать, пока есть время
         for _i in 0..iterations_count {
             // info!("iteration {}", i);
             self.search_iteration(board);
         }
+    }
+
+    pub fn search_with_time(&mut self, board: &Board, time: u64) {
+        let end = Instant::now() + Duration::from_millis(time);
+        let mut i = 0u32;
+        while Instant::now() < end {
+            self.search_iteration(board);
+            i += 1;
+        }
+
+        info!("Searched {} iterations in {} ms", i, time);
     }
 
     fn search_iteration(&mut self, board: &Board) {
@@ -166,6 +177,7 @@ impl MCTS {
 
 fn rollout(board: &mut Board) -> Vec<f32> {
     let random = &mut rand::thread_rng();
+    let start_turn = board.turn;
     while board.is_terminal() {
         let actions: HashMap<_, _> = get_masks(board)
             .into_iter()
@@ -184,10 +196,13 @@ fn rollout(board: &mut Board) -> Vec<f32> {
         advance_one_step(board, &mut |snake, _| *actions.get(&snake).unwrap());
     }
 
-    board.snakes
+    let rewards = board.snakes
         .iter()
         .map(|snake| snake.is_alive() as u32 as f32)
-        .collect()
+        .collect();
+
+    // info!("Started at {} turn and rolled out with {} turns and rewards {:?}", start_turn, board.turn - start_turn, rewards);
+    rewards
 }
 
 
