@@ -1,4 +1,5 @@
 pub mod objects {
+    use std::fmt;
     use serde::{Serialize, Deserialize};
 
     #[derive(Serialize, Deserialize, PartialEq, Eq, Hash, Debug, Copy, Clone)]
@@ -70,6 +71,18 @@ pub mod objects {
                 3 => Movement::Left,
                 _ => panic!("Out of range movement value"),
             }
+        }
+    }
+
+    impl fmt::Display for Movement {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            let symbol = match self {
+                Movement::Up => "↑",
+                Movement::Right => "→",
+                Movement::Down => "↓",
+                Movement::Left => "←",
+            };
+            write!(f, "{}", symbol)
         }
     }
 }

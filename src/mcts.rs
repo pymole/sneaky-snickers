@@ -61,12 +61,16 @@ impl MCTS {
         let mut node = self.nodes.get(board).unwrap().borrow_mut();
         // node.ucb_instances
         //     .iter()
-        //     .for_each(|(ii, i)| i.visits.iter()
-        //     .zip(i.rewards)
-        //     .enumerate()
-        //     .for_each(|(a, (v, r))| {
-        //         info!("{} - {}: r: {}; v: {}", ii, a, r, v);
-        //     }));
+        //     .for_each(|(i, ucb)| {
+        //         info!("Snake {}", i);
+        //         ucb.visits
+        //             .iter()
+        //             .zip(ucb.rewards)
+        //             .enumerate()
+        //             .for_each(|(a, (v, r))| {
+        //                 info!("{} - r: {}; v: {}", Movement::from_usize(a), r, v);
+        //             })
+        //     });
 
         let ucb_instance = node.ucb_instances.get_mut(&snake).unwrap();
 
