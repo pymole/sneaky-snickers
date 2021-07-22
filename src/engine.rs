@@ -472,6 +472,21 @@ mod tests {
         });
         assert!(!board.snakes[0].is_alive());
         assert!(!board.snakes[1].is_alive());
+
+        let mut board = create_board(data::HEAD_TO_HEAD_CORRELATED_MCTS);
+        assert!(board.snakes[0].is_alive());
+        assert!(board.snakes[0].health == 79);
+        assert!(board.snakes[1].is_alive());
+        assert!(board.snakes[1].health == 5);
+        advance_one_step(&mut board, &mut |i, _| {
+            match i {
+                0 => Action::Move(Movement::Up),
+                1 => Action::Move(Movement::Right),
+                _ => unreachable!(),
+            }
+        });
+        assert!(!board.snakes[0].is_alive());
+        assert!(board.snakes[1].is_alive());
     }
 
     #[test]
