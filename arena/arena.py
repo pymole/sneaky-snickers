@@ -204,8 +204,12 @@ class Rules:
         logging.info(f'$ {shlex.join(args)}')
 
         r = subprocess.run(args, capture_output=True, check=False, text=True)
+
+        for line in r.stderr.splitlines():
+            if '[WARN]' in line:
+                logging.warn(f'{line} (players={players})')
+
         # Note: This only distinguishes between winner or looser.
-        # TODO: parse warnings (e.g. move failed)
         winner = self._parse_winner(r.stderr)
         return [ (0 if name == winner else 1) for name in game_names ]
 
