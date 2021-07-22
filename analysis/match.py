@@ -1,6 +1,9 @@
 from dataclasses import dataclass, asdict
 
 
+ME = 'sneaky-snickers'
+
+
 @dataclass(unsafe_hash=True)
 class Point:
     x: int
@@ -121,10 +124,13 @@ def battlesnake_frames_to_snickers_match(data: dict) -> SnickersMatch:
 
 
 def snickers_state_to_battlesnake_turn(game: Game, state: State):
+    snake_id_to_name = { meta.id: meta.name for meta in game.snakes_meta }
+    assert len(set(snake_id_to_name.values())) == len(snake_id_to_name), 'Non-unique snake names!'
+
     snakes = [
         {
             'id': snake.id,
-            'name': snake.id,
+            'name': snake_id_to_name[snake.id],
             'health': snake.health,
             'body': [asdict(body_part) for body_part in snake.body],
             'latency': '1',
@@ -132,7 +138,10 @@ def snickers_state_to_battlesnake_turn(game: Game, state: State):
             'length': len(snake.body),
         }
         for snake in state.snakes
+        if snake.health > 0
     ]
+
+    snake_by_name = { snake['name']: snake for snake in snakes }
 
     battlesnake_turn = {
         'game': {
@@ -152,8 +161,7 @@ def snickers_state_to_battlesnake_turn(game: Game, state: State):
             'food': [asdict(f) for f in state.food],
             'snakes': snakes,
         },
-        # Random snake
-        'you': snakes[0],
+        'you': snake_by_name.get(ME, snakes[0]), # Prefer us if we are present, choose random snake otherwise
     }
 
     return battlesnake_turn

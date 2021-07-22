@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 
-from argparse import ArgumentParser
-from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Optional, NamedTuple
+from threading import Lock
+from typing import Any, NamedTuple
 import _jsonnet
 import atexit
+import concurrent.futures
 import json
 import logging
-import random
+import numpy as np
+import os
 import re
 import shlex
 import subprocess
@@ -26,7 +28,7 @@ Address = str
 
 
 def run(*args, **kwargs):
-    logging.info(f'$ {shlex.join(map(str, args))} # {kwargs}')
+    logging.info(f'$ {shlex.join(map(str, args))}') # TODO: Reduce kwargs and start logging them again.
     return subprocess.run(args, check=True, **kwargs)
 
 
@@ -88,7 +90,11 @@ class BotFromCommit(BotI):
         else:
             run('git', 'checkout', self._build_commit, cwd=self._build_dir)
 
-        run('cargo', 'build', *self._build_flags, cwd=self._build_dir)
+        run(
+            'cargo', 'build', *self._build_flags,
+            cwd=self._build_dir,
+            env=os.environ | { 'RUSTFLAGS': '-Awarnings' }
+        )
 
     def up(self, ports_iter, copies=1) -> None:
         logging.info(f'{self}.up(copies={copies})')
@@ -178,6 +184,11 @@ class Rules:
     def __init__(self, rules_config):
         self._build_dir : Path = Path(rules_config['build_dir'])
         self._engine : Path = (self._build_dir / 'official_engine').resolve()
+        self._warning_count = WithLock(0)
+
+    @property
+    def warning_count(self):
+        return self._warning_count
 
     def prepare(self) -> None:
         run('go', 'build', '-o', self._engine, './cli/battlesnake/main.go', cwd=ARENA_DIR / 'rules')
@@ -200,6 +211,13 @@ class Rules:
         logging.info(f'$ {shlex.join(args)}')
 
         r = subprocess.run(args, capture_output=True, check=False, text=True)
+
+        for line in r.stderr.splitlines():
+            if '[WARN]' in line:
+                logging.warn(f'{line} (players={players})')
+                with self._warning_count.lock:
+                    self._warning_count.value += 1
+
         # Note: This only distinguishes between winner or looser.
         winner = self._parse_winner(r.stderr)
         return [ (0 if name == winner else 1) for name in game_names ]
@@ -232,6 +250,9 @@ class RatingJsonEncoder(json.JSONEncoder):
 
 
 def load_ratings(filename) -> dict[str, trueskill.Rating]:
+    if not Path(filename).exists():
+        return {}
+
     return {
         name: trueskill.Rating(mu=rating['mu'], sigma=rating['sigma'])
         for name, rating in json.load(open(filename)).items()
@@ -240,6 +261,21 @@ def load_ratings(filename) -> dict[str, trueskill.Rating]:
 
 def dump_ratings(ratings, filename) -> None:
     json.dump(ratings, open(filename, 'w'), indent=4, cls=RatingJsonEncoder)
+    logging.info(f'Updated ratings in {filename}')
+
+
+def sample(xs : list[Any], k : int, weights : list[float], beta : float) -> list[Any]:
+    assert len(weights) == len(xs)
+    powered_weights = np.array(weights) ** beta
+    probabilities = powered_weights / powered_weights.sum()
+    rng = np.random.default_rng()
+    return rng.choice(xs, size=k, replace=False, p=probabilities)
+
+
+class WithLock:
+    def __init__(self, value):
+        self.lock = Lock()
+        self.value = value
 
 
 class Arena:
@@ -254,6 +290,8 @@ class Arena:
         self._ports_iter = iter(range(config['ports']['from'], config['ports']['to'] + 1))
         self._number_of_players : int = config['arena']['number_of_players']
         self._ladder_games : int = config['arena']['ladder_games']
+        self._parallel : int = config['arena']['parallel']
+        self._beta : float = config['arena']['beta']
 
     def prepare(self):
         self._rules.prepare()
@@ -265,6 +303,24 @@ class Arena:
             bot.up(self._ports_iter)
             assert len(bot.addresses) > 0
 
+    def _run_random_game(self, i, weights) -> tuple[list[Player], list[int]]:
+        try:
+            with weights.lock:
+                selected_bots = sample(
+                    self._bots,
+                    k=self._number_of_players,
+                    weights=weights.value,
+                    beta=self._beta,
+                )
+
+            players = [Player(name=bot.name, address=bot.addresses[0]) for bot in selected_bots]
+            logging.info(f'[{i} / {self._ladder_games}] Starting game. Players: {players}')
+            ranks = self._rules.play(players)
+            return players, ranks
+        except Exception as e:
+            logging.exception(e)
+            raise
+
     # TODO: want to calculate win-rates
     def run_ladder(self):
         if self._number_of_players > len(self._bots):
@@ -274,19 +330,49 @@ class Arena:
         for bot in self._bots:
             ratings.setdefault(bot.name, trueskill.Rating())
 
-        logging.info(f'Running ladder for {self._ladder_games} games')
+        compute_weights = lambda: [ ratings[bot.name].sigma for bot in self._bots ]
 
-        for i in range(1, self._ladder_games + 1):
-            selected_bots = random.sample(self._bots, k=self._number_of_players)
-            players = [Player(name=bot.name, address=bot.addresses[0]) for bot in selected_bots]
-            logging.info(f'[{i} / {self._ladder_games}] Starting game. Players: {players}')
-            ranks = self._rules.play(players)
-            logging.info(f'Ranks: {ranks}')
-            new_ratings = trueskill.rate([(ratings[player.name],) for player in players], ranks=ranks)
-            for (new_rating,), player in zip(new_ratings, players):
-                ratings[player.name] = new_rating
+        logging.info(f'Running ladder for {self._ladder_games} games in {self._parallel} threads')
 
-        dump_ratings(ratings, self._ratings_file)
+        with ThreadPoolExecutor(max_workers=self._parallel) as executor:
+            completed = 0
+            game_results = []
+
+            try:
+                weights = WithLock(compute_weights())
+                game_results[:] = [
+                    executor.submit(self._run_random_game, i, weights)
+                    for i in range(1, self._ladder_games + 1)
+                ]
+
+                for game_result in concurrent.futures.as_completed(game_results):
+                    assert game_result.done()
+
+                    if game_result.cancelled() or game_result.exception() is not None:
+                        continue
+
+                    players, ranks = game_result.result()
+                    new_ratings = trueskill.rate([(ratings[player.name],) for player in players], ranks=ranks)
+                    for (new_rating,), player in zip(new_ratings, players):
+                        ratings[player.name] = new_rating
+
+                    with weights.lock:
+                        weights.value[:] = compute_weights()
+
+                    completed += 1
+
+                executor.shutdown()
+            except:
+                executor.shutdown(cancel_futures=True)
+                raise
+            finally:
+                logging.info(
+                    f'completed {completed}, '
+                    f'cancelled {sum(1 for f in game_results if f.cancelled())}, '
+                    f'failed {sum(1 for f in game_results if not f.cancelled() and f.exception() is not None)}, '
+                    f'warnings {self._rules.warning_count.value}'
+                )
+                dump_ratings(ratings, self._ratings_file)
 
     def down(self):
         for bot in self._bots:
