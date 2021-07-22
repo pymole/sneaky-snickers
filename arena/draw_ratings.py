@@ -31,7 +31,7 @@ def main():
     ax.bxp(boxes, showfliers=False)
     ax.set_ylabel("trueskill")
     ax.get_xaxis().set_tick_params(rotation=-90)
-    ax.set_ylim([20, 40])
+    ax.set_ylim([10, 40])
     fig.tight_layout()
     fig.subplots_adjust(bottom=0.12, top=0.97)
 
