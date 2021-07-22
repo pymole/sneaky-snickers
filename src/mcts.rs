@@ -93,14 +93,16 @@ impl MCTS {
     }
 
     pub fn search_with_time(&mut self, board: &Board, time: u64) {
-        let end = Instant::now() + Duration::from_millis(time);
+        let time_start = Instant::now();
+        let time_end = time_start + Duration::from_millis(time);
         let mut i = 0u32;
-        while Instant::now() < end {
+        while Instant::now() < time_end {
             self.search_iteration(board);
             i += 1;
         }
 
-        info!("Searched {} iterations in {} ms", i, time);
+        let duration = Instant::now() - time_start;
+        info!("Searched {} iterations in {} ms (target time={})", i, duration.as_millis(), time);
     }
 
     fn search_iteration(&mut self, board: &Board) {
