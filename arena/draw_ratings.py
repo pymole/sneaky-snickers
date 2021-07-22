@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 import json
 import sys
@@ -29,7 +30,12 @@ def main():
     ]
     ax.bxp(boxes, showfliers=False)
     ax.set_ylabel("trueskill")
-    ax.set_ylim([15, 35])
+    ax.get_xaxis().set_tick_params(rotation=-90)
+    ax.set_ylim([20, 40])
+    fig.tight_layout()
+    fig.subplots_adjust(bottom=0.12, top=0.97)
+
+    fig.set_size_inches(20, 15)
     plt.gca().yaxis.set_major_locator(plt.MultipleLocator(5))
     plt.gca().yaxis.set_minor_locator(plt.MultipleLocator(1))
     ax.grid()
