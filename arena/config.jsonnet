@@ -43,9 +43,23 @@ local Bots = {
     },
 
     arena: {
-        ratings_file: "./ratings_4.json",
-        ladder_games: 300, // number of games to run
-        number_of_players: 4, // per game
-        parallel: 2,
+        ratings_file: "./ratings_test.json",
+
+        // Number of games to run.
+        ladder_games: 300,
+
+        // All games start with the same number of players. Precondition: number_of_players <= len(bots).
+        number_of_players: 2,
+
+        // How many games are run in parallel.
+        // For maximum efficiency usually you want (number_of_players⋅parallel) ≈ cpu_count.
+        parallel: 5,
+
+        // Regulates sampling of players.
+        // beta=0 — uniform.
+        // beta=1 — proportional to rating.sigma.
+        // beta>1 — prioritize players with high sigma even more.
+        // Distribution is computed as p_i = σ_i^β / (∑_j σ_j^β).
+        beta: 1.5,
     }
 }
