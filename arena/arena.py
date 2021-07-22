@@ -28,7 +28,7 @@ Address = str
 
 
 def run(*args, **kwargs):
-    logging.info(f'$ {shlex.join(map(str, args))}') # TODO: Reduce kwargs and start logging them again.
+    # logging.info(f'$ {shlex.join(map(str, args))}') # TODO: Reduce kwargs and start logging them again.
     return subprocess.run(args, check=True, **kwargs)
 
 
@@ -208,13 +208,13 @@ class Rules:
         for name, player in zip(game_names, players):
             args += ['--name', name, '--url', player.address]
 
-        logging.info(f'$ {shlex.join(args)}')
+        # logging.info(f'$ {shlex.join(args)}')
 
         r = subprocess.run(args, capture_output=True, check=False, text=True)
 
         for line in r.stderr.splitlines():
             if '[WARN]' in line:
-                logging.warn(f'{line} (players={players})')
+                logging.warning(f'{line} (players={players})')
                 with self._warning_count.lock:
                     self._warning_count.value += 1
 
@@ -261,7 +261,6 @@ def load_ratings(filename) -> dict[str, trueskill.Rating]:
 
 def dump_ratings(ratings, filename) -> None:
     json.dump(ratings, open(filename, 'w'), indent=4, cls=RatingJsonEncoder)
-    logging.info(f'Updated ratings in {filename}')
 
 
 def sample(xs : list[Any], k : int, weights : list[float], beta : float) -> list[Any]:
@@ -314,7 +313,11 @@ class Arena:
                 )
 
             players = [Player(name=bot.name, address=bot.addresses[0]) for bot in selected_bots]
-            logging.info(f'[{i} / {self._ladder_games}] Starting game. Players: {players}')
+            logging.info(
+                f'[{i} / {self._ladder_games}] Starting game. Playing '
+                + ' vs '.join(p.name for p in players)
+                + f' (' + ', '.join(p.address for p in players) + ')'
+                )
             ranks = self._rules.play(players)
             return players, ranks
         except Exception as e:
@@ -360,6 +363,9 @@ class Arena:
                         weights.value[:] = compute_weights()
 
                     completed += 1
+
+                    dump_ratings(ratings, self._ratings_file)
+
 
                 executor.shutdown()
             except:
