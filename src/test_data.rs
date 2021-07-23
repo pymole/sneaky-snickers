@@ -242,7 +242,6 @@ pub const FOOD_HEAD_TO_HEAD_EQUAL_V2: &str = include_str!("test_data/food_head_t
 
 /*
 game id: dfcddc22-a5f0-4b90-a911-6bceb283dda6
-move: 129
 
  turn=129
  A: health=79
@@ -260,3 +259,23 @@ move: 129
 ░░░░░░ . . . . ¤ .░░░░
 */
 pub const HEAD_TO_HEAD_CORRELATED_MCTS: &str = include_str!("test_data/head_to_head_correlated_mcts.json");
+
+/*
+game id: 88ab3d74-0430-41bd-b315-c8036f304910
+
+ turn=180
+ A: health=1
+ B: health=61
+░░░░░░░░░░░░ b░░░░ ¤░░
+░░░░ . . . . b b .░░ ¤
+░░░░ . . . . b b .░░░░
+░░░░ . . . b b . .░░░░
+░░░░ . a A b . . .░░░░
+ ¤░░ . a . B a a .░░░░
+░░░░ . a . a a a a░░░░
+░░░░░░ a a a a a a░░░░
+░░░░░░░░░░░░░░░░░░░░ ¤
+░░░░░░░░░░░░░░ ¤░░░░░░
+░░░░ ¤░░ ¤░░░░ ¤░░░░░░
+*/
+pub const HEAD_TO_HEAD_OUT_OF_HEALTH: &str = include_str!("test_data/head_to_head_out_of_health.json");
