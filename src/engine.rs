@@ -130,8 +130,8 @@ type SnakeStrategy<'a> = &'a mut dyn FnMut(/*snake_index:*/ usize, &Board) -> Ac
 
 pub fn advance_one_step(board: &mut Board, snake_strategy: SnakeStrategy) -> Vec<(usize, Action)> {
     let mut settings = EngineSettings {
-        food_spawner: &mut food_spawner::create_standard,
-        safe_zone_shrinker: &mut safe_zone_shrinker::standard,
+        food_spawner: &mut food_spawner::noop,
+        safe_zone_shrinker: &mut safe_zone_shrinker::noop,
     };
 
     advance_one_step_with_settings(board, &mut settings, snake_strategy)

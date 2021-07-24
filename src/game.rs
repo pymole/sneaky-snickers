@@ -54,13 +54,17 @@ impl Board {
             foods: board_api.food.clone(), // TODO: reserve capacity
             snakes: board_api.snakes.iter().map(Snake::from_api).collect(),
             turn: state_api.turn as i32,
-            safe_zone: Self::calcualate_safe_zone(&board_api.hazards, board_api.width, board_api.height),
+            safe_zone: Self::calcualate_safe_zone(board_api),
             objects: objects,
         }
     }
 
     pub fn contains(&self, p: Point) -> bool {
         Rectangle { p0: Point::ZERO, p1: self.size }.contains(p)
+    }
+
+    pub fn is_terminal(&self) -> bool {
+        self.snakes.iter().filter(|snake| snake.is_alive()).count() < 2
     }
 
     fn calculate_objects(state_api: &api::objects::State) -> Vec2D<Object> {
@@ -95,17 +99,31 @@ impl Board {
         objects
     }
 
-    fn calcualate_safe_zone(hazards: &Vec<Point>, width: i32, height: i32) -> Rectangle {
+    fn calcualate_safe_zone(board_api : &api::objects::Board) -> Rectangle {
+        let is_safe = {
+            let mut mask = Vec2D::init_same(board_api.width as usize, board_api.height as usize, true);
+
+            for &p in &board_api.hazards {
+                mask[p] = false;
+            }
+
+            mask
+        };
+
         let mut safe_zone = Rectangle {
-            p0: Point { x: width, y: height },
+            p0: Point { x: board_api.width, y: board_api.height },
             p1: Point { x: -1, y: -1 },
         };
 
-        for &Point{x, y} in hazards {
-            safe_zone.p0.x = safe_zone.p0.x.min(x);
-            safe_zone.p1.x = safe_zone.p1.x.max(x);
-            safe_zone.p0.y = safe_zone.p0.y.min(y);
-            safe_zone.p1.y = safe_zone.p1.y.max(y);
+        for x in 0..board_api.width {
+            for y in 0..board_api.height {
+                if is_safe[(x, y)] {
+                    safe_zone.p0.x = safe_zone.p0.x.min(x as i32);
+                    safe_zone.p1.x = safe_zone.p1.x.max(x as i32);
+                    safe_zone.p0.y = safe_zone.p0.y.min(y as i32);
+                    safe_zone.p1.y = safe_zone.p1.y.max(y as i32);
+                }
+            }
         }
 
         // Add one to include borders ( rectangle represents [p0.x, p1.x) × [p0.y, p1.y) )
@@ -118,10 +136,6 @@ impl Board {
         else {
             safe_zone
         }
-    }
-
-    pub fn is_terminal(&self) -> bool {
-        self.snakes.iter().filter(|snake| snake.is_alive()).count() < 2
     }
 }
 
@@ -191,4 +205,3 @@ mod tests {
         // TODO
     }
 }
-
