@@ -33,21 +33,29 @@ local Bots = {
 
 {
     bots: [
-        Bots.from_commit("v1", "v1"),
-        Bots.from_commit("v2.1#500", "v2.1", { "MCTS_ITERATIONS": "500" }),
-        Bots.from_commit("v2.1#1000", "v2.1", { "MCTS_ITERATIONS": "1000" }),
-        Bots.from_commit("v2.2#500", "v2.2", { "MCTS_ITERATIONS": "500" }),
-        Bots.from_commit("v2.2#1000", "v2.2", { "MCTS_ITERATIONS": "1000" }),
-        Bots.from_commit("v2.3#500", "v2.3", { "MCTS_ITERATIONS": "500" }),
+        // Bots.from_commit("v1", "v1"),
+        // Bots.from_commit("v2.1#500", "v2.1", { "MCTS_ITERATIONS": "500" }),
+        // Bots.from_commit("v2.1#1000", "v2.1", { "MCTS_ITERATIONS": "1000" }),
+        // Bots.from_commit("v2.2#500", "v2.2", { "MCTS_ITERATIONS": "500" }),
+        // Bots.from_commit("v2.2#1000", "v2.2", { "MCTS_ITERATIONS": "1000" }),
+        // Bots.from_commit("v2.3#500", "v2.3", { "MCTS_ITERATIONS": "500" }),
+        // Bots.from_commit("v2.4#500", "v2.4.timed", { "MCTS_ITERATIONS": "500" }),
+        // Bots.from_commit("v2.4#t=50", "v2.4.timed", { "MCTS_SEARCH_TIME": "50" }),
+        // Bots.from_commit("v2.4#t=250", "v2.4.timed", { "MCTS_SEARCH_TIME": "250" }),
+
+        Bots.from_commit("v2.5#500", "v2.5", { "MCTS_ITERATIONS": "500" }),
+        Bots.from_commit("v2.5#t=50", "v2.5", { "MCTS_SEARCH_TIME": "50" }),
+        Bots.from_commit("v2.5#t=250", "v2.5", { "MCTS_SEARCH_TIME": "250" }),
 
         // Version that is currently deployed
-        Bots.from_commit("v2.4#500", "v2.4.timed", { "MCTS_ITERATIONS": "500" }),
-        Bots.from_commit("v2.4#timed50", "v2.4.timed", { "MCTS_SEARCH_TIME": "50" }),
-        Bots.from_commit("v2.4#timed250", "v2.4.timed", { "MCTS_SEARCH_TIME": "250" }),
+        Bots.from_commit("v2.6#500", "v2.6", { "MCTS_ITERATIONS": "500" }),
+        Bots.from_commit("v2.6#t=50", "v2.6", { "MCTS_SEARCH_TIME": "50" }),
+        Bots.from_commit("v2.6#t=250", "v2.6", { "MCTS_SEARCH_TIME": "250" }),
 
-        Bots.binary("current#500", { "MCTS_ITERATIONS": "500" }),
-        Bots.binary("current#t=50", { "MCTS_SEARCH_TIME": "50" }),
-        Bots.binary("current#t=250", { "MCTS_SEARCH_TIME": "250" }),
+        // Bots.binary("current#500", { "MCTS_ITERATIONS": "500" }),
+        // Bots.binary("current#t=50", { "MCTS_SEARCH_TIME": "50" }),
+        // Bots.binary("current#t=250", { "MCTS_SEARCH_TIME": "250" }),
+
         // Bots.unmanaged("current"),
     ],
 
