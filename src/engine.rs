@@ -88,11 +88,10 @@ pub mod food_spawner {
         unreachable!();
     }
 
-    pub fn create_standard(mut rng: impl rand::Rng) -> impl FnMut(&mut Board) {
-        move |board: &mut Board| {
-            if board.foods.len() < 1 || rng.gen_ratio(20, 100) {
-                spawn_one(&mut rng, board);
-            }
+    pub fn create_standard(board: &mut Board) {
+        let random = &mut rand::thread_rng();
+        if board.foods.len() < 1 || random.gen_ratio(20, 100) {
+            spawn_one(random, board);
         }
     }
 
@@ -131,8 +130,8 @@ type SnakeStrategy<'a> = &'a mut dyn FnMut(/*snake_index:*/ usize, &Board) -> Ac
 
 pub fn advance_one_step(board: &mut Board, snake_strategy: SnakeStrategy) -> Vec<(usize, Action)> {
     let mut settings = EngineSettings {
-        food_spawner: &mut food_spawner::noop,
-        safe_zone_shrinker: &mut safe_zone_shrinker::noop,
+        food_spawner: &mut food_spawner::create_standard,
+        safe_zone_shrinker: &mut safe_zone_shrinker::standard,
     };
 
     advance_one_step_with_settings(board, &mut settings, snake_strategy)

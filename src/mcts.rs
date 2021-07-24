@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 use std::cell::{RefCell, RefMut};
 use std::time::{Duration, Instant};
-use rand;
 use rand::seq::SliceRandom;
 
 use crate::api::objects::Movement;
-use crate::engine::{advance_one_step, Action, MOVEMENTS};
+use crate::engine::{
+    Action, MOVEMENTS, advance_one_step,
+};
 use crate::game::{Board, Object, Point};
 
 #[derive(Clone, Default, Debug)]
@@ -44,7 +45,6 @@ impl Node {
     }
 }
 
-#[derive(Debug)]
 pub struct MCTS {
     c: f32,
     nodes: HashMap<Board, RefCell<Node>>,
@@ -115,7 +115,8 @@ impl MCTS {
             let node = node_cell.borrow_mut();
             // info!("{:?}", node.ucb_instances);
 
-            let joint_action = advance_one_step(&mut board, &mut |i, _| {
+            let joint_action = advance_one_step(
+                &mut board, &mut |i, _| {
                 let ucb = &node.ucb_instances[&i];
                 let available_moves = (0..4)
                     .filter(|&i| ucb.mask[i])
@@ -195,7 +196,11 @@ fn rollout(board: &mut Board) -> Vec<f32> {
                 (snake, Action::Move(Movement::from_usize(movement)))
             })
             .collect();
-        advance_one_step(board, &mut |snake, _| *actions.get(&snake).unwrap());
+ 
+        advance_one_step(
+            board,
+            &mut |snake, _| *actions.get(&snake).unwrap()
+        );
     }
 
     let rewards = board.snakes
