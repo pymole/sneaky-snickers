@@ -4,9 +4,7 @@ use std::time::{Duration, Instant};
 use rand::seq::SliceRandom;
 
 use crate::api::objects::Movement;
-use crate::engine::{
-    Action, MOVEMENTS, advance_one_step,
-};
+use crate::engine::{Action, EngineSettings, MOVEMENTS, advance_one_step_with_settings, food_spawner, safe_zone_shrinker};
 use crate::game::{Board, Object, Point};
 
 #[derive(Clone, Default, Debug)]
@@ -109,14 +107,19 @@ impl MCTS {
         let mut board = board.clone();
         let mut path = Vec::new();
 
+        let mut engine_settings = EngineSettings {
+            food_spawner: &mut food_spawner::noop,
+            safe_zone_shrinker: &mut safe_zone_shrinker::noop,
+        };
+
         let c = self.c;
         while let Some(node_cell) = self.nodes.get(&board) {
             // info!("Selection");
             let node = node_cell.borrow_mut();
             // info!("{:?}", node.ucb_instances);
-
-            let joint_action = advance_one_step(
-                &mut board, &mut |i, _| {
+            
+            let joint_action = advance_one_step_with_settings(
+                &mut board, &mut engine_settings, &mut |i, _| {
                 let ucb = &node.ucb_instances[&i];
                 let available_moves = (0..4)
                     .filter(|&i| ucb.mask[i])
@@ -150,7 +153,7 @@ impl MCTS {
         let rewards = rollout(&mut board);
         self.backpropagate(path, rewards);
 
-        if expansion_board.is_terminal() {
+        if !expansion_board.is_terminal() {
             self.expansion(&expansion_board);
         }
     }
@@ -181,7 +184,12 @@ impl MCTS {
 fn rollout(board: &mut Board) -> Vec<f32> {
     let random = &mut rand::thread_rng();
     // let start_turn = board.turn;
-    while board.is_terminal() {
+    let mut engine_settings = EngineSettings {
+        food_spawner: &mut food_spawner::noop,
+        safe_zone_shrinker: &mut safe_zone_shrinker::noop,
+    };
+    
+    while !board.is_terminal() {
         let actions: HashMap<_, _> = get_masks(board)
             .into_iter()
             .map(|(snake, movement_masks)| {
@@ -197,8 +205,9 @@ fn rollout(board: &mut Board) -> Vec<f32> {
             })
             .collect();
  
-        advance_one_step(
+        advance_one_step_with_settings(
             board,
+            &mut engine_settings,
             &mut |snake, _| *actions.get(&snake).unwrap()
         );
     }

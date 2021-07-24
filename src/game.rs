@@ -1,12 +1,12 @@
 use std::collections::VecDeque;
 use std::ops::{Add, AddAssign};
-
+use std::hash::{Hash, Hasher};
 use crate::api;
 use crate::vec2d::Vec2D;
 
 pub const MAX_SNAKE_COUNT: usize = 8;
 
-#[derive(PartialEq, Eq, Debug, Clone, Hash)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Board {
     pub size: Point,
     pub foods: Vec<Point>,
@@ -121,7 +121,13 @@ impl Board {
     }
 
     pub fn is_terminal(&self) -> bool {
-        self.snakes.iter().filter(|snake| snake.is_alive()).count() > 1
+        self.snakes.iter().filter(|snake| snake.is_alive()).count() < 2
+    }
+}
+
+impl Hash for Board {
+    fn hash<H>(&self, state: &mut H) where H: Hasher {
+        (&self.snakes, &self.foods, &self.safe_zone).hash(state);
     }
 }
 
