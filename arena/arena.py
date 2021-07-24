@@ -51,27 +51,23 @@ class BotI:
         raise NotImplementedError()
 
 
-class BotFromCommit(BotI):
-    TERMINATE_TIMEOUT = 1
-
+class BotBinary(BotI):
     def __init__(self, bot_config):
-        assert bot_config['type'] == 'from_commit'
+        assert bot_config['type'] == 'binary'
 
-        self._name : str = bot_config['name']
+        self._name      : str       = bot_config['name']
         self._addresses : list[Address] = []
 
-        self._build_dir    : Path      = Path(bot_config['build']['dir'])
-        self._build_commit : str       = bot_config['build']['commit']
-        self._build_flags  : list[str] = bot_config['build']['flags']
-
-        self._run_exe  : str            = bot_config['run']['exe']
-        self._run_env  : dict[str, str] = bot_config['run']['env']
-        self._run_mute : bool           = bot_config['run']['mute']
+        self._workd_dir  : str      = bot_config['work_dir']
+        self._exe  : str            = bot_config['exe']
+        self._env  : dict[str, str] = bot_config['env']
+        self._mute : bool           = bot_config['mute']
 
         self._bot_processes : set[subprocess.Popen] = set()
 
+
     def __repr__(self) -> str:
-        return f'BotFromCommit(commit={self._build_commit})'
+        return f'BotBinary(name={self._name}, exe={self._exe})'
 
     @property
     def name(self) -> str:
@@ -82,30 +78,18 @@ class BotFromCommit(BotI):
         return self._addresses
 
     def prepare(self) -> None:
-        logging.info(f'{self}.prepare()')
-
-        if not self._build_dir.exists():
-            self._build_dir.mkdir(parents=True)
-            run('git', 'worktree', 'add', self._build_dir, self._build_commit)
-        else:
-            run('git', 'checkout', self._build_commit, cwd=self._build_dir)
-
-        run(
-            'cargo', 'build', *self._build_flags,
-            cwd=self._build_dir,
-            env=os.environ | { 'RUSTFLAGS': '-Awarnings' }
-        )
+        return
 
     def up(self, ports_iter, copies=1) -> None:
         logging.info(f'{self}.up(copies={copies})')
 
         for _, port in zip(range(copies), ports_iter):
             process = subprocess.Popen(
-                [self._run_exe],
-                cwd=self._build_dir,
-                env={ 'ROCKET_PORT': str(port) } | self._run_env,
-                stderr=subprocess.DEVNULL if self._run_mute else None,
-                stdout=subprocess.DEVNULL if self._run_mute else None
+                [self._exe],
+                cwd=self._workd_dir,
+                env={ 'ROCKET_PORT': str(port) } | self._env,
+                stderr=subprocess.DEVNULL if self._mute else None,
+                stdout=subprocess.DEVNULL if self._mute else None
             )
             atexit.register(process.kill)
             self._bot_processes.add(process)
@@ -113,9 +97,9 @@ class BotFromCommit(BotI):
 
     def down(self) -> None:
         logging.info(f'{self}.down()')
-        self._down()
+        self.down_impl()
 
-    def _down(self) -> None:
+    def down_impl(self) -> None:
         for p in self._bot_processes:
             p.terminate()
 
@@ -136,7 +120,62 @@ class BotFromCommit(BotI):
         self._addresses.clear()
 
     def __del__(self):
-        self._down()
+        self.down_impl()
+
+
+class BotFromCommit(BotI):
+    TERMINATE_TIMEOUT = 1
+
+    def __init__(self, bot_config):
+        assert bot_config['type'] == 'from_commit'
+
+        self._build_dir    : Path      = Path(bot_config['build']['dir'])
+        self._build_commit : str       = bot_config['build']['commit']
+        self._build_flags  : list[str] = bot_config['build']['flags']
+
+        self._bot_binary = BotBinary({
+            'name': bot_config['name'],
+            'type': 'binary',
+            'work_dir': self._build_dir,
+            'exe': bot_config['run']['exe'],
+            'env': bot_config['run']['env'],
+            'mute': bot_config['run']['mute'],
+        })
+
+    def __repr__(self) -> str:
+        return f'BotFromCommit(commit={self._build_commit})'
+
+    @property
+    def name(self) -> str:
+        return self._bot_binary.name
+
+    @property
+    def addresses(self) -> list[Address]:
+        return self._bot_binary.addresses
+
+    def prepare(self) -> None:
+        logging.info(f'{self}.prepare()')
+
+        if not self._build_dir.exists():
+            self._build_dir.mkdir(parents=True)
+            run('git', 'worktree', 'add', self._build_dir, self._build_commit)
+        else:
+            run('git', 'checkout', self._build_commit, cwd=self._build_dir)
+
+        run(
+            'cargo', 'build', *self._build_flags,
+            cwd=self._build_dir,
+            env=os.environ | { 'RUSTFLAGS': '-Awarnings' }
+        )
+
+        self._bot_binary.prepare()
+
+    def up(self, ports_iter, copies=1) -> None:
+        self._bot_binary.up(ports_iter, copies)
+
+    def down(self) -> None:
+        logging.info(f'{self}.down()')
+        self._bot_binary.down_impl()
 
 
 class BotUnmanaged(BotI):

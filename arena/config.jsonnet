@@ -1,4 +1,13 @@
 local Bots = {
+    binary(name, env={}, work_dir="..", exe=work_dir + "/target/release/sneaky-snickers", mute=true): {
+        name: name,
+        type: "binary",
+        work_dir: work_dir,
+        exe: exe,
+        env: env,
+        mute: mute,
+    },
+
     from_commit(name, commit, env={}, mute=true): {
         name: name,
         type: "from_commit",
@@ -15,7 +24,7 @@ local Bots = {
         },
     },
 
-    current(name="current", host="http://127.0.0.1", port="8000"): {
+    unmanaged(name="unmanaged", host="http://127.0.0.1", port="8000"): {
         name: name,
         type: "unmanaged",
         addresses: [host + ":" + port]
@@ -30,163 +39,16 @@ local Bots = {
         Bots.from_commit("v2.2#500", "v2.2", { "MCTS_ITERATIONS": "500" }),
         Bots.from_commit("v2.2#1000", "v2.2", { "MCTS_ITERATIONS": "1000" }),
         Bots.from_commit("v2.3#500", "v2.3", { "MCTS_ITERATIONS": "500" }),
-        Bots.from_commit('mcts_c#500#0.25', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "500",
-            "MCTS_C": "0.25",
-        }),
-        Bots.from_commit('mcts_c#500#0.35', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "500",
-            "MCTS_C": "0.35",
-        }),
-        Bots.from_commit('mcts_c#500#0.45', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "500",
-            "MCTS_C": "0.45",
-        }),
-        Bots.from_commit('mcts_c#500#0.5', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "500",
-            "MCTS_C": "0.5",
-        }),
-        Bots.from_commit('mcts_c#500#0.60', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "500",
-            "MCTS_C": "0.60",
-        }),
-        Bots.from_commit('mcts_c#500#0.75', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "500",
-            "MCTS_C": "0.75",
-        }),
-        Bots.from_commit('mcts_c#500#0.87', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "500",
-            "MCTS_C": "0.87",
-        }),
-        Bots.from_commit('mcts_c#500#1', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "500",
-            "MCTS_C": "1",
-        }),
-        Bots.from_commit('mcts_c#500#1.12', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "500",
-            "MCTS_C": "1.12",
-        }),
-        Bots.from_commit('mcts_c#500#1.25', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "500",
-            "MCTS_C": "1.25",
-        }),
-        Bots.from_commit('mcts_c#500#1.5', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "500",
-            "MCTS_C": "1.5",
-        }),
-        Bots.from_commit('mcts_c#500#1.75', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "500",
-            "MCTS_C": "1.75",
-        }),
-        Bots.from_commit('mcts_c#500#2', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "500",
-            "MCTS_C": "2",
-        }),
-        Bots.from_commit('mcts_c#1000#0.25', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "1000",
-            "MCTS_C": "0.25",
-        }),
-        Bots.from_commit('mcts_c#1000#0.35', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "1000",
-            "MCTS_C": "0.35",
-        }),
-        Bots.from_commit('mcts_c#1000#0.45', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "1000",
-            "MCTS_C": "0.45",
-        }),
-        Bots.from_commit('mcts_c#1000#0.5', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "1000",
-            "MCTS_C": "0.5",
-        }),
-        Bots.from_commit('mcts_c#1000#0.60', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "1000",
-            "MCTS_C": "0.60",
-        }),
-        Bots.from_commit('mcts_c#1000#0.75', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "1000",
-            "MCTS_C": "0.75",
-        }),
-        Bots.from_commit('mcts_c#1000#0.87', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "1000",
-            "MCTS_C": "0.87",
-        }),
-        Bots.from_commit('mcts_c#1000#1', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "1000",
-            "MCTS_C": "1",
-        }),
-        Bots.from_commit('mcts_c#1000#1.12', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "1000",
-            "MCTS_C": "1.12",
-        }),
-        Bots.from_commit('mcts_c#1000#1.25', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "1000",
-            "MCTS_C": "1.25",
-        }),
-        Bots.from_commit('mcts_c#1000#1.5', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "1000",
-            "MCTS_C": "1.5",
-        }),
-        Bots.from_commit('mcts_c#1000#1.75', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "1000",
-            "MCTS_C": "1.75",
-        }),
-        Bots.from_commit('mcts_c#1000#2', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "1000",
-            "MCTS_C": "2",
-        }),
-        Bots.from_commit('mcts_c#2000#0.25', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "2000",
-            "MCTS_C": "0.25",
-        }),
-        Bots.from_commit('mcts_c#2000#0.35', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "2000",
-            "MCTS_C": "0.35",
-        }),
-        Bots.from_commit('mcts_c#2000#0.45', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "2000",
-            "MCTS_C": "0.45",
-        }),
-        Bots.from_commit('mcts_c#2000#0.5', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "2000",
-            "MCTS_C": "0.5",
-        }),
-        Bots.from_commit('mcts_c#2000#0.60', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "2000",
-            "MCTS_C": "0.60",
-        }),
-        Bots.from_commit('mcts_c#2000#0.75', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "2000",
-            "MCTS_C": "0.75",
-        }),
-        Bots.from_commit('mcts_c#2000#0.87', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "2000",
-            "MCTS_C": "0.87",
-        }),
-        Bots.from_commit('mcts_c#2000#1', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "2000",
-            "MCTS_C": "1",
-        }),
-        Bots.from_commit('mcts_c#2000#1.12', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "2000",
-            "MCTS_C": "1.12",
-        }),
-        Bots.from_commit('mcts_c#2000#1.25', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "2000",
-            "MCTS_C": "1.25",
-        }),
-        Bots.from_commit('mcts_c#2000#1.5', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "2000",
-            "MCTS_C": "1.5",
-        }),
-        Bots.from_commit('mcts_c#2000#1.75', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "2000",
-            "MCTS_C": "1.75",
-        }),
-        Bots.from_commit('mcts_c#2000#2', 'c14d36f6f5efab73d042d99dcf74501191535bc7', {
-            "MCTS_ITERATIONS": "2000",
-            "MCTS_C": "2",
-        }),
-        // Bots.current(),
+
+        // Version that is currently deployed
+        Bots.from_commit("v2.4#500", "v2.4.timed", { "MCTS_ITERATIONS": "500" }),
+        Bots.from_commit("v2.4#timed50", "v2.4.timed", { "MCTS_SEARCH_TIME": "50" }),
+        Bots.from_commit("v2.4#timed250", "v2.4.timed", { "MCTS_SEARCH_TIME": "250" }),
+
+        Bots.binary("current#500", { "MCTS_ITERATIONS": "500" }),
+        Bots.binary("current#t=50", { "MCTS_SEARCH_TIME": "50" }),
+        Bots.binary("current#t=250", { "MCTS_SEARCH_TIME": "250" }),
+        // Bots.unmanaged(),
     ],
 
     ports: {
@@ -199,10 +61,10 @@ local Bots = {
     },
 
     arena: {
-        ratings_file: "./ratings_test.json",
+        ratings_file: "./ratings.json",
 
         // Number of games to run.
-        ladder_games: 500,
+        ladder_games: 100,
 
         // All games start with the same number of players. Precondition: number_of_players <= len(bots).
         number_of_players: 2,
@@ -216,6 +78,6 @@ local Bots = {
         // beta=1 — proportional to rating.sigma.
         // beta>1 — prioritize players with high sigma even more.
         // Distribution is computed as p_i = σ_i^β / (∑_j σ_j^β).
-        beta: 1.5,
+        beta: 1.0,
     }
 }
