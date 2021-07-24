@@ -109,7 +109,7 @@ impl MCTS {
 
         let mut engine_settings = EngineSettings {
             food_spawner: &mut food_spawner::noop,
-            safe_zone_shrinker: &mut safe_zone_shrinker::noop,
+            safe_zone_shrinker: &mut safe_zone_shrinker::standard,
         };
 
         let c = self.c;
@@ -117,7 +117,7 @@ impl MCTS {
             // info!("Selection");
             let node = node_cell.borrow_mut();
             // info!("{:?}", node.ucb_instances);
-            
+
             let joint_action = advance_one_step_with_settings(
                 &mut board, &mut engine_settings, &mut |i, _| {
                 let ucb = &node.ucb_instances[&i];
@@ -186,9 +186,9 @@ fn rollout(board: &mut Board) -> Vec<f32> {
     // let start_turn = board.turn;
     let mut engine_settings = EngineSettings {
         food_spawner: &mut food_spawner::noop,
-        safe_zone_shrinker: &mut safe_zone_shrinker::noop,
+        safe_zone_shrinker: &mut safe_zone_shrinker::standard,
     };
-    
+
     while !board.is_terminal() {
         let actions: HashMap<_, _> = get_masks(board)
             .into_iter()
@@ -204,7 +204,7 @@ fn rollout(board: &mut Board) -> Vec<f32> {
                 (snake, Action::Move(Movement::from_usize(movement)))
             })
             .collect();
- 
+
         advance_one_step_with_settings(
             board,
             &mut engine_settings,
