@@ -10,6 +10,13 @@ use crate::game::{
 
 pub use crate::api::objects::Movement;
 
+pub const MOVEMENTS: [Movement; 4] = [
+    Movement::Up,
+    Movement::Right,
+    Movement::Down,
+    Movement::Left,
+];
+
 impl Movement {
     pub fn to_direction(self) -> Point {
         match self {
@@ -21,6 +28,18 @@ impl Movement {
     }
 }
 
+impl Distribution<Movement> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Movement {
+        match rng.gen_range(0..4) {
+            0 => Movement::Down,
+            1 => Movement::Up,
+            2 => Movement::Right,
+            3 => Movement::Left,
+            _ => unreachable!(),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub enum Action {
     // `DoNothing` allows freezing some snakes in place.
@@ -28,18 +47,6 @@ pub enum Action {
     // head-to-head collisions with frozen snake should be resolved.
     // DoNothing,
     Move(Movement),
-}
-
-impl Distribution<Action> for Standard {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Action {
-        match rng.gen_range(0..4) {
-            0 => Action::Move(Movement::Down),
-            1 => Action::Move(Movement::Up),
-            2 => Action::Move(Movement::Right),
-            3 => Action::Move(Movement::Left),
-            _ => unreachable!(),
-        }
-    }
 }
 
 pub struct EngineSettings<'a, 'b> {
@@ -55,20 +62,20 @@ pub mod food_spawner {
     use rand;
 
     fn spawn_one(rng: &mut impl rand::Rng, board: &mut Board) {
-        let empty_squares_count = board.squares.data.iter().filter(|s| s.object == Object::Empty).count();
+        let empty_objects_count = board.objects.data.iter().filter(|&&object| object == Object::Empty).count();
 
-        if empty_squares_count == 0 {
-            return
+        if empty_objects_count == 0 {
+            return;
         }
 
-        let needle = rng.gen_range(0..empty_squares_count);
+        let needle = rng.gen_range(0..empty_objects_count);
 
         let mut i = 0;
-        for x in 0..board.squares.len1 {
-            for y in 0..board.squares.len2 {
-                if board.squares[(x, y)].object == Object::Empty {
+        for x in 0..board.objects.len1 {
+            for y in 0..board.objects.len2 {
+                if board.objects[(x, y)] == Object::Empty {
                     if i == needle {
-                        board.squares[(x, y)].object = Object::Food;
+                        board.objects[(x, y)] = Object::Food;
                         board.foods.push(Point { x: x as i32, y: y as i32 });
                         return;
                     }
@@ -96,7 +103,25 @@ pub mod food_spawner {
 pub mod safe_zone_shrinker {
     use super::*;
 
+    pub fn shrink(board: &mut Board, side: Movement) {
+        if board.safe_zone.empty() {
+            return;
+        }
+        match side {
+            Movement::Left => board.safe_zone.p0.x += 1,
+            Movement::Up => board.safe_zone.p0.y -= 1,
+            Movement::Right => board.safe_zone.p1.x -= 1,
+            Movement::Down => board.safe_zone.p1.y += 1,
+        }
+    }
+
     // TODO: pub fn standard
+    pub fn standard(board: &mut Board) {
+        if board.turn != 0 && board.turn % 20 == 0 {
+            let side: Movement = rand::random();
+            shrink(board, side);
+        }
+    }
 
     pub fn noop(_: &mut Board) {
     }
@@ -151,11 +176,11 @@ pub fn advance_one_step_with_settings(
             let old_tail = snake.body.pop_back().unwrap();
             snake.health -= 1;
 
-            debug_assert_eq!(board.squares[old_tail].object, Object::BodyPart);
+            debug_assert_eq!(board.objects[old_tail], Object::BodyPart);
 
             // TODO: benchmark alternative: if *snake.body.back().unwrap() != old_tail {
-            board.squares[old_tail].object = Object::Empty;
-            board.squares[*snake.body.back().unwrap()].object = Object::BodyPart;
+            board.objects[old_tail] = Object::Empty;
+            board.objects[*snake.body.back().unwrap()] = Object::BodyPart;
 
             // The head will be set in a separate loop.
         }
@@ -166,10 +191,10 @@ pub fn advance_one_step_with_settings(
     for &i in alive_snakes.iter() {
         let head = board.snakes[i].body[0];
         if board.contains(head) {
-            objects_under_head.push(board.squares[head].object);
+            objects_under_head.push(board.objects[head]);
         } else {
             // Note: Object::Empty will also work in current implementation
-            // Note: If board.squares would allow out of bounds access, only "then" branch will suffice.
+            // Note: If board.objects would allow out of bounds access, only "then" branch will suffice.
             objects_under_head.push(Object::BodyPart);
         }
     }
@@ -194,19 +219,19 @@ pub fn advance_one_step_with_settings(
 
             let tail = *snake.body.back().unwrap();
             snake.body.push_back(tail);
-            debug_assert_eq!(board.squares[tail].object, Object::BodyPart);
+            debug_assert_eq!(board.objects[tail], Object::BodyPart);
             eaten_food.push(head);
         }
 
         for food in eaten_food {
             if let Some(food_position) = board.foods.iter().position(|&x| x == food) {
                 board.foods.swap_remove(food_position);
-                board.squares[food].object = Object::Empty;
+                board.objects[food] = Object::Empty;
             }
         }
     }
 
-    // 3. Any new food spawning will be placed in empty squares on the board.
+    // 3. Any new food spawning will be placed in empty objects on the board.
     {
         (engine_settings.food_spawner)(board);
     }
@@ -271,7 +296,7 @@ pub fn advance_one_step_with_settings(
         (engine_settings.safe_zone_shrinker)(board);
     }
 
-    // Remove dead snakes from board.squares.
+    // Remove dead snakes from board.objects.
     {
         for (&i, &object_under_head) in alive_snakes.iter().zip(&objects_under_head) {
             if !board.snakes[i].is_alive() {
@@ -279,11 +304,11 @@ pub fn advance_one_step_with_settings(
                 board.snakes[i].health = 0;
 
                 if object_under_head != Object::BodyPart {
-                    board.squares[board.snakes[i].body[0]].object = Object::Empty;
+                    board.objects[board.snakes[i].body[0]] = Object::Empty;
                 }
 
                 for &p in board.snakes[i].body.iter().skip(1) {
-                    board.squares[p].object = Object::Empty;
+                    board.objects[p] = Object::Empty;
                 }
             }
         }
@@ -291,7 +316,7 @@ pub fn advance_one_step_with_settings(
         // Restore alive heads, which were removed in previous loop in case of a head-to-head collision.
         for &i in alive_snakes.iter() {
             if board.snakes[i].is_alive() {
-                board.squares[board.snakes[i].body[0]].object = Object::BodyPart;
+                board.objects[board.snakes[i].body[0]] = Object::BodyPart;
             }
         }
     }
@@ -322,7 +347,7 @@ mod tests {
     fn is_empty(board: &Board) -> bool {
         for x in 0..board.size.x {
             for y in 0..board.size.y {
-                if board.squares[(x, y)].object != Object::Empty {
+                if board.objects[(x, y)] != Object::Empty {
                     return false;
                 }
             }

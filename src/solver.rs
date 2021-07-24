@@ -2,15 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::api::objects::{Movement, State};
 use crate::game::{Board, Point};
-
-
-const MOVEMENTS: [Movement; 4] = [
-    Movement::Left,
-    Movement::Right,
-    Movement::Up,
-    Movement::Down
-];
-
+use crate::engine::MOVEMENTS;
 
 pub fn get_best_movement(state: State) -> Movement {
     let head = state.you.head;
@@ -181,7 +173,7 @@ pub fn flavored_flood_fill(board: &Board) -> FloodFill {
 
 pub fn flavored_flood_fill_estimate(board: &Board) -> Vec<(usize, f32)> {
     let fff = flavored_flood_fill(board);
-    let squares_count = board.squares.len1 * board.squares.len2;
+    let squares_count = board.objects.len1 * board.objects.len2;
 
     fff.into_iter()
         .map(|(id, seized)| (id, (seized.len()/squares_count) as f32))

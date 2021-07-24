@@ -13,7 +13,7 @@ pub struct Board {
     pub snakes: Vec<Snake>,
     pub turn: i32,
     pub safe_zone: Rectangle,
-    pub squares: Vec2D<Square>,
+    pub objects: Vec2D<Object>,
 }
 
 #[derive(PartialEq, Eq, Debug, Copy, Clone, Hash)]
@@ -21,12 +21,6 @@ pub enum Object {
     Empty,
     Food,
     BodyPart,
-}
-
-#[derive(PartialEq, Eq, Debug, Copy, Clone, Hash)]
-pub struct Square {
-    pub safe: bool,
-    pub object: Object,
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Hash)]
@@ -50,7 +44,7 @@ impl Board {
         let board_api = &state_api.board;
         assert!(board_api.width > 0 && board_api.height > 0);
         // TODO: validate that everything is inbounds.
-        let squares = Self::calculate_squares(state_api);
+        let objects = Self::calculate_objects(state_api);
 
         Board {
             size: Point {
@@ -60,8 +54,8 @@ impl Board {
             foods: board_api.food.clone(), // TODO: reserve capacity
             snakes: board_api.snakes.iter().map(Snake::from_api).collect(),
             turn: state_api.turn as i32,
-            safe_zone: Self::calcualate_safe_zone(&squares),
-            squares: squares,
+            safe_zone: Self::calcualate_safe_zone(&board_api.hazards, board_api.width, board_api.height),
+            objects: objects,
         }
     }
 
@@ -69,27 +63,20 @@ impl Board {
         Rectangle { p0: Point::ZERO, p1: self.size }.contains(p)
     }
 
-    fn calculate_squares(state_api: &api::objects::State) -> Vec2D<Square> {
+    fn calculate_objects(state_api: &api::objects::State) -> Vec2D<Object> {
         let board_api = &state_api.board;
 
-        let mut squares = Vec2D::init_same(
+        let mut objects = Vec2D::init_same(
             board_api.width as usize,
             board_api.height as usize,
-            Square {
-                safe: true,
-                object: Object::Empty,
-            }
+            Object::Empty,
         );
-
-        for p in board_api.hazards.iter() {
-            squares[*p].safe = false;
-        }
 
         for snake in board_api.snakes.iter() {
             if snake.health > 0 {
                 for body_part in snake.body.iter() {
-                    match squares[*body_part].object {
-                        Object::Empty => squares[*body_part].object = Object::BodyPart,
+                    match objects[*body_part] {
+                        Object::Empty => objects[*body_part] = Object::BodyPart,
                         Object::BodyPart => {} // A snake can intersect with itself in the begining and after eating a food.
                         Object::Food => unreachable!(),
                     }
@@ -98,31 +85,27 @@ impl Board {
         }
 
         for food in board_api.food.iter() {
-            match squares[*food].object {
-                Object::Empty => squares[*food].object = Object::Food,
+            match objects[*food] {
+                Object::Empty => objects[*food] = Object::Food,
                 Object::BodyPart { .. } => unreachable!("Can't have food and snake body in the same square."),
                 Object::Food => unreachable!("Can't have two food pieces in the same square."),
             }
         }
 
-        squares
+        objects
     }
 
-    fn calcualate_safe_zone(squares: &Vec2D<Square>) -> Rectangle {
+    fn calcualate_safe_zone(hazards: &Vec<Point>, width: i32, height: i32) -> Rectangle {
         let mut safe_zone = Rectangle {
-            p0: Point { x: squares.len1 as i32, y: squares.len2 as i32 },
+            p0: Point { x: width, y: height },
             p1: Point { x: -1, y: -1 },
         };
 
-        for x in 0..squares.len1 {
-            for y in 0..squares.len2 {
-                if squares[(x, y)].safe {
-                    safe_zone.p0.x = safe_zone.p0.x.min(x as i32);
-                    safe_zone.p1.x = safe_zone.p1.x.max(x as i32);
-                    safe_zone.p0.y = safe_zone.p0.y.min(y as i32);
-                    safe_zone.p1.y = safe_zone.p1.y.max(y as i32);
-                }
-            }
+        for &Point{x, y} in hazards {
+            safe_zone.p0.x = safe_zone.p0.x.min(x);
+            safe_zone.p1.x = safe_zone.p1.x.max(x);
+            safe_zone.p0.y = safe_zone.p0.y.min(y);
+            safe_zone.p1.y = safe_zone.p1.y.max(y);
         }
 
         // Add one to include borders ( rectangle represents [p0.x, p1.x) × [p0.y, p1.y) )

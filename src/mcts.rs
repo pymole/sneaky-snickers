@@ -5,7 +5,7 @@ use rand;
 use rand::seq::SliceRandom;
 
 use crate::api::objects::Movement;
-use crate::engine::{advance_one_step, Action};
+use crate::engine::{advance_one_step, Action, MOVEMENTS};
 use crate::game::{Board, Object, Point};
 
 #[derive(Clone, Default, Debug)]
@@ -177,7 +177,7 @@ impl MCTS {
 
 fn rollout(board: &mut Board) -> Vec<f32> {
     let random = &mut rand::thread_rng();
-    let start_turn = board.turn;
+    // let start_turn = board.turn;
     while board.is_terminal() {
         let actions: HashMap<_, _> = get_masks(board)
             .into_iter()
@@ -205,15 +205,6 @@ fn rollout(board: &mut Board) -> Vec<f32> {
     rewards
 }
 
-
-const MOVEMENTS: [Movement; 4] = [
-    Movement::Up,
-    Movement::Right,
-    Movement::Down,
-    Movement::Left,
-];
-
-
 fn get_masks(board: &Board) -> Vec<(usize, [bool; 4])> {
     let tails: Vec<_> = board.snakes
         .iter()
@@ -233,7 +224,7 @@ fn get_masks(board: &Board) -> Vec<(usize, [bool; 4])> {
                     let movement_position = get_movement_position(snake.body[0], movement);
                     if board.contains(movement_position)
                         && (tails.contains(&movement_position)
-                            || board.squares[movement_position].object != Object::BodyPart) {
+                            || board.objects[movement_position] != Object::BodyPart) {
                         movement_mask[movement as usize] = true;
                     }
                 });
