@@ -108,9 +108,9 @@ pub mod safe_zone_shrinker {
         }
         match side {
             Movement::Left => board.safe_zone.p0.x += 1,
+            Movement::Down => board.safe_zone.p0.y += 1,
             Movement::Up => board.safe_zone.p1.y -= 1,
             Movement::Right => board.safe_zone.p1.x -= 1,
-            Movement::Down => board.safe_zone.p0.y += 1,
         }
     }
 
