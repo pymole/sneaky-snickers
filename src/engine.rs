@@ -271,7 +271,7 @@ pub fn advance_one_step_with_settings(
                 let body_i = &board.snakes[i].body;
                 let body_j = &board.snakes[j].body;
 
-                if i != j && body_i[0] == body_j[0] && body_i.len() <= body_j.len() {
+                if i != j && body_i[0] == body_j[0] && body_i.len() <= body_j.len() && board.snakes[j].is_alive() {
                     died_snakes.push(i);
                     break;
                 }
@@ -497,6 +497,37 @@ mod tests {
         });
         assert!(!board.snakes[0].is_alive());
         assert!(!board.snakes[1].is_alive());
+
+        let mut board = create_board(data::HEAD_TO_HEAD_CORRELATED_MCTS);
+        assert!(board.snakes[0].is_alive());
+        assert!(board.snakes[0].health == 79);
+        assert!(board.snakes[1].is_alive());
+        assert!(board.snakes[1].health == 5);
+        advance_one_step(&mut board, &mut |i, _| {
+            match i {
+                0 => Action::Move(Movement::Up),
+                1 => Action::Move(Movement::Right),
+                _ => unreachable!(),
+            }
+        });
+        assert!(!board.snakes[0].is_alive());
+        assert!(board.snakes[1].is_alive());
+
+
+        let mut board = create_board(data::HEAD_TO_HEAD_OUT_OF_HEALTH);
+        assert!(board.snakes[0].is_alive());
+        assert!(board.snakes[0].health == 1);
+        assert!(board.snakes[1].is_alive());
+        assert!(board.snakes[1].health == 61);
+        advance_one_step(&mut board, &mut |i, _| {
+            match i {
+                0 => Action::Move(Movement::Down),
+                1 => Action::Move(Movement::Left),
+                _ => unreachable!(),
+            }
+        });
+        assert!(!board.snakes[0].is_alive());
+        assert!(board.snakes[1].is_alive());
     }
 
     #[test]

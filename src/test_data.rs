@@ -186,8 +186,96 @@ pub const STEP_ON_TAIL: &str = include_str!("test_data/step_on_tail.json");
 */
 pub const TOP_RIGHT_CORNER: &str = include_str!("test_data/top_right_corner.json");
 
+/*
+ turn=200
+ A: health=100
+ B: health=100
+ . . . . . . . . . . .
+ . . . . . ¤ . . . . .
+ . . . . . . . . . . .
+ . . . . . . . . . . .
+ . a a . . . . . . . .
+ . . a . . . . . . . .
+ . . A . . . . . . . .
+ . B . . . . . . . . .
+ . b b b b b b . . . .
+ . . . b b b b ¤ . . ¤
+ . . . . . . . . . . .
+*/
 pub const HEAD_TO_HEAD_BIG_AND_SMALL: &str = include_str!("test_data/head_to_head_big_and_small.json");
 
+/*
+ turn=200
+ A: health=100
+ B: health=100
+ . . . . . . . . . . .
+ . . . . . . . . . . .
+ . . . . . . . . . . .
+ . . . . . . . . . . .
+ . . . . . . . . . . .
+ . . a a A ¤ B b b . .
+ . . . . . . . . . . .
+ . . . . . . . . . . .
+ . . . . . . . . . . .
+ . . . . . . . . . . .
+ . . . . . . . . . . .
+*/
 pub const FOOD_HEAD_TO_HEAD_EQUAL: &str = include_str!("test_data/food_head_to_head_equal.json");
 
+/*
+ turn=200
+ A: health=100
+ B: health=100
+ . . . . . . . . . . .
+ . . . . . . . . . . .
+ . . . . . . . . . . .
+ . . . . . . . . . . .
+ . A a . . . . . . . .
+ . ¤ a a a . . . . . .
+ . B b b b . . . . . .
+ . . . . b . . . . . .
+ . . . . . . . . . . .
+ . . . . . . . . . . .
+ . . . . . . . . . . .
+*/
 pub const FOOD_HEAD_TO_HEAD_EQUAL_V2: &str = include_str!("test_data/food_head_to_head_equal_v2.json");
+
+/*
+game id: dfcddc22-a5f0-4b90-a911-6bceb283dda6
+
+ turn=129
+ A: health=79
+ B: health=5
+ a a a a a a░░░░░░░░░░
+ a░░░░ . a a . . .░░░░
+░░░░░░ . a . . . .░░░░
+ b b B . a . . . .░░░░
+ b b b A a . . . .░░░░
+ b b b . . . . . ¤░░░░
+ b b b . . . . ¤ .░░░░
+░░░░ b b b b . . .░░░░
+░░ ¤░░ . . b . . ¤░░░░
+░░░░░░ . . . . . .░░░░
+░░░░░░ . . . . ¤ .░░░░
+*/
+pub const HEAD_TO_HEAD_CORRELATED_MCTS: &str = include_str!("test_data/head_to_head_correlated_mcts.json");
+
+/*
+game id: 88ab3d74-0430-41bd-b315-c8036f304910
+
+ turn=180
+ A: health=1
+ B: health=61
+░░░░░░░░░░░░ b░░░░ ¤░░
+░░░░ . . . . b b .░░ ¤
+░░░░ . . . . b b .░░░░
+░░░░ . . . b b . .░░░░
+░░░░ . a A b . . .░░░░
+ ¤░░ . a . B a a .░░░░
+░░░░ . a . a a a a░░░░
+░░░░░░ a a a a a a░░░░
+░░░░░░░░░░░░░░░░░░░░ ¤
+░░░░░░░░░░░░░░ ¤░░░░░░
+░░░░ ¤░░ ¤░░░░ ¤░░░░░░
+*/
+pub const HEAD_TO_HEAD_OUT_OF_HEALTH: &str = include_str!("test_data/head_to_head_out_of_health.json");
