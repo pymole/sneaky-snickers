@@ -1,9 +1,9 @@
 local Bots = {
-    binary(name, env={}, work_dir="..", exe=work_dir + "/target/release/sneaky-snickers", mute=true): {
+    binary(name, env={}, work_dir="..", exe="target/release/sneaky-snickers", mute=true): {
         name: name,
         type: "binary",
         work_dir: work_dir,
-        exe: exe,
+        exe: exe, // Relative to work_dir
         env: env,
         mute: mute,
     },
@@ -24,7 +24,7 @@ local Bots = {
         },
     },
 
-    unmanaged(name="unmanaged", host="http://127.0.0.1", port="8000"): {
+    unmanaged(name, host="http://127.0.0.1", port="8000"): {
         name: name,
         type: "unmanaged",
         addresses: [host + ":" + port]
@@ -48,7 +48,7 @@ local Bots = {
         Bots.binary("current#500", { "MCTS_ITERATIONS": "500" }),
         Bots.binary("current#t=50", { "MCTS_SEARCH_TIME": "50" }),
         Bots.binary("current#t=250", { "MCTS_SEARCH_TIME": "250" }),
-        // Bots.unmanaged(),
+        // Bots.unmanaged("current"),
     ],
 
     ports: {

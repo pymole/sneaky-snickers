@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+from argparse import ArgumentParser
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Lock
@@ -82,7 +83,9 @@ class BotBinary(BotI):
 
     def up(self, ports_iter, copies=1) -> None:
         logging.info(f'{self}.up(copies={copies})')
+        self.up_impl(ports_iter, copies)
 
+    def up_impl(self, ports_iter, copies=1) -> None:
         for _, port in zip(range(copies), ports_iter):
             process = subprocess.Popen(
                 [self._exe],
@@ -171,7 +174,8 @@ class BotFromCommit(BotI):
         self._bot_binary.prepare()
 
     def up(self, ports_iter, copies=1) -> None:
-        self._bot_binary.up(ports_iter, copies)
+        logging.info(f'{self}.up(copies={copies})')
+        self._bot_binary.up_impl(ports_iter, copies)
 
     def down(self) -> None:
         logging.info(f'{self}.down()')
@@ -272,12 +276,18 @@ class Rules:
         return match.group(1)
 
 
-# Bot factory
 def create_bot_from_config(bot_config) -> BotI:
+    if bot_config['type'] == 'binary':
+        return BotBinary(bot_config)
     if bot_config['type'] == 'from_commit':
         return BotFromCommit(bot_config)
     elif bot_config['type'] == 'unmanaged':
         return BotUnmanaged(bot_config)
+
+    logging.warning(
+        f'Unrecognized bot type "{bot_config["type"]}"! Ignoring.\n'
+        + textwrap.indent(json.dumps(bot_config, indent=2), "    ")
+    )
 
     return None
 
@@ -365,11 +375,11 @@ class Arena:
             raise
 
     # TODO: want to calculate win-rates
-    def run_ladder(self):
+    def run_ladder(self, reset_ratings):
         if self._number_of_players > len(self._bots):
             raise Exception(f'Not enough players to host {self._number_of_players}-players matches')
 
-        ratings = load_ratings(self._ratings_file)
+        ratings = {} if reset_ratings else load_ratings(self._ratings_file)
         for bot in self._bots:
             ratings.setdefault(bot.name, trueskill.Rating())
 
@@ -432,13 +442,23 @@ def main():
         level=logging.INFO,
     )
 
+    argparser = ArgumentParser(description='Runs matches and computes ratings.')
+    argparser.add_argument(
+        '--reset-ratings',
+        default=False,
+        required=False,
+        action='store_true',
+        help='Forget all the regretful past and start with a clean slate.'
+    )
+    args = argparser.parse_args()
+
     config = json.loads(_jsonnet.evaluate_file(str(CONFIG_PATH)))
     logging.info(f'Loaded config\n{textwrap.indent(json.dumps(config, indent=2), "    ")}')
 
     arena = Arena(config)
     arena.prepare()
     arena.up()
-    arena.run_ladder()
+    arena.run_ladder(reset_ratings=args.reset_ratings)
     arena.down()
 
 
