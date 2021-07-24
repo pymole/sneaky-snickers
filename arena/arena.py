@@ -220,6 +220,7 @@ class Rules:
 
         # Note: This only distinguishes between winner or looser.
         winner = self._parse_winner(r.stderr)
+        logging.info(f'Winner: {winner}')
         return [ (0 if name == winner else 1) for name in game_names ]
 
     @staticmethod
