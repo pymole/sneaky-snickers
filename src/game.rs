@@ -121,7 +121,7 @@ impl Board {
     }
 
     pub fn is_terminal(&self) -> bool {
-        self.snakes.iter().filter(|snake| snake.is_alive()).count() > 1
+        self.snakes.iter().filter(|snake| snake.is_alive()).count() < 2
     }
 }
 
