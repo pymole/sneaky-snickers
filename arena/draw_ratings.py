@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import json
 import sys
 from math import ceil, floor
+import os
 
 
 def minmax(ratings):
@@ -46,8 +47,11 @@ def main():
     plt.gca().yaxis.set_major_locator(plt.MultipleLocator(1))
     plt.gca().yaxis.set_minor_locator(plt.MultipleLocator(1))
     ax.grid()
-    plt.savefig("ratings.png")
+    plt.savefig("ratings.tmp.png")
     plt.close()
+
+    # This allows to redraw image on every ratings.json change, and watch how image updates in vscode without read errors.
+    os.rename('ratings.tmp.png', 'ratings.png')
 
 
 if __name__ == '__main__':
