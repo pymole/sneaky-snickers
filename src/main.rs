@@ -6,6 +6,7 @@ mod engine;
 mod solver;
 mod vec2d;
 mod mcts;
+mod parallelization;
 
 #[cfg(test)]
 mod test_data;
@@ -13,17 +14,21 @@ mod test_data;
 #[macro_use]
 extern crate rocket;
 
+use std::env;
+
 use rocket::fairing::AdHoc;
 use rocket::http::Header;
 use rocket::http::Status;
 use rocket::serde::json::Json;
 use rocket::serde::json::serde_json;
+use log::info;
 
-use log::{info};
-use std::env;
+use game::Board;
+use mcts::{MCTSConfig, get_best_movement_from_movement_visits};
+use parallelization::root_parallelization;
+use engine::Movement;
 
-use crate::game::Board;
-use crate::mcts::{MCTS, MCTSConfig};
+use crate::mcts::MCTS;
 
 #[get("/")]
 fn index() -> Json<api::responses::Info> {
@@ -62,15 +67,30 @@ fn movement(body: String) -> Json<api::responses::Move> {
         .unwrap();
 
     let config = MCTSConfig::from_env();
-    let mut mcts = MCTS::new(config);
 
-    if let Some(search_time) = config.search_time {
-        mcts.search_with_time(&board, search_time);
-    } else if let Some(iterations) = config.iterations {
-        mcts.search(&board, iterations);
+    let visits;
+    if let Ok(workers) = env::var("MCTS_WORKERS") {
+        let workers = workers.parse().expect("Invalid MCTS_WORKERS");
+        visits = root_parallelization(
+            &board,
+            workers,
+            config.search_time.expect("Parallel mcts uses MCTS_SEARCH_TIME"),
+            my_index);
+    } else {
+        let mut mcts = MCTS::new(config);
+        if let Some(search_time) = config.search_time {
+            mcts.search_with_time(&board, search_time);
+        } else if let Some(iterations) = config.iterations {
+            mcts.search(&board, iterations);
+        } else {
+            panic!("Provide MCTS_SEARCH_TIME or MCTS_ITERATIONS");
+        }
+
+        visits = mcts.get_movement_visits(&board, my_index);
     }
 
-    let movement = api::responses::Move::new(mcts.get_movement(&board, my_index));
+    let movement = get_best_movement_from_movement_visits(visits);
+    let movement = api::responses::Move::new(Movement::from_usize(movement));
     Json(movement)
 }
 
