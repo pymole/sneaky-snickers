@@ -7,7 +7,7 @@ use std::str::{FromStr};
 
 use crate::api::objects::Movement;
 use crate::engine::{Action, EngineSettings, MOVEMENTS, advance_one_step_with_settings, food_spawner, safe_zone_shrinker};
-use crate::game::{Board, Object, Point};
+use crate::game::{Board, Object, Point, Snake};
 
 #[derive(Clone, Default, Debug)]
 struct UCB {
@@ -50,6 +50,9 @@ pub struct MCTSConfig {
     pub c: f32,
     pub iterations: Option<u32>,
     pub search_time: Option<Duration>,
+    pub rollout_cutoff: i32,
+    pub rollout_beta: f32,
+    pub draw_reward: f32,
 }
 
 impl MCTSConfig {
@@ -62,26 +65,37 @@ impl MCTSConfig {
     }
 
     pub fn from_env() -> MCTSConfig {
-        MCTSConfig {
-            c:           Self::parse_env("MCTS_C").unwrap_or(0.6),
-            iterations:  Self::parse_env("MCTS_ITERATIONS"),
-            search_time: Self::parse_env("MCTS_SEARCH_TIME").map(Duration::from_millis),
-        }
+        const WIN_POINTS : f32 = 15.0;
+        const DRAW_POINTS : f32 = 0.0;
+        const LOSS_POINTS : f32 = -3.0;
+        const NORMALIZED_DRAW_REWARD : f32 = (DRAW_POINTS - LOSS_POINTS) / (WIN_POINTS - LOSS_POINTS);
+
+        let config = MCTSConfig {
+            c:              Self::parse_env("MCTS_C").unwrap_or(0.6),
+            iterations:     Self::parse_env("MCTS_ITERATIONS"),
+            search_time:    Self::parse_env("MCTS_SEARCH_TIME").map(Duration::from_millis),
+            rollout_cutoff: Self::parse_env("MCTS_ROLLOUT_CUTOFF").unwrap_or(21),
+            rollout_beta:   Self::parse_env("MCTS_ROLLOUT_BETA").unwrap_or(3.0),
+            draw_reward:    Self::parse_env("MCTS_DRAW_REWARD").unwrap_or(NORMALIZED_DRAW_REWARD),
+        };
+
+        assert!(config.c >= 0.0);
+        assert!(config.rollout_cutoff >= 0);
+
+        config
     }
 }
 
 pub struct MCTS {
     config: MCTSConfig,
     nodes: HashMap<Board, RefCell<Node>>,
-    my_index: usize,
 }
 
 impl MCTS {
-    pub fn new(config: MCTSConfig, my_index: usize) -> MCTS {
+    pub fn new(config: MCTSConfig) -> MCTS {
         MCTS {
             config,
             nodes: HashMap::new(),
-            my_index
         }
     }
 
@@ -136,6 +150,7 @@ impl MCTS {
     fn search_iteration(&mut self, board: &Board) {
         let mut board = board.clone();
         let mut path = Vec::new();
+        // let rng = &mut rand::thread_rng();
 
         let mut engine_settings = EngineSettings {
             food_spawner: &mut food_spawner::noop,
@@ -155,7 +170,7 @@ impl MCTS {
                     .filter(|&i| ucb.mask[i])
                     .map(|i| (i, ucb.rewards[i], ucb.visits[i]));
 
-                let (best_action, _) = available_moves.fold((0, 0f32), |(best, best_ucb), (action, r, n)| {
+                let (best_action, _) = available_moves.fold((0, -1.0), |(best, best_ucb), (action, r, n)| {
                     let ucb;
                     if n > 0 {
                         let exploit = r/(n as f32);
@@ -180,7 +195,7 @@ impl MCTS {
         }
 
         let expansion_board = board.clone();
-        let rewards = rollout(&mut board);
+        let rewards = self.rollout(&mut board);
         self.backpropagate(path, rewards);
 
         if !expansion_board.is_terminal() {
@@ -209,46 +224,55 @@ impl MCTS {
             }
         }
     }
-}
 
-fn rollout(board: &mut Board) -> Vec<f32> {
-    let random = &mut rand::thread_rng();
-    // let start_turn = board.turn;
-    let mut engine_settings = EngineSettings {
-        food_spawner: &mut food_spawner::noop,
-        safe_zone_shrinker: &mut safe_zone_shrinker::standard,
-    };
+    fn rollout(&self, board: &mut Board) -> Vec<f32> {
+        let random = &mut rand::thread_rng();
 
-    while !board.is_terminal() {
-        let actions: HashMap<_, _> = get_masks(board)
-            .into_iter()
-            .map(|(snake, movement_masks)| {
-                let &movement = movement_masks
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, &mask)| mask)
-                    .map(|(movement, _)| movement)
-                    .collect::<Vec<_>>()
-                    .choose(random)
-                    .unwrap_or(&0);
-                (snake, Action::Move(Movement::from_usize(movement)))
-            })
-            .collect();
+        let mut engine_settings = EngineSettings {
+            food_spawner: &mut food_spawner::noop,
+            safe_zone_shrinker: &mut safe_zone_shrinker::standard,
+        };
 
-        advance_one_step_with_settings(
-            board,
-            &mut engine_settings,
-            &mut |snake, _| *actions.get(&snake).unwrap()
-        );
+        let start_turn = board.turn;
+        while start_turn + self.config.rollout_cutoff > board.turn && !board.is_terminal() {
+            let actions: HashMap<_, _> = get_masks(board)
+                .into_iter()
+                .map(|(snake, movement_masks)| {
+                    let &movement = movement_masks
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, &mask)| mask)
+                        .map(|(movement, _)| movement)
+                        .collect::<Vec<_>>()
+                        .choose(random)
+                        .unwrap_or(&0);
+                    (snake, Action::Move(Movement::from_usize(movement)))
+                })
+                .collect();
+
+            advance_one_step_with_settings(
+                board,
+                &mut engine_settings,
+                &mut |snake, _| *actions.get(&snake).unwrap()
+            );
+        }
+
+        let alive_count = board.snakes.iter().filter(|snake| snake.is_alive()).count();
+        let beta = self.config.rollout_beta;
+        let health_norm : f32 = board.snakes.iter().map(|snake| (snake.health as f32).powf(beta)).sum();
+
+        let reward = |snake: &Snake|
+            if alive_count == 0 { self.config.draw_reward }
+            else {
+                (snake.is_alive() as u32 as f32) / (alive_count as f32)
+                * (snake.health as f32).powf(beta) / health_norm
+            } ;
+
+        let rewards = board.snakes.iter().map(reward).collect();
+
+        // info!("Started at {} turn and rolled out with {} turns and rewards {:?}", start_turn, board.turn - start_turn, rewards);
+        rewards
     }
-
-    let rewards = board.snakes
-        .iter()
-        .map(|snake| snake.is_alive() as u32 as f32)
-        .collect();
-
-    // info!("Started at {} turn and rolled out with {} turns and rewards {:?}", start_turn, board.turn - start_turn, rewards);
-    rewards
 }
 
 fn get_masks(board: &Board) -> Vec<(usize, [bool; 4])> {

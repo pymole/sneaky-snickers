@@ -62,7 +62,7 @@ fn movement(body: String) -> Json<api::responses::Move> {
         .unwrap();
 
     let config = MCTSConfig::from_env();
-    let mut mcts = MCTS::new(config, my_index);
+    let mut mcts = MCTS::new(config);
 
     if let Some(search_time) = config.search_time {
         mcts.search_with_time(&board, search_time);
