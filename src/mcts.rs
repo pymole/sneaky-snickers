@@ -1,7 +1,9 @@
-use std::collections::HashMap;
-use std::cell::{RefCell, RefMut};
-use std::time::{Duration, Instant};
 use rand::seq::SliceRandom;
+use std::cell::{RefCell, RefMut};
+use std::collections::HashMap;
+use std::env;
+use std::time::{Duration, Instant};
+use std::str::{FromStr};
 
 use crate::api::objects::Movement;
 use crate::engine::{Action, EngineSettings, MOVEMENTS, advance_one_step_with_settings, food_spawner, safe_zone_shrinker};
@@ -43,16 +45,43 @@ impl Node {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct MCTSConfig {
+    pub c: f32,
+    pub iterations: Option<u32>,
+    pub search_time: Option<Duration>,
+}
+
+impl MCTSConfig {
+    fn parse_env<Value>(key: &str) -> Option<Value>
+    where
+        Value: FromStr,
+        <Value as FromStr>::Err: std::fmt::Debug
+    {
+        env::var(key).map(|s| s.parse().expect("MCTSConfig: can't parse env variable")).ok()
+    }
+
+    pub fn from_env() -> MCTSConfig {
+        MCTSConfig {
+            c:           Self::parse_env("MCTS_C").unwrap_or(0.6),
+            iterations:  Self::parse_env("MCTS_ITERATIONS"),
+            search_time: Self::parse_env("MCTS_SEARCH_TIME").map(Duration::from_millis),
+        }
+    }
+}
+
 pub struct MCTS {
-    c: f32,
+    config: MCTSConfig,
     nodes: HashMap<Board, RefCell<Node>>,
+    my_index: usize,
 }
 
 impl MCTS {
-    pub fn new(c: f32) -> MCTS {
+    pub fn new(config: MCTSConfig, my_index: usize) -> MCTS {
         MCTS {
-            c,
+            config,
             nodes: HashMap::new(),
+            my_index
         }
     }
 
@@ -90,17 +119,18 @@ impl MCTS {
         }
     }
 
-    pub fn search_with_time(&mut self, board: &Board, time: u64) {
+    pub fn search_with_time(&mut self, board: &Board, target_duration: Duration) {
         let time_start = Instant::now();
-        let time_end = time_start + Duration::from_millis(time);
+        let time_end = time_start + target_duration;
+
         let mut i = 0u32;
         while Instant::now() < time_end {
             self.search_iteration(board);
             i += 1;
         }
 
-        let duration = Instant::now() - time_start;
-        info!("Searched {} iterations in {} ms (target time={})", i, duration.as_millis(), time);
+        let actual_duration = Instant::now() - time_start;
+        info!("Searched {} iterations in {} ms (target={} ms)", i, actual_duration.as_millis(), target_duration.as_millis());
     }
 
     fn search_iteration(&mut self, board: &Board) {
@@ -112,7 +142,7 @@ impl MCTS {
             safe_zone_shrinker: &mut safe_zone_shrinker::standard,
         };
 
-        let c = self.c;
+        let c = self.config.c;
         while let Some(node_cell) = self.nodes.get(&board) {
             // info!("Selection");
             let node = node_cell.borrow_mut();

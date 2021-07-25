@@ -23,7 +23,7 @@ use log::{info};
 use std::env;
 
 use crate::game::Board;
-use crate::mcts::MCTS;
+use crate::mcts::{MCTS, MCTSConfig};
 
 #[get("/")]
 fn index() -> Json<api::responses::Info> {
@@ -56,25 +56,19 @@ fn movement(body: String) -> Json<api::responses::Move> {
     let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
     let board = Board::from_api(&state);
 
-    let mcts_c = env::var("MCTS_C").unwrap_or("0.6".to_string()).parse().unwrap();
-    let mut mcts = MCTS::new(mcts_c);
-
-    // TODO: Config
-    if let Ok(search_time_string) = env::var("MCTS_SEARCH_TIME") {
-        let search_time = search_time_string.parse().expect("Invalid MCTS_SEARCH_TIME");
-        mcts.search_with_time(&board, search_time);
-    } else {
-        let iterations = env::var("MCTS_ITERATIONS")
-            .expect("Provide MCTS_SEARCH_TIME or MCTS_ITERATIONS")
-            .parse()
-            .expect("Invalid MCTS_ITERATIONS");
-        mcts.search(&board, iterations);
-    }
-    
     let my_index = state.board.snakes
         .iter()
         .position(|snake| snake.id == state.you.id)
         .unwrap();
+
+    let config = MCTSConfig::from_env();
+    let mut mcts = MCTS::new(config, my_index);
+
+    if let Some(search_time) = config.search_time {
+        mcts.search_with_time(&board, search_time);
+    } else if let Some(iterations) = config.iterations {
+        mcts.search(&board, iterations);
+    }
 
     let movement = api::responses::Move::new(mcts.get_movement(&board, my_index));
     Json(movement)
