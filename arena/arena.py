@@ -220,8 +220,8 @@ class Player(NamedTuple):
 
 class Rules:
     RESULT_PATTERN : re.Pattern = re.compile(
-        r'\[DONE\]: Game completed after \d+ turns. (.*) is the winner.|'
-        r'\[DONE\]: Game completed after \d+ turns. It was a draw.'
+        r'\[DONE\]: Game completed after (\d+) turns. (.*) is the winner.|'
+        r'\[DONE\]: Game completed after (\d+) turns. It was a draw.'
     )
 
     def __init__(self, rules_config):
@@ -261,19 +261,22 @@ class Rules:
                 with self._warning_count.lock:
                     self._warning_count.value += 1
 
+        turn_count, winner = self._parse_result(r.stderr)
+        if winner is not None:
+            logging.info(f'turn_count={turn_count}, winner: {winner[2:]}, loosers: {list(name[2:] for name in game_names if winner != name )}')
+        else:
+            logging.info(f'turn_count={turn_count}, ' + ' = '.join(name[2:] for name in game_names))
         # Note: This only distinguishes between winner or looser.
-        winner = self._parse_winner(r.stderr)
-        logging.info(f'Winner: {winner}')
         return [ (0 if name == winner else 1) for name in game_names ]
 
     @staticmethod
-    def _parse_winner(log : str):
+    def _parse_result(log : str):
         match = Rules.RESULT_PATTERN.search(log)
         if match is None:
             logging.error("Can't parse log.")
             print(log)
             raise Exception("Can't parse log.")
-        return match.group(1)
+        return match.group(1), match.group(2)
 
 
 def create_bot_from_config(bot_config) -> BotI:
