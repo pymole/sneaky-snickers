@@ -80,7 +80,7 @@ impl MCTSConfig {
         };
 
         assert!(config.c >= 0.0);
-        assert!(config.rollout_cutoff >= 0);
+        assert!(config.rollout_cutoff >= 1);
 
         config
     }
@@ -99,8 +99,16 @@ impl MCTS {
         }
     }
 
-    pub fn get_movement(&self, board: &Board, snake: usize) -> Movement {
-        let mut node = self.nodes.get(board).unwrap().borrow_mut();
+    pub fn get_movement_visits(&self, board: &Board, snake: usize) -> [u32; 4] {
+        let node = self.nodes.get(board).unwrap().borrow();
+
+        let ucb_instance = node.ucb_instances.get(&snake).unwrap();
+
+        ucb_instance.visits
+    }
+
+    pub fn print_stats(&self, board: &Board) {
+        let node = self.nodes.get(board).unwrap().borrow();
         node.ucb_instances
             .iter()
             .for_each(|(i, ucb)| {
@@ -113,17 +121,6 @@ impl MCTS {
                         info!("{} - r: {}; v: {}", Movement::from_usize(a), r, v);
                     })
             });
-
-        let ucb_instance = node.ucb_instances.get_mut(&snake).unwrap();
-
-        let (movement, _) = ucb_instance.visits
-            .iter()
-            .enumerate()
-            .filter(|(movement, _)| ucb_instance.mask[*movement])
-            .max_by_key(|(_, &visit_count)| visit_count)
-            .unwrap_or((0, &0));
-
-        Movement::from_usize(movement)
     }
 
     pub fn search(&mut self, board: &Board, iterations_count: u32) {
@@ -131,6 +128,7 @@ impl MCTS {
             // info!("iteration {}", i);
             self.search_iteration(board);
         }
+        self.print_stats(board);
     }
 
     pub fn search_with_time(&mut self, board: &Board, target_duration: Duration) {
@@ -144,6 +142,7 @@ impl MCTS {
         }
 
         let actual_duration = Instant::now() - time_start;
+        self.print_stats(board);
         info!("Searched {} iterations in {} ms (target={} ms)", i, actual_duration.as_millis(), target_duration.as_millis());
     }
 
@@ -310,4 +309,13 @@ fn get_movement_position(position: Point, movement: Movement) -> Point {
         Movement::Up => Point {x: position.x, y: position.y + 1},
         Movement::Down => Point {x: position.x, y: position.y - 1},
     }
+}
+
+pub fn get_best_movement_from_movement_visits(movement_visits: [u32; 4]) -> usize {
+    let (movement, _) = movement_visits.iter()
+        .enumerate()
+        .max_by_key(|(_, &visits)| visits)
+        .unwrap_or((0, &0));
+    
+    movement
 }
