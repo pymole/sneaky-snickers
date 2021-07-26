@@ -12,6 +12,7 @@ use crate::game::{Board, Object, Point, Snake};
 #[derive(Clone, Default, Debug)]
 struct UCB {
     rewards: [f32; 4],
+    squared_rewards: [f32; 4],
     visits: [u32; 4],
     // With mask we mark available moves
     mask: [bool; 4],
@@ -21,6 +22,7 @@ impl UCB {
     fn new(mask: [bool; 4]) -> UCB {
         UCB {
             rewards: [0f32; 4],
+            squared_rewards: [0f32; 4],
             visits: [0u32; 4],
             mask: mask,
         }
@@ -47,7 +49,6 @@ impl Node {
 
 #[derive(Clone, Copy, Debug)]
 pub struct MCTSConfig {
-    pub c: f32,
     pub iterations: Option<u32>,
     pub search_time: Option<Duration>,
     pub rollout_cutoff: i32,
@@ -71,7 +72,6 @@ impl MCTSConfig {
         const NORMALIZED_DRAW_REWARD : f32 = (DRAW_POINTS - LOSS_POINTS) / (WIN_POINTS - LOSS_POINTS);
 
         let config = MCTSConfig {
-            c:              Self::parse_env("MCTS_C").unwrap_or(0.6),
             iterations:     Self::parse_env("MCTS_ITERATIONS"),
             search_time:    Self::parse_env("MCTS_SEARCH_TIME").map(Duration::from_millis),
             rollout_cutoff: Self::parse_env("MCTS_ROLLOUT_CUTOFF").unwrap_or(21),
@@ -79,7 +79,6 @@ impl MCTSConfig {
             draw_reward:    Self::parse_env("MCTS_DRAW_REWARD").unwrap_or(NORMALIZED_DRAW_REWARD),
         };
 
-        assert!(config.c >= 0.0);
         assert!(config.rollout_cutoff >= 1);
 
         config
@@ -149,46 +148,50 @@ impl MCTS {
     fn search_iteration(&mut self, board: &Board) {
         let mut board = board.clone();
         let mut path = Vec::new();
-        // let rng = &mut rand::thread_rng();
 
         let mut engine_settings = EngineSettings {
             food_spawner: &mut food_spawner::noop,
             safe_zone_shrinker: &mut safe_zone_shrinker::standard,
         };
 
-        let c = self.config.c;
         while let Some(node_cell) = self.nodes.get(&board) {
-            // info!("Selection");
             let node = node_cell.borrow_mut();
-            // info!("{:?}", node.ucb_instances);
 
             let joint_action = advance_one_step_with_settings(
-                &mut board, &mut engine_settings, &mut |i, _| {
-                let ucb = &node.ucb_instances[&i];
-                let available_moves = (0..4)
-                    .filter(|&i| ucb.mask[i])
-                    .map(|i| (i, ucb.rewards[i], ucb.visits[i]));
+                &mut board,
+                &mut engine_settings,
+                &mut |i, _| {
+                    let ucb_instance = &node.ucb_instances[&i];
 
-                let (best_action, _) = available_moves.fold((0, -1.0), |(best, best_ucb), (action, r, n)| {
-                    let ucb;
-                    if n > 0 {
-                        let exploit = r/(n as f32);
-                        let explore = c * ((node.visits as f32).ln() / n as f32).sqrt();
+                    let mut max_ucb_action = 0;
+                    let mut max_ucb = -1.0;
 
-                        ucb = exploit + explore;
-                    } else {
-                        ucb = f32::INFINITY;
+                    for action in 0..4 {
+                        if ucb_instance.mask[action] {
+                            let n = node.visits as f32;
+                            let n_i = ucb_instance.visits[action] as f32;
+
+                            let ucb = if n_i > 0.0 {
+                                let avg_reward = ucb_instance.rewards[action] / n_i;
+                                let avg_squared_reward = ucb_instance.squared_rewards[action] / n_i;
+                                let variance = avg_squared_reward - avg_reward * avg_reward;
+                                let variance_ucb = (variance + (2.0 * n.ln() / n_i).sqrt()).min(0.25);
+
+                                avg_reward + (variance_ucb * n.ln() / n_i).sqrt()
+                            } else {
+                                f32::INFINITY
+                            };
+
+                            if ucb > max_ucb {
+                                max_ucb_action = action;
+                                max_ucb = ucb;
+                            }
+                        }
                     }
 
-                    if ucb > best_ucb {
-                        (action, ucb)
-                    } else {
-                        (best, best_ucb)
-                    }
-                });
-
-                Action::Move(Movement::from_usize(best_action))
-            });
+                    Action::Move(Movement::from_usize(max_ucb_action))
+                }
+            );
 
             path.push((node, joint_action));
         }
@@ -219,6 +222,7 @@ impl MCTS {
 
                 let ucb = node.ucb_instances.get_mut(&snake).unwrap();
                 ucb.rewards[movement] += reward;
+                ucb.squared_rewards[movement] += reward * reward;
                 ucb.visits[movement] += 1;
             }
         }
@@ -316,6 +320,6 @@ pub fn get_best_movement_from_movement_visits(movement_visits: [u32; 4]) -> usiz
         .enumerate()
         .max_by_key(|(_, &visits)| visits)
         .unwrap_or((0, &0));
-    
+
     movement
 }
