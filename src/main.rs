@@ -30,34 +30,7 @@ use engine::Movement;
 
 use crate::mcts::MCTS;
 
-#[get("/")]
-fn index() -> Json<api::responses::Info> {
-    Json(api::responses::Info {
-        apiversion: "1".to_string(),
-        author: Some("Snickers".to_string()),
-        color: Some("#4a3120".to_string()),
-        head: Some("bendr".to_string()),
-        tail: Some("round-bum".to_string()),
-        version: Some("0".to_string()),
-    })
-}
-
-#[post("/start", data = "<body>")]
-fn start(body: String) -> Status {
-    info!("START - {}", body);
-    Status::Ok
-}
-
-// This route is needed for CORS
-#[options("/move")]
-fn movement_options() -> Status {
-    Status::Ok
-}
-
-#[post("/move", data = "<body>")]
-fn movement(body: String) -> Json<api::responses::Move> {
-    info!("MOVE - {}", body);
-
+fn get_visits(body: String) -> [u32; 4] {
     let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
     let board = Board::from_api(&state);
 
@@ -88,7 +61,38 @@ fn movement(body: String) -> Json<api::responses::Move> {
 
         visits = mcts.get_movement_visits(&board, my_index);
     }
+    visits
+}
 
+#[get("/")]
+fn index() -> Json<api::responses::Info> {
+    Json(api::responses::Info {
+        apiversion: "1".to_string(),
+        author: Some("Snickers".to_string()),
+        color: Some("#4a3120".to_string()),
+        head: Some("bendr".to_string()),
+        tail: Some("round-bum".to_string()),
+        version: Some("0".to_string()),
+    })
+}
+
+#[post("/start", data = "<body>")]
+fn start(body: String) -> Status {
+    info!("START - {}", body);
+    Status::Ok
+}
+
+// This route is needed for CORS
+#[options("/move")]
+fn movement_options() -> Status {
+    Status::Ok
+}
+
+#[post("/move", data = "<body>")]
+fn movement(body: String) -> Json<api::responses::Move> {
+    info!("MOVE - {}", body);
+
+    let visits = get_visits(body);
     let movement = get_best_movement_from_movement_visits(visits);
     let movement = api::responses::Move::new(Movement::from_usize(movement));
     Json(movement)

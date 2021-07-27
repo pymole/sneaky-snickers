@@ -12,6 +12,7 @@ use crate::game::{Board, Object, Point, Snake};
 #[derive(Clone, Debug)]
 struct UCB {
     rewards: [f32; 4],
+    squared_rewards: [f32; 4],
     visits: [u32; 4],
     mask: [MovementMask; 4],
 }
@@ -20,6 +21,7 @@ impl UCB {
     fn new(mask: [MovementMask; 4]) -> UCB {
         UCB {
             rewards: [0f32; 4],
+            squared_rewards: [0f32; 4],
             visits: [0u32; 4],
             mask: mask,
         }
@@ -50,7 +52,6 @@ impl Node {
 
 #[derive(Clone, Copy, Debug)]
 pub struct MCTSConfig {
-    pub c: f32,
     pub iterations: Option<u32>,
     pub search_time: Option<Duration>,
     pub rollout_cutoff: i32,
@@ -74,7 +75,6 @@ impl MCTSConfig {
         const NORMALIZED_DRAW_REWARD : f32 = (DRAW_POINTS - LOSS_POINTS) / (WIN_POINTS - LOSS_POINTS);
 
         let config = MCTSConfig {
-            c:              Self::parse_env("MCTS_C").unwrap_or(0.6),
             iterations:     Self::parse_env("MCTS_ITERATIONS"),
             search_time:    Self::parse_env("MCTS_SEARCH_TIME").map(Duration::from_millis),
             rollout_cutoff: Self::parse_env("MCTS_ROLLOUT_CUTOFF").unwrap_or(21),
@@ -82,7 +82,6 @@ impl MCTSConfig {
             draw_reward:    Self::parse_env("MCTS_DRAW_REWARD").unwrap_or(NORMALIZED_DRAW_REWARD),
         };
 
-        assert!(config.c >= 0.0);
         assert!(config.rollout_cutoff >= 1);
 
         config
@@ -112,19 +111,46 @@ impl MCTS {
 
     pub fn print_stats(&self, board: &Board) {
         let node = self.nodes.get(board).unwrap().borrow();
-        node.agents.iter()
-            .zip(node.ucb_instances.iter())
-            .for_each(|(i, ucb)| {
-                info!("Snake {}", i);
-                ucb.visits
-                    .iter()
-                    .zip(ucb.rewards)
-                    .zip(ucb.mask)
-                    .enumerate()
-                    .for_each(|(a, ((v, r), m))| {
-                        info!("[{:?}] {} - r: {}; v: {}", m, Movement::from_usize(a), r, v);
-                    })
-            });
+        let n = node.visits as f32;
+
+        info!("      reward  explore  visits");
+
+        for (&snake_index, ucb_instance) in node.agents.iter().zip(node.ucb_instances.iter()) {
+            info!("Snake {}", snake_index);
+            let selecte_move = get_best_movement_from_movement_visits(ucb_instance.visits);
+            for action in 0..4 {
+                let n_i = ucb_instance.visits[action] as f32;
+                if n_i > 0.0 {
+                    // copy-paste
+                    let avg_reward = ucb_instance.rewards[action] / n_i;
+                    let avg_squared_reward = ucb_instance.squared_rewards[action] / n_i;
+                    let variance = avg_squared_reward - avg_reward * avg_reward;
+                    let variance_ucb = (variance + (2.0 * n.ln() / n_i).sqrt()).min(0.25);
+
+                    let explore = (variance_ucb * n.ln() / n_i).sqrt();
+
+                    if action == selecte_move {
+                        info!(
+                            "[{}] - {:.4}  {:.4}   {}",
+                            Movement::from_usize(action),
+                            avg_reward,
+                            explore,
+                            n_i,
+                        );
+                    } else {
+                        info!(
+                            " {}  - {:.4}  {:.4}   {}",
+                            Movement::from_usize(action),
+                            avg_reward,
+                            explore,
+                            n_i,
+                        );
+                    }
+                } else {
+                    info!(" {}", Movement::from_usize(action));
+                }
+            }
+        }
     }
 
     pub fn search(&mut self, board: &Board, iterations_count: u32) {
@@ -160,52 +186,53 @@ impl MCTS {
             safe_zone_shrinker: &mut safe_zone_shrinker::standard,
         };
 
-        let c = self.config.c;
         while let Some(node_cell) = self.nodes.get(&board) {
-            // info!("Selection");
             let node = node_cell.borrow_mut();
-            // info!("{:?}", node.ucb_instances);
 
             let joint_action = advance_one_step_with_settings(
-                &mut board, &mut engine_settings, &mut |i, _| {
+                &mut board,
+                &mut engine_settings,
+                &mut |i, _| {
+                    let agent_index = node.get_agent_index(i);
+                    let ucb_instance = &node.ucb_instances[agent_index];
+                    let (safe_actions, risky_actions): (Vec<_>, Vec<_>) = (0..4)
+                        .filter(|&m| ucb_instance.mask[m] != MovementMask::Forbidden)
+                        .partition(|&m| ucb_instance.mask[m] == MovementMask::Safe);
                 
-                let agent_index = node.get_agent_index(i);
-                let ucb_instance = &node.ucb_instances[agent_index];
-                let (safe_actions, risky_actions): (Vec<_>, Vec<_>) = (0..4)
-                    .filter(|&m| ucb_instance.mask[m] != MovementMask::Forbidden)
-                    .partition(|&m| ucb_instance.mask[m] == MovementMask::Safe);
-                
-                let best_action = if !safe_actions.is_empty() {
-                    let (best_action, _) = safe_actions
-                        .into_iter()
-                        .fold((0, -1.0), |(best, best_ucb), a| {
-                            let ucb;
-                            let n = ucb_instance.visits[a];
+                    let best_action = if !safe_actions.is_empty() {
+                        let mut max_ucb_action = 0;
+                        let mut max_ucb = -1.0;
 
-                            if n > 0 {
-                                let r = ucb_instance.rewards[a];
-                                let exploit = r/(n as f32);
-                                let explore = c * ((node.visits as f32).ln() / n as f32).sqrt();
-        
-                                ucb = exploit + explore;
+                        for action in safe_actions {
+                            let n = node.visits as f32;
+                            let n_i = ucb_instance.visits[action] as f32;
+
+                            let ucb = if n_i > 0.0 {
+                                let avg_reward = ucb_instance.rewards[action] / n_i;
+                                let avg_squared_reward = ucb_instance.squared_rewards[action] / n_i;
+                                let variance = avg_squared_reward - avg_reward * avg_reward;
+                                let variance_ucb = (variance + (2.0 * n.ln() / n_i).sqrt()).min(0.25);
+
+                                avg_reward + (variance_ucb * n.ln() / n_i).sqrt()
                             } else {
-                                ucb = f32::INFINITY;
+                                f32::INFINITY
+                            };
+
+                            if ucb > max_ucb {
+                                max_ucb_action = action;
+                                max_ucb = ucb;
                             }
-        
-                            if ucb > best_ucb {
-                                (a, ucb)
-                            } else {
-                                (best, best_ucb)
-                            }
-                        });
-                    best_action
-                } else {
-                    // TODO: proportional sampling
-                    *risky_actions.choose(rng).unwrap_or(&0)
-                };
-                
-                Action::Move(Movement::from_usize(best_action))                
-            });
+                        }
+                        max_ucb_action
+                    } else {
+                        // TODO: proportional sampling
+                        *risky_actions.choose(rng).unwrap_or(&0)
+                    };
+                    
+
+                    Action::Move(Movement::from_usize(best_action))
+                }
+            );
 
             path.push((node, joint_action));
         }
@@ -238,6 +265,7 @@ impl MCTS {
 
                 let ucb = &mut node.ucb_instances[snake_index];
                 ucb.rewards[movement] += reward;
+                ucb.squared_rewards[movement] += reward * reward;
                 ucb.visits[movement] += 1;
             }
         }
@@ -379,6 +407,6 @@ pub fn get_best_movement_from_movement_visits(movement_visits: [u32; 4]) -> usiz
         .enumerate()
         .max_by_key(|(_, &visits)| visits)
         .unwrap_or((0, &0));
-    
+
     movement
 }

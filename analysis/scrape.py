@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 from argparse import ArgumentParser
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import List, Set, Iterator, TypedDict, Union
 from urllib.request import urlopen
@@ -44,6 +45,14 @@ def download(game_id: GameId) -> dict:
         'ScrapeTimestamp': datetime.datetime.now().astimezone().isoformat(),
     }
 
+def download_battlesnake_turn(game_id: GameId, frame: int) -> dict:
+    snickers_match = battlesnake_frames_to_snickers_match(
+        {
+            'Game': download_game(game_id),
+            'Frames': [ download_frame(game_id, frame) ]
+        }
+    )
+    return snickers_state_to_battlesnake_turn(snickers_match.game, snickers_match.states[0])
 
 def list_recent_game_ids() -> List[GameId]:
     return RECENT_GAMES_REGEX.findall(urlopen(ARENA_URL).read().decode('utf-8'))
@@ -57,6 +66,19 @@ def save_game(storage_path: Path, game_id: GameId, game: Union[dict, SnickersMat
     json.dump(game, open(storage_path / f'{game_id}.json', 'wt'))
 
 
+def parse_url_or_game_id(url_or_game_id: str) -> GameId:
+    if url_or_game_id.startswith('https://'):
+        game_id = url_or_game_id.removesuffix('/').split('/')[-1]
+    else:
+        game_id = url_or_game_id
+
+    if not re.fullmatch(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', game_id):
+        raise Exception('Bad game id format')
+
+
+    return game_id
+
+
 def main():
     logging.basicConfig(
         format='%(asctime)s | %(levelname)-8s | %(message)s',
@@ -67,6 +89,7 @@ def main():
     subparsers = argparser.add_subparsers(dest='command', required=True)
     argparser_recent = subparsers.add_parser('recent', help='Download all games referenced on "Recent Games" page')
     argparser_recent.add_argument('--storage', required=True, help='Place to dump files', type=Path)
+    argparser_serve = subparsers.add_parser('serve', help='Run in server mode. Will scrape games on GET requests')
     argparser_game = subparsers.add_parser('game', help='Download game by its id')
     argparser_game.add_argument('game_id')
     argparser_game.add_argument('frame', nargs='?')
@@ -74,25 +97,46 @@ def main():
     args = argparser.parse_args()
 
     if args.command == 'game':
-        if args.game_id.startswith('https://'):
-            game_id = args.game_id.removesuffix('/').split('/')[-1]
-        else:
-            game_id = args.game_id
-
-        if not re.fullmatch(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', game_id):
-            raise Exception('Bad game id format')
+        game_id = parse_url_or_game_id(args.game_id)
 
         if args.frame is None:
             save_game(args.output, game_id, download(game_id))
         else:
-            snickers_match = battlesnake_frames_to_snickers_match(
-                {
-                    'Game': download_game(game_id),
-                    'Frames': [ download_frame(game_id, args.frame) ]
-                }
-            )
-            turn = snickers_state_to_battlesnake_turn(snickers_match.game, snickers_match.states[0])
+            turn = download_battlesnake_turn(game_id, args.frame)
             json.dump(turn, open(args.output / f'{game_id}_{args.frame}.json', 'wt'))
+    elif args.command == 'serve':
+        class Handler(BaseHTTPRequestHandler):
+            def do_GET(self):
+                try:
+                    url_or_game_id, frame = self.path.split('$')
+                    url_or_game_id = url_or_game_id.removeprefix('/')
+                    turn = download_battlesnake_turn(parse_url_or_game_id(url_or_game_id), frame)
+                    self.send_response(200)
+                    self.send_header('Content-type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps(turn).encode('utf-8'))
+                except:
+                    logging.exception("Request failed")
+                    self.send_response(404)
+                    self.end_headers()
+
+            def do_OPTIONS(self):
+                self.send_response(200)
+                self.end_headers()
+
+            def end_headers(self):
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Access-Control-Allow-Methods', 'POST, GET, PATCH, OPTIONS')
+                self.send_header('Access-Control-Allow-Headers', '*')
+                self.send_header('Access-Control-Allow-Credentials', 'true')
+                super().end_headers()
+
+        try:
+            server = HTTPServer(('127.0.0.1', 8500), Handler)
+            server.serve_forever()
+        finally:
+            server.server_close()
+
     else:
         assert args.command == 'recent'
 

@@ -345,6 +345,10 @@ class Arena:
         self._parallel : int = config['arena']['parallel']
         self._beta : float = config['arena']['beta']
 
+    @property
+    def bots(self) -> list[BotI]:
+        return self._bots
+
     def prepare(self):
         self._rules.prepare()
         for bot in self._bots:
@@ -453,6 +457,8 @@ def main():
         action='store_true',
         help='Forget all the regretful past and start with a clean slate.'
     )
+    subparsers = argparser.add_subparsers(dest='command', required=False)
+    subparsers.add_parser('up', help="Start bots until enter is pressed. Don't run games.")
     args = argparser.parse_args()
 
     config = json.loads(_jsonnet.evaluate_file(str(CONFIG_PATH)))
@@ -460,9 +466,22 @@ def main():
 
     arena = Arena(config)
     arena.prepare()
-    arena.up()
-    arena.run_ladder(reset_ratings=args.reset_ratings)
-    arena.down()
+
+    if args.command == 'up':
+        try:
+            arena.up()
+            for bot in arena.bots:
+                logging.info(f'{bot.name} at {bot.addresses}')
+            input('Press enter to shutdown the bots')
+        finally:
+            arena.down()
+    elif args.command is None:
+        arena.up()
+        import time; time.sleep(2)
+        arena.run_ladder(reset_ratings=args.reset_ratings)
+        arena.down()
+    else:
+        assert False
 
 
 if __name__ == '__main__':
