@@ -108,18 +108,47 @@ impl MCTS {
 
     pub fn print_stats(&self, board: &Board) {
         let node = self.nodes.get(board).unwrap().borrow();
-        node.ucb_instances
-            .iter()
-            .for_each(|(i, ucb)| {
-                info!("Snake {}", i);
-                ucb.visits
-                    .iter()
-                    .zip(ucb.rewards)
-                    .enumerate()
-                    .for_each(|(a, (v, r))| {
-                        info!("{} - r: {}; v: {}", Movement::from_usize(a), r, v);
-                    })
-            });
+        let n = node.visits as f32;
+
+        info!("      reward  explore  visits");
+
+        for snake_index in (0..board.snakes.len()).filter(|&snake_index| board.snakes[snake_index].is_alive()) {
+            let ucb_instance = &node.ucb_instances[&snake_index];
+            info!("Snake {}", snake_index);
+            let selecte_move = get_best_movement_from_movement_visits(ucb_instance.visits);
+            for action in 0..4 {
+                let n_i = ucb_instance.visits[action] as f32;
+                if n_i > 0.0 {
+                    // copy-paste
+                    let avg_reward = ucb_instance.rewards[action] / n_i;
+                    let avg_squared_reward = ucb_instance.squared_rewards[action] / n_i;
+                    let variance = avg_squared_reward - avg_reward * avg_reward;
+                    let variance_ucb = (variance + (2.0 * n.ln() / n_i).sqrt()).min(0.25);
+
+                    let explore = (variance_ucb * n.ln() / n_i).sqrt();
+
+                    if action == selecte_move {
+                        info!(
+                            "[{}] - {:.4}  {:.4}   {}",
+                            Movement::from_usize(action),
+                            avg_reward,
+                            explore,
+                            n_i
+                        );
+                    } else {
+                        info!(
+                            " {}  - {:.4}  {:.4}   {}",
+                            Movement::from_usize(action),
+                            avg_reward,
+                            explore,
+                            n_i
+                        );
+                    }
+                } else {
+                    info!(" {}", Movement::from_usize(action));
+                }
+            }
+        }
     }
 
     pub fn search(&mut self, board: &Board, iterations_count: u32) {
