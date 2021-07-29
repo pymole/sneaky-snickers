@@ -43,20 +43,24 @@ local Bots = {
         // Bots.from_commit("v2.4#t=50", "v2.4.timed", { "MCTS_SEARCH_TIME": "50" }),
         // Bots.from_commit("v2.4#t=250", "v2.4.timed", { "MCTS_SEARCH_TIME": "250" }),
 
-        Bots.from_commit("v2.5#500", "v2.5", { "MCTS_ITERATIONS": "500" }),
-        Bots.from_commit("v2.5#t=50", "v2.5", { "MCTS_SEARCH_TIME": "50" }),
-        Bots.from_commit("v2.5#t=250", "v2.5", { "MCTS_SEARCH_TIME": "250" }),
+        //Bots.from_commit("v2.5#500", "v2.5", { "MCTS_ITERATIONS": "500" }),
+        //Bots.from_commit("v2.5#t=50", "v2.5", { "MCTS_SEARCH_TIME": "50" }),
+        //Bots.from_commit("v2.5#t=250", "v2.5", { "MCTS_SEARCH_TIME": "250" }),
 
         // Version that is currently deployed
-        Bots.from_commit("v2.6#500", "v2.6", { "MCTS_ITERATIONS": "500" }),
-        Bots.from_commit("v2.6#t=50", "v2.6", { "MCTS_SEARCH_TIME": "50" }),
-        Bots.from_commit("v2.6#t=250", "v2.6", { "MCTS_SEARCH_TIME": "250" }),
+        //Bots.from_commit("v2.6#500", "v2.6", { "MCTS_ITERATIONS": "500" }),
+        //Bots.from_commit("v2.6#t=50", "v2.6", { "MCTS_SEARCH_TIME": "50" }),
+        //Bots.from_commit("v2.6#t=250", "v2.6", { "MCTS_SEARCH_TIME": "250" }),
+
+        //Bots.from_commit("v2.8#500", "v2.6", { "MCTS_ITERATIONS": "500" }),
+        //Bots.from_commit("v2.8#t=50", "v2.6", { "MCTS_SEARCH_TIME": "50" }),
+        Bots.from_commit("v2.8#t=250", "v2.8", { "MCTS_SEARCH_TIME": "200" }),
 
         // Bots.binary("current#500", { "MCTS_ITERATIONS": "500" }),
-        // Bots.binary("current#t=50", { "MCTS_SEARCH_TIME": "50" }),
-        // Bots.binary("current#t=250", { "MCTS_SEARCH_TIME": "250" }),
+        //Bots.binary("current#t=50", { "MCTS_SEARCH_TIME": "50" }),
+        //Bots.binary("current#t=250", { "MCTS_SEARCH_TIME": "100" }),
 
-        // Bots.unmanaged("current"),
+        Bots.unmanaged("current"),
     ],
 
     ports: {
@@ -70,16 +74,17 @@ local Bots = {
 
     arena: {
         ratings_file: "./ratings.json",
+        winrates_file: "./winrates.json",
 
         // Number of games to run.
-        ladder_games: 100,
+        ladder_games: 20,
 
         // All games start with the same number of players. Precondition: number_of_players <= len(bots).
         number_of_players: 2,
 
         // How many games are run in parallel.
         // For maximum efficiency usually you want (number_of_players⋅parallel) ≈ cpu_count.
-        parallel: 5,
+        parallel: 1,
 
         // Regulates sampling of players.
         // beta=0 — uniform.
