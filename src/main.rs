@@ -1,5 +1,4 @@
-#![feature(proc_macro_hygiene, decl_macro)]
-
+#![feature(proc_macro_hygiene, decl_macro, total_cmp)]
 mod api;
 mod game;
 mod engine;
@@ -14,7 +13,7 @@ mod test_data;
 #[macro_use]
 extern crate rocket;
 
-use std::env;
+// use std::env;
 
 use rocket::fairing::AdHoc;
 use rocket::http::Header;
@@ -24,13 +23,12 @@ use rocket::serde::json::serde_json;
 use log::info;
 
 use game::Board;
-use mcts::{MCTSConfig, get_best_movement_from_movement_visits};
-use parallelization::root_parallelization;
+use mcts::{MCTSConfig, MCTS, GetBestMovement};
+// use parallelization::root_parallelization;
 use engine::Movement;
 
-use crate::mcts::MCTS;
 
-fn get_visits(body: String) -> [u32; 4] {
+fn get_best_movement(body: String) -> Movement {
     let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
     let board = Board::from_api(&state);
 
@@ -41,27 +39,25 @@ fn get_visits(body: String) -> [u32; 4] {
 
     let config = MCTSConfig::from_env();
 
-    let visits;
-    if let Ok(workers) = env::var("MCTS_WORKERS") {
-        let workers = workers.parse().expect("Invalid MCTS_WORKERS");
-        visits = root_parallelization(
-            &board,
-            workers,
-            config.search_time.expect("Parallel mcts uses MCTS_SEARCH_TIME"),
-            my_index);
+    // if let Ok(workers) = env::var("MCTS_WORKERS") {
+    //     let workers = workers.parse().expect("Invalid MCTS_WORKERS");
+    //     visits = root_parallelization(
+    //         &board,
+    //         workers,
+    //         config.search_time.expect("Parallel mcts uses MCTS_SEARCH_TIME"),
+    //         my_index);
+    // } else {
+    let mut mcts = MCTS::new(config);
+    if let Some(search_time) = config.search_time {
+        mcts.search_with_time(&board, search_time);
+    } else if let Some(iterations) = config.iterations {
+        mcts.search(&board, iterations);
     } else {
-        let mut mcts = MCTS::new(config);
-        if let Some(search_time) = config.search_time {
-            mcts.search_with_time(&board, search_time);
-        } else if let Some(iterations) = config.iterations {
-            mcts.search(&board, iterations);
-        } else {
-            panic!("Provide MCTS_SEARCH_TIME or MCTS_ITERATIONS");
-        }
-
-        visits = mcts.get_movement_visits(&board, my_index);
+        panic!("Provide MCTS_SEARCH_TIME or MCTS_ITERATIONS");
     }
-    visits
+
+    mcts.get_best_movement(&board, my_index)
+    // }
 }
 
 #[get("/")]
@@ -92,9 +88,8 @@ fn movement_options() -> Status {
 fn movement(body: String) -> Json<api::responses::Move> {
     info!("MOVE - {}", body);
 
-    let visits = get_visits(body);
-    let movement = get_best_movement_from_movement_visits(visits);
-    let movement = api::responses::Move::new(Movement::from_usize(movement));
+    let movement = get_best_movement(body);
+    let movement = api::responses::Move::new(movement);
     Json(movement)
 }
 

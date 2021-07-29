@@ -4,25 +4,25 @@ use std::collections::HashMap;
 use std::env;
 use std::time::{Duration, Instant};
 use std::str::{FromStr};
+use rand::distributions::WeightedIndex;
+use rand::prelude::*;
 
 use crate::api::objects::Movement;
 use crate::engine::{Action, EngineSettings, MOVEMENTS, advance_one_step_with_settings, food_spawner, safe_zone_shrinker};
 use crate::game::{Board, Object, Point, Snake};
 
 #[derive(Clone, Debug)]
-struct UCB {
-    rewards: [f32; 4],
-    squared_rewards: [f32; 4],
-    visits: [u32; 4],
-    mask: [MovementMask; 4],
+struct RegretMatching {
+    regret: [f32; 4],
+    cumulative_p: [f32; 4],
+    mask: [bool; 4],
 }
 
-impl UCB {
-    fn new(mask: [MovementMask; 4]) -> UCB {
-        UCB {
-            rewards: [0f32; 4],
-            squared_rewards: [0f32; 4],
-            visits: [0u32; 4],
+impl RegretMatching {
+    fn new(mask: [bool; 4]) -> RegretMatching {
+        RegretMatching {
+            regret: [0f32; 4],
+            cumulative_p: [0f32; 4],
             mask: mask,
         }
     }
@@ -33,15 +33,15 @@ struct Node {
     visits: u32,
     // Alive snakes
     agents: Vec<usize>,
-    ucb_instances: Vec<UCB>,
+    ucb_instances: Vec<RegretMatching>,
 }
 
 impl Node {
-    fn new(agents: Vec<usize>, masks: Vec<[MovementMask; 4]>) -> Node {
+    fn new(agents: Vec<usize>, masks: Vec<[bool; 4]>) -> Node {
         Node {
             visits: 0,
             agents: agents,
-            ucb_instances: masks.into_iter().map(UCB::new).collect(),
+            ucb_instances: masks.into_iter().map(RegretMatching::new).collect(),
         }
     }
 
@@ -52,6 +52,7 @@ impl Node {
 
 #[derive(Clone, Copy, Debug)]
 pub struct MCTSConfig {
+    pub y: f32,
     pub iterations: Option<u32>,
     pub search_time: Option<Duration>,
     pub rollout_cutoff: i32,
@@ -75,6 +76,7 @@ impl MCTSConfig {
         const NORMALIZED_DRAW_REWARD : f32 = (DRAW_POINTS - LOSS_POINTS) / (WIN_POINTS - LOSS_POINTS);
 
         let config = MCTSConfig {
+            y:              Self::parse_env("MCTS_Y").unwrap_or(0.05),
             iterations:     Self::parse_env("MCTS_ITERATIONS"),
             search_time:    Self::parse_env("MCTS_SEARCH_TIME").map(Duration::from_millis),
             rollout_cutoff: Self::parse_env("MCTS_ROLLOUT_CUTOFF").unwrap_or(21),
@@ -101,55 +103,18 @@ impl MCTS {
         }
     }
 
-    pub fn get_movement_visits(&self, board: &Board, snake: usize) -> [u32; 4] {
-        let node = self.nodes.get(board).unwrap().borrow();
-        let snake_index = node.get_agent_index(snake);
-        let ucb_instance = &node.ucb_instances[snake_index];
-
-        ucb_instance.visits
-    }
-
     pub fn print_stats(&self, board: &Board) {
-        let node = self.nodes.get(board).unwrap().borrow();
-        let n = node.visits as f32;
+        let node = self.nodes[board].borrow();
 
-        info!("      reward  explore  visits");
-
-        for (&snake_index, ucb_instance) in node.agents.iter().zip(node.ucb_instances.iter()) {
-            info!("Snake {}", snake_index);
-            let selecte_move = get_best_movement_from_movement_visits(ucb_instance.visits);
-            for action in 0..4 {
-                let n_i = ucb_instance.visits[action] as f32;
-                if n_i > 0.0 {
-                    // copy-paste
-                    let avg_reward = ucb_instance.rewards[action] / n_i;
-                    let avg_squared_reward = ucb_instance.squared_rewards[action] / n_i;
-                    let variance = avg_squared_reward - avg_reward * avg_reward;
-                    let variance_ucb = (variance + (2.0 * n.ln() / n_i).sqrt()).min(0.25);
-
-                    let explore = (variance_ucb * n.ln() / n_i).sqrt();
-
-                    if action == selecte_move {
-                        info!(
-                            "[{}] - {:.4}  {:.4}   {}",
-                            Movement::from_usize(action),
-                            avg_reward,
-                            explore,
-                            n_i,
-                        );
-                    } else {
-                        info!(
-                            " {}  - {:.4}  {:.4}   {}",
-                            Movement::from_usize(action),
-                            avg_reward,
-                            explore,
-                            n_i,
-                        );
-                    }
-                } else {
-                    info!(" {}", Movement::from_usize(action));
-                }
-            }
+        for (ucb_instance, agent) in node.ucb_instances.iter().zip(node.agents.iter()) {
+            info!("Snake {}", agent);
+            let visits = node.visits as f32;
+            // TODO: try max(0, pi / visits - 1 / moves_count)
+            ucb_instance.cumulative_p
+                .iter()
+                .enumerate()
+                .filter(|(a, _)| ucb_instance.mask[*a])
+                .for_each(|(a, pi)| info!("{} {}", Movement::from_usize(a), *pi / visits));
         }
     }
 
@@ -158,7 +123,7 @@ impl MCTS {
             // info!("iteration {}", i);
             self.search_iteration(board);
         }
-        self.print_stats(board);
+        // self.print_stats(board);
     }
 
     pub fn search_with_time(&mut self, board: &Board, target_duration: Duration) {
@@ -172,7 +137,7 @@ impl MCTS {
         }
 
         let actual_duration = Instant::now() - time_start;
-        self.print_stats(board);
+        // self.print_stats(board);
         info!("Searched {} iterations in {} ms (target={} ms)", i, actual_duration.as_millis(), target_duration.as_millis());
     }
 
@@ -187,54 +152,51 @@ impl MCTS {
         };
 
         while let Some(node_cell) = self.nodes.get(&board) {
-            let node = node_cell.borrow_mut();
+            let mut node = node_cell.borrow_mut();
+
+            let mut joint_probs = vec![0.0; node.ucb_instances.len()];
 
             let joint_action = advance_one_step_with_settings(
                 &mut board,
                 &mut engine_settings,
                 &mut |i, _| {
                     let agent_index = node.get_agent_index(i);
-                    let ucb_instance = &node.ucb_instances[agent_index];
-                    let (safe_actions, risky_actions): (Vec<_>, Vec<_>) = (0..4)
-                        .filter(|&m| ucb_instance.mask[m] != MovementMask::Forbidden)
-                        .partition(|&m| ucb_instance.mask[m] == MovementMask::Safe);
-                
-                    let best_action = if !safe_actions.is_empty() {
-                        let mut max_ucb_action = 0;
-                        let mut max_ucb = -1.0;
-
-                        for action in safe_actions {
-                            let n = node.visits as f32;
-                            let n_i = ucb_instance.visits[action] as f32;
-
-                            let ucb = if n_i > 0.0 {
-                                let avg_reward = ucb_instance.rewards[action] / n_i;
-                                let avg_squared_reward = ucb_instance.squared_rewards[action] / n_i;
-                                let variance = avg_squared_reward - avg_reward * avg_reward;
-                                let variance_ucb = (variance + (2.0 * n.ln() / n_i).sqrt()).min(0.25);
-
-                                avg_reward + (variance_ucb * n.ln() / n_i).sqrt()
-                            } else {
-                                f32::INFINITY
-                            };
-
-                            if ucb > max_ucb {
-                                max_ucb_action = action;
-                                max_ucb = ucb;
-                            }
-                        }
-                        max_ucb_action
-                    } else {
-                        // TODO: proportional sampling
-                        *risky_actions.choose(rng).unwrap_or(&0)
-                    };
+                    let ucb_instance = &mut node.ucb_instances[agent_index];
+                    let available_actions: Vec<_> = (0..4)
+                        .filter(|&m| ucb_instance.mask[m])
+                        .collect();
                     
+                    if available_actions.is_empty() {
+                        return Action::Move(Movement::Right);
+                    }
+                    
+                    let positive_regret: Vec<_> = available_actions.iter()
+                        .map(|&a| ucb_instance.regret[a].max(0.0))
+                        .collect();
+                    
+                    let positive_regret_sum: f32 = positive_regret.iter().sum();
+                    let mut p = if positive_regret_sum == 0.0 {
+                        vec![1.0 / available_actions.len() as f32; available_actions.len()]
+                    } else {
+                        positive_regret.iter().map(|r| r/positive_regret_sum).collect()
+                    };
+
+                    for (pi, &a) in &mut p.iter_mut().zip(available_actions.iter()) {
+                        *pi = (1.0 - self.config.y) * (*pi) + self.config.y / available_actions.len() as f32;
+                        
+                        ucb_instance.cumulative_p[a] += *pi;
+                    }
+
+                    let dist = WeightedIndex::new(&p).unwrap();
+                    let best_index = dist.sample(rng);
+                    joint_probs[agent_index] = p[best_index];
+                    let best_action = available_actions[best_index];
 
                     Action::Move(Movement::from_usize(best_action))
                 }
             );
 
-            path.push((node, joint_action));
+            path.push((node, joint_action, joint_probs));
         }
 
         let expansion_board = board.clone();
@@ -253,20 +215,23 @@ impl MCTS {
         self.nodes.insert(board.clone(), RefCell::new(node));
     }
 
-    fn backpropagate(&self, path: Vec<(RefMut<Node>, Vec<(usize, Action)>)>, rewards: Vec<f32>) {
-        for (mut node, joint_action) in path {
+    fn backpropagate(&self, path: Vec<(RefMut<Node>, Vec<(usize, Action)>, Vec<f32>)>, rewards: Vec<f32>) {
+        for (mut node, joint_action, joint_probs) in path {
             node.visits += 1;
 
-            for (snake, Action::Move(movement)) in joint_action {
+            for ((snake, Action::Move(movement)), p) in joint_action.into_iter().zip(joint_probs.into_iter()) {
                 let snake_index = node.get_agent_index(snake);
                 
                 let reward = rewards[snake];
                 let movement = movement as usize;
 
                 let ucb = &mut node.ucb_instances[snake_index];
-                ucb.rewards[movement] += reward;
-                ucb.squared_rewards[movement] += reward * reward;
-                ucb.visits[movement] += 1;
+                for r in &mut ucb.regret {
+                    *r -= reward;
+                }
+
+                let K = ucb.mask.iter().filter(|&&m| m).count() as f32;
+                ucb.regret[movement] += reward / p;
             }
         }
     }
@@ -287,7 +252,7 @@ impl MCTS {
                     let &movement = movement_masks
                         .iter()
                         .enumerate()
-                        .filter(|(_, &mask)| mask != MovementMask::Forbidden)
+                        .filter(|(_, &mask)| mask)
                         .map(|(movement, _)| movement)
                         .collect::<Vec<_>>()
                         .choose(random)
@@ -321,64 +286,52 @@ impl MCTS {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum MovementMask {
-    Risky,
-    Safe,
-    Forbidden,
+pub trait GetBestMovement {
+    fn get_best_movement(&self, board: &Board, agent: usize) -> Movement;
 }
 
-fn get_masks(board: &Board) -> Vec<(usize, [MovementMask; 4])> {
+impl GetBestMovement for MCTS {
+    fn get_best_movement(&self, board: &Board, agent: usize) -> Movement {
+        let node = self.nodes[board].borrow();
+        let agent_index = node.get_agent_index(agent);
+        let ucb_instance = &node.ucb_instances[agent_index];
+        let visits = node.visits as f32;
+        // TODO: try max(0, pi / visits - 1 / moves_count)
+        let (best_movement, _) = ucb_instance.cumulative_p
+            .iter()
+            .enumerate()
+            .filter(|(a, _)| ucb_instance.mask[*a])
+            .map(|(a, pi)| (a, *pi / visits))
+            .max_by(|(_, a_normalized_pi), (_, b_normalized_pi),| a_normalized_pi.total_cmp(b_normalized_pi))
+            .unwrap_or((0, 0.0));
+    
+        Movement::from_usize(best_movement)
+    }
+}
+
+fn get_masks(board: &Board) -> Vec<(usize, [bool; 4])> {
     let tails: Vec<_> = board.snakes
         .iter()
         .filter(|snake| snake.is_alive())
         .map(|snake| *snake.body.back().unwrap())
         .collect();
-    
-    let mut movement_position_max_body = HashMap::new();
 
-    let masks: Vec<_> = board.snakes
+    board.snakes
         .iter()
         .enumerate()
         .filter(|(_, snake)| snake.is_alive())
         .map(|(snake_id, snake)| {
-            let mut movement_mask = [MovementMask::Forbidden; 4];
-            let movement_positions = get_movement_positions(snake.body[0]);
-            let snake_length = snake.body.len();
-
-            for (&movement_position, &movement) in movement_positions.iter().zip(MOVEMENTS.iter()) {
-                if board.contains(movement_position) && (tails.contains(&movement_position)
-                        || board.objects[movement_position] != Object::BodyPart) {
-                    
-                    movement_mask[movement as usize] = MovementMask::Safe;
-                    
-                    if let Some(&(_, max_body)) = movement_position_max_body.get(&movement_position) {
-                        if max_body < snake_length {
-                            movement_position_max_body.insert(movement_position, (snake_id, snake_length));
-                        }
-                    } else {
-                        movement_position_max_body.insert(movement_position, (snake_id, snake_length));
+            let mut movement_mask = [false; 4];
+            MOVEMENTS
+                .iter()
+                .for_each(|&movement| {
+                    let movement_position = get_movement_position(snake.body[0], movement);
+                    if board.contains(movement_position)
+                        && (tails.contains(&movement_position)
+                            || board.objects[movement_position] != Object::BodyPart) {
+                        movement_mask[movement as usize] = true;
                     }
-                }
-            }
-
-            (snake_id, snake_length, movement_mask, movement_positions)
-        })
-        .collect();
-    
-    // info!("{:?}", movement_position_max_body);
-    masks.into_iter()
-        .map(|(snake_id, snake_length, mut movement_mask, movement_positions)| {
-            for (mask, position) in movement_mask.iter_mut().zip(movement_positions.iter()) {
-                if *mask != MovementMask::Safe {
-                    continue;
-                }
-                let &(largest_snake_id, max_length) = movement_position_max_body.get(position).unwrap();
-                if snake_id != largest_snake_id && snake_length <= max_length {
-                    // info!("{} {:?} {} {:?}", snake_id, position, snake_length, movement_position_max_body.get(position).unwrap());
-                    *mask = MovementMask::Risky;
-                }
-            }
+                });
             (snake_id, movement_mask)
         })
         .collect()
@@ -400,13 +353,4 @@ fn get_movement_position(position: Point, movement: Movement) -> Point {
         Movement::Up => Point {x: position.x, y: position.y + 1},
         Movement::Down => Point {x: position.x, y: position.y - 1},
     }
-}
-
-pub fn get_best_movement_from_movement_visits(movement_visits: [u32; 4]) -> usize {
-    let (movement, _) = movement_visits.iter()
-        .enumerate()
-        .max_by_key(|(_, &visits)| visits)
-        .unwrap_or((0, &0));
-
-    movement
 }

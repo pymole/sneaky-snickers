@@ -4,7 +4,7 @@ from argparse import ArgumentParser
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Lock
-from typing import Any, NamedTuple
+from typing import Any, DefaultDict, NamedTuple
 import _jsonnet
 import atexit
 import concurrent.futures
@@ -14,6 +14,7 @@ import numpy as np
 import os
 import re
 import shlex
+from collections import defaultdict
 import subprocess
 import textwrap
 import trueskill
@@ -316,6 +317,15 @@ def dump_ratings(ratings, filename) -> None:
     json.dump(ratings, open(filename, 'w'), indent=4, cls=RatingJsonEncoder)
 
 
+def load_winrates(filename) -> DefaultDict[str, DefaultDict[str, int]]:
+    winrates = json.load(open(filename)) if Path(filename).exists() else {}
+    return defaultdict(lambda: defaultdict(int), winrates)
+
+
+def dump_winrates(winrate, filename) -> None:
+    json.dump(winrate, open(filename, 'w'), indent=4)
+
+
 def sample(xs : list[Any], k : int, weights : list[float], beta : float) -> list[Any]:
     assert len(weights) == len(xs)
     powered_weights = np.array(weights) ** beta
@@ -339,6 +349,7 @@ class Arena:
             if (bot := create_bot_from_config(bot_config)) is not None
         ]
         self._ratings_file : Path = Path(config['arena']['ratings_file'])
+        self._winrates_file : Path = Path(config['arena']['winrates_file'])
         self._ports_iter = iter(range(config['ports']['from'], config['ports']['to'] + 1))
         self._number_of_players : int = config['arena']['number_of_players']
         self._ladder_games : int = config['arena']['ladder_games']
@@ -387,6 +398,8 @@ class Arena:
             raise Exception(f'Not enough players to host {self._number_of_players}-players matches')
 
         ratings = {} if reset_ratings else load_ratings(self._ratings_file)
+        winrates = load_winrates(self._winrates_file)
+
         for bot in self._bots:
             ratings.setdefault(bot.name, trueskill.Rating())
 
@@ -413,8 +426,15 @@ class Arena:
 
                     players, ranks = game_result.result()
                     new_ratings = trueskill.rate([(ratings[player.name],) for player in players], ranks=ranks)
-                    for (new_rating,), player in zip(new_ratings, players):
+                    for (new_rating,), player, rank in zip(new_ratings, players, ranks):
                         ratings[player.name] = new_rating
+
+                        if rank == 0:
+                            for opponent in players:
+                                if player == opponent:
+                                    continue
+                                
+                                winrates[player.name][opponent.name] += 1
 
                     with weights.lock:
                         weights.value[:] = compute_weights()
@@ -422,6 +442,7 @@ class Arena:
                     completed += 1
 
                     dump_ratings(ratings, self._ratings_file)
+                    dump_winrates(winrates, self._winrates_file)
 
 
                 executor.shutdown()
