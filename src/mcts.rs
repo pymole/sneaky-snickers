@@ -89,7 +89,7 @@ impl MCTSConfig {
 }
 
 pub struct MCTS {
-    config: MCTSConfig,
+    pub config: MCTSConfig,
     nodes: HashMap<Board, RefCell<Node>>,
 }
 
@@ -117,7 +117,7 @@ impl MCTS {
 
         for (&snake_index, ucb_instance) in node.agents.iter().zip(node.ucb_instances.iter()) {
             info!("Snake {}", snake_index);
-            let selecte_move = get_best_movement_from_movement_visits(ucb_instance.visits);
+            // let selecte_move = get_best_movement_from_movement_visits(ucb_instance.visits);
             for action in 0..4 {
                 let n_i = ucb_instance.visits[action] as f32;
                 if n_i > 0.0 {
@@ -129,15 +129,15 @@ impl MCTS {
 
                     let explore = (variance_ucb * n.ln() / n_i).sqrt();
 
-                    if action == selecte_move {
-                        info!(
-                            "[{}] - {:.4}  {:.4}   {}",
-                            Movement::from_usize(action),
-                            avg_reward,
-                            explore,
-                            n_i,
-                        );
-                    } else {
+                    // if action == selecte_move {
+                    //     info!(
+                    //         "[{}] - {:.4}  {:.4}   {}",
+                    //         Movement::from_usize(action),
+                    //         avg_reward,
+                    //         explore,
+                    //         n_i,
+                    //     );
+                    // } else {
                         info!(
                             " {}  - {:.4}  {:.4}   {}",
                             Movement::from_usize(action),
@@ -145,7 +145,7 @@ impl MCTS {
                             explore,
                             n_i,
                         );
-                    }
+                    // }
                 } else {
                     info!(" {}", Movement::from_usize(action));
                 }
@@ -321,6 +321,22 @@ impl MCTS {
     }
 }
 
+pub trait GetBestMovement {
+    fn get_best_movement(&self, board: &Board, agent: usize) -> Movement;
+}
+
+impl GetBestMovement for MCTS {
+    fn get_best_movement(&self, board: &Board, agent: usize) -> Movement {
+        let (best_movement, _) = self.get_movement_visits(board, agent)
+            .iter()
+            .enumerate()
+            .max_by_key(|(_, &visits)| visits)
+            .unwrap_or((0, &0));
+
+        Movement::from_usize(best_movement)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum MovementMask {
     Risky,
@@ -400,13 +416,4 @@ fn get_movement_position(position: Point, movement: Movement) -> Point {
         Movement::Up => Point {x: position.x, y: position.y + 1},
         Movement::Down => Point {x: position.x, y: position.y - 1},
     }
-}
-
-pub fn get_best_movement_from_movement_visits(movement_visits: [u32; 4]) -> usize {
-    let (movement, _) = movement_visits.iter()
-        .enumerate()
-        .max_by_key(|(_, &visits)| visits)
-        .unwrap_or((0, &0));
-
-    movement
 }
