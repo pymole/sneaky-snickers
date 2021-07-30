@@ -13,10 +13,10 @@ mod test_data;
 #[macro_use]
 extern crate rocket;
 
-// use std::env;
+use std::env;
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Mutex, RwLock};
 
 use rocket::fairing::AdHoc;
 use rocket::http::Header;
@@ -34,7 +34,7 @@ use engine::Movement;
 
 
 struct Storage {
-    mcts_instances: Arc<RwLock<HashMap<String, Mutex<MCTS>>>>,
+    mcts_instances: RwLock<HashMap<String, Mutex<MCTS>>>,
 }
 
 
@@ -65,12 +65,15 @@ fn index() -> Json<api::responses::Info> {
 #[post("/start", data = "<body>")]
 fn start(body: String, storage: &State<Storage>) -> Status {
     info!("START - {}", body);
-    let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
+    if env::var("MCTS_PERSISTENT").is_ok() {
+        let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
 
-    let config = MCTSConfig::from_env();
-    let mcts = MCTS::new(config);
-
-    storage.mcts_instances.write().unwrap().insert(state.game.id, Mutex::new(mcts));
+        let config = MCTSConfig::from_env();
+        let mcts = MCTS::new(config);
+    
+        storage.mcts_instances.write().unwrap().insert(state.game.id, Mutex::new(mcts));
+    }
+    
     Status::Ok
 }
 
@@ -108,8 +111,10 @@ fn movement(storage: &State<Storage>, body: String) -> Json<api::responses::Move
 #[post("/end", data = "<body>")]
 fn end(storage: &State<Storage>, body: String) -> Status {
     info!("END - {}", body);
-    let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
-    storage.mcts_instances.write().unwrap().remove(&state.game.id);
+    if env::var("MCTS_PERSISTENT").is_ok() {
+        let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
+        storage.mcts_instances.write().unwrap().remove(&state.game.id);
+    }
     Status::Ok
 }
 
@@ -133,6 +138,6 @@ fn rocket() -> _ {
             response.set_header(Header::new("Access-Control-Allow-Headers", "*"));
             response.set_header(Header::new("Access-Control-Allow-Credentials", "true"));
         })))
-        .manage(Storage {mcts_instances: Arc::new(RwLock::new(HashMap::new()))})
+        .manage(Storage {mcts_instances: RwLock::new(HashMap::new())})
         .mount("/", routes![index, start, movement, movement_options, end, flavored_flood_fill])
 }

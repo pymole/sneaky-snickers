@@ -262,7 +262,7 @@ impl MCTSConfig {
         const NORMALIZED_DRAW_REWARD : f32 = (DRAW_POINTS - LOSS_POINTS) / (WIN_POINTS - LOSS_POINTS);
 
         let config = MCTSConfig {
-            y:              Self::parse_env("MCTS_Y").unwrap_or(0.05),
+            y:              Self::parse_env("MCTS_Y").unwrap_or(0.8),
             iterations:     Self::parse_env("MCTS_ITERATIONS"),
             search_time:    Self::parse_env("MCTS_SEARCH_TIME").map(Duration::from_millis),
             rollout_cutoff: Self::parse_env("MCTS_ROLLOUT_CUTOFF").unwrap_or(21),
@@ -319,11 +319,12 @@ impl MCTS {
         }
 
         let actual_duration = Instant::now() - time_start;
-        // self.print_stats(board);
+        self.print_stats(board);
         info!("Searched {} iterations in {} ms (target={} ms)", i, actual_duration.as_millis(), target_duration.as_millis());
     }
 
     fn search_iteration(&mut self, board: &Board) {
+        // let start = Instant::now();
         let mut board = board.clone();
         let mut path = Vec::new();
 
@@ -356,16 +357,24 @@ impl MCTS {
         }
 
         let expansion_board = board.clone();
+        // let start_rollout = Instant::now() - start;
         let rewards = self.rollout(&mut board);
+        // let start_backpropagate = Instant::now() - start;
         self.backpropagate(path, rewards);
-
+        // let start_exapantion = Instant::now() - start;
         if !expansion_board.is_terminal() {
             self.expansion(&expansion_board);
         }
+
+        // if Instant::now() - start >= Duration::from_millis(10) {
+        //     info!("ZALUPA {:?} {:?} {:?}", start_rollout, start_backpropagate, start_exapantion);
+        // }
     }
 
     fn expansion(&mut self, board: &Board) {
+        // let start = Instant::now();
         let masks = get_masks_with_risk_flag(board);
+        // let mask_duration = Instant::now() - start;
         let agents = masks
             .into_iter()
             .map(|(agent, mask, risk)| {
@@ -382,9 +391,22 @@ impl MCTS {
                 }
             })
             .collect();
+        // let agent_duration = Instant::now() - start;
         
         let node = Node::new(agents);
-        self.nodes.insert(board.clone(), RefCell::new(node));
+        // let node_create = Instant::now() - start;
+
+        let board_clone = board.clone();
+        // let board_clone_time = Instant::now() - start;
+
+        // let c = self.nodes.capacity();
+        self.nodes.insert(board_clone, RefCell::new(node));
+        // let c_new = self.nodes.capacity();
+
+        // let end = Instant::now() - start;
+        // if end > Duration::from_millis(10) {
+        //     info!("EX {:?} {:?} {:?} {:?} {:?} {} {} {}", mask_duration, agent_duration, node_create, board_clone_time, end, self.nodes.len(), c, c_new);
+        // }
     }
 
     fn backpropagate(&self, path: Vec<(RefMut<Node>, Vec<(usize, Action)>, Vec<ActionContext>)>, rewards: Vec<f32>) {

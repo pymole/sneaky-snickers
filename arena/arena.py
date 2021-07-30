@@ -319,7 +319,7 @@ def dump_ratings(ratings, filename) -> None:
 
 def load_winrates(filename) -> DefaultDict[str, DefaultDict[str, int]]:
     winrates = json.load(open(filename)) if Path(filename).exists() else {}
-    return defaultdict(lambda: defaultdict(int), winrates)
+    return winrates
 
 
 def dump_winrates(winrate, filename) -> None:
@@ -428,12 +428,17 @@ class Arena:
                     new_ratings = trueskill.rate([(ratings[player.name],) for player in players], ranks=ranks)
                     for (new_rating,), player, rank in zip(new_ratings, players, ranks):
                         ratings[player.name] = new_rating
-
+                        if player.name not in winrates:
+                            winrates[player.name] = {}
+                        
                         if rank == 0:
                             for opponent in players:
                                 if player == opponent:
                                     continue
-                                
+
+                                if opponent.name not in winrates[player.name]:
+                                    winrates[player.name][opponent.name] = 0
+
                                 winrates[player.name][opponent.name] += 1
 
                     with weights.lock:

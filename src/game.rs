@@ -4,7 +4,7 @@ use std::hash::{Hash, Hasher};
 use crate::api;
 use crate::vec2d::Vec2D;
 
-pub const MAX_SNAKE_COUNT: usize = 8;
+pub const MAX_SNAKE_COUNT: usize = 4;
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Board {
