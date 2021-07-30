@@ -365,10 +365,6 @@ impl MCTS {
         if !expansion_board.is_terminal() {
             self.expansion(&expansion_board);
         }
-
-        // if Instant::now() - start >= Duration::from_millis(10) {
-        //     info!("ZALUPA {:?} {:?} {:?}", start_rollout, start_backpropagate, start_exapantion);
-        // }
     }
 
     fn expansion(&mut self, board: &Board) {
@@ -495,7 +491,7 @@ fn get_masks_with_risk_flag(board: &Board) -> Vec<(usize, [bool; 4], bool)> {
         .map(|snake| *snake.body.back().unwrap())
         .collect();
     
-    let mut movement_position_max_body = HashMap::new();
+    let mut all_movement_positions = HashMap::new();
 
     let masks: Vec<_> = board.snakes
         .iter()
@@ -504,7 +500,6 @@ fn get_masks_with_risk_flag(board: &Board) -> Vec<(usize, [bool; 4], bool)> {
         .map(|(snake_id, snake)| {
             let mut movement_mask = [false; 4];
             let movement_positions = get_movement_positions(snake.body[0]);
-            let snake_length = snake.body.len();
 
             for (&movement_position, &movement) in movement_positions.iter().zip(MOVEMENTS.iter()) {
                 if board.contains(movement_position) && (tails.contains(&movement_position)
@@ -512,32 +507,26 @@ fn get_masks_with_risk_flag(board: &Board) -> Vec<(usize, [bool; 4], bool)> {
                     
                     movement_mask[movement as usize] = true;
                     
-                    if let Some(&(_, max_body)) = movement_position_max_body.get(&movement_position) {
-                        if max_body < snake_length {
-                            movement_position_max_body.insert(movement_position, (snake_id, snake_length));
-                        }
+                    if let Some(multiple_snakes) = all_movement_positions.get_mut(&movement_position) {
+                        *multiple_snakes = true;
                     } else {
-                        movement_position_max_body.insert(movement_position, (snake_id, snake_length));
+                        all_movement_positions.insert(movement_position, false);
                     }
                 }
             }
 
-            (snake_id, snake_length, movement_mask, movement_positions)
+            (snake_id, movement_mask, movement_positions)
         })
         .collect();
     
     // info!("{:?}", movement_position_max_body);
     masks.into_iter()
-        .map(|(snake_id, snake_length, movement_mask, movement_positions)| {
+        .map(|(snake_id, movement_mask, movement_positions)| {
             let mut risk = false;
             for (mask, position) in movement_mask.iter().zip(movement_positions.iter()) {
-                if *mask {
-                    let &(largest_snake_id, max_length) = movement_position_max_body.get(position).unwrap();
-                    if snake_id != largest_snake_id && snake_length <= max_length {
-                        // info!("{} {:?} {} {:?}", snake_id, position, snake_length, movement_position_max_body.get(position).unwrap());
-                        risk = true;
-                        break;
-                    }
+                if *mask && *all_movement_positions.get(position).unwrap() {
+                    risk = true;
+                    break;
                 }
             }
             (snake_id, movement_mask, risk)
