@@ -70,6 +70,7 @@ local Bots = {
 
     arena: {
         ratings_file: "./ratings.json",
+        winrates_file: "./winrates.json",
 
         // Number of games to run.
         ladder_games: 100,
