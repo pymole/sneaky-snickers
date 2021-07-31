@@ -85,8 +85,9 @@ impl Formula for UCB {
     fn print_stats(&self, _mcts_config: &MCTSConfig, node_visits: u32) {
         let n = node_visits as f32;
 
-        info!("UCB");
-        // let selecte_move = get_best_movement_from_movement_visits(ucb_instance.visits);
+        info!("UCB   reward  explore  visits");
+
+        let selected_move = self.get_final_movement(_mcts_config, node_visits);
         for action in 0..4 {
             let n_i = self.visits[action] as f32;
             if n_i > 0.0 {
@@ -98,15 +99,23 @@ impl Formula for UCB {
 
                 let explore = (variance_ucb * n.ln() / n_i).sqrt();
 
-                // let (selected_move, _) = self.get_best_movement(mcts_config, node_visits);
-
-                info!(
-                    "[{}] - {:.4}  {:.4}   {}",
-                    Movement::from_usize(action),
-                    avg_reward,
-                    explore,
-                    n_i,
-                );
+                if action == selected_move as usize {
+                    info!(
+                        "[{}] - {:.4}  {:.4}   {}",
+                        Movement::from_usize(action),
+                        avg_reward,
+                        explore,
+                        n_i
+                    );
+                } else {
+                    info!(
+                        " {}  - {:.4}  {:.4}   {}",
+                        Movement::from_usize(action),
+                        avg_reward,
+                        explore,
+                        n_i
+                    );
+                }
             } else {
                 info!(" {}", Movement::from_usize(action));
             }
@@ -270,7 +279,7 @@ impl MCTSConfig {
             draw_reward:    Self::parse_env("MCTS_DRAW_REWARD").unwrap_or(NORMALIZED_DRAW_REWARD),
         };
 
-        assert!(config.rollout_cutoff >= 1);
+        assert!(config.rollout_cutoff >= 0);
 
         config
     }
