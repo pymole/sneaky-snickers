@@ -6,7 +6,7 @@
 // pub fn root_parallelization(board: &Board, workers: usize, search_time: Duration, snake: usize) -> [u32; 4] {
 //     let mcts_config = MCTSConfig::from_env();
 //     let mut threads = Vec::with_capacity(workers);
-    
+
 //     for _i in 0..workers {
 //         // TODO: Figure out how to pass reference to thread instead of copy.
 //         // Thread can outlive board reference.

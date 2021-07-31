@@ -70,10 +70,10 @@ fn start(body: String, storage: &State<Storage>) -> Status {
 
         let config = MCTSConfig::from_env();
         let mcts = MCTS::new(config);
-    
+
         storage.mcts_instances.write().unwrap().insert(state.game.id, Mutex::new(mcts));
     }
-    
+
     Status::Ok
 }
 
@@ -87,14 +87,14 @@ fn movement_options() -> Status {
 fn movement(storage: &State<Storage>, body: String) -> Json<api::responses::Move> {
     info!("MOVE - {}", body);
     let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
-    
+
     let board = Board::from_api(&state);
 
     let my_index = state.board.snakes
         .iter()
         .position(|snake| snake.id == state.you.id)
         .unwrap();
-    
+
     let movement = if let Some(mcts_mutex) = storage.mcts_instances.read().unwrap().get(&state.game.id) {
         let mut mcts = mcts_mutex.lock().unwrap();
         get_best_movement(&mut mcts, &board, my_index)
