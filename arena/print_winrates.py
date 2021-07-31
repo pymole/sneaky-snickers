@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import json
 
 
@@ -12,12 +14,13 @@ for player, opponents in winrates.items():
             opponent_wins = winrates[opponent][player]
         except KeyError:
             opponent_wins = 0
-        
+
         wins = player_wins + opponent_wins
-        
-        winrate = player_wins/wins
+
+        winrate = round(player_wins/wins * 100, 2)
         winrate_sum += winrate
-        
-        print(player, 'vs', opponent + ':', winrate)
-    
-    print(player, 'average:', winrate_sum/len(opponents), '\n')
+
+        print(f'{player} vs {opponent}: {winrate}% ({player_wins}/{opponent_wins})')
+
+    avg_winrate = round(winrate_sum/len(opponents), 2)
+    print(f'{player} average: {avg_winrate}%\n')
