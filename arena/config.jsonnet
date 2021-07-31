@@ -53,14 +53,14 @@ local Bots = {
         //Bots.from_commit("v2.6#t=250", "v2.6", { "MCTS_SEARCH_TIME": "250" }),
 
         //Bots.from_commit("v2.8#500", "v2.8", { "MCTS_ITERATIONS": "500" }),
-        Bots.from_commit("v2.8#t=50", "v2.8", { "MCTS_SEARCH_TIME": "50" }),
-        //Bots.from_commit("v2.8#t=250", "v2.8", { "MCTS_SEARCH_TIME": "200" }),
+        //Bots.from_commit("v2.8#t=50", "v2.8", { "MCTS_SEARCH_TIME": "50" }),
+        Bots.from_commit("v2.8#t=250", "v2.8", { "MCTS_SEARCH_TIME": "250" }),
         
         //Bots.from_commit("current#persisted", "63cee84f936ca52a8a155303ff6d7df773e06219", { "MCTS_SEARCH_TIME": "50" }),
 
         //Bots.binary("current#500", { "MCTS_ITERATIONS": "500" }),
-        Bots.binary("current#t=50", {"MCTS_Y": "0.1", "MCTS_SEARCH_TIME": "50" }),
-        //Bots.binary("current#t=250", { "MCTS_SEARCH_TIME": "100" }),
+        //Bots.binary("current#t=50", {"MCTS_Y": "0.1", "MCTS_SEARCH_TIME": "50" }),
+        Bots.binary("current#t=250", { "MCTS_SEARCH_TIME": "250" }),
 
         //Bots.unmanaged("current"),
     ],
