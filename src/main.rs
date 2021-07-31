@@ -1,5 +1,4 @@
-#![feature(proc_macro_hygiene, decl_macro)]
-
+#![feature(proc_macro_hygiene, decl_macro, total_cmp)]
 mod api;
 mod game;
 mod engine;
@@ -16,19 +15,40 @@ extern crate rocket;
 
 use std::env;
 
+use std::collections::HashMap;
+use std::sync::{Mutex, RwLock};
+
 use rocket::fairing::AdHoc;
 use rocket::http::Header;
 use rocket::http::Status;
 use rocket::serde::json::Json;
 use rocket::serde::json::serde_json;
+use rocket::State;
+
 use log::info;
 
 use game::Board;
-use mcts::{MCTSConfig, get_best_movement_from_movement_visits};
-use parallelization::root_parallelization;
+use mcts::{MCTSConfig, MCTS, GetBestMovement};
+// use parallelization::root_parallelization;
 use engine::Movement;
 
-use crate::mcts::MCTS;
+
+struct Storage {
+    mcts_instances: RwLock<HashMap<String, Mutex<MCTS>>>,
+}
+
+
+fn get_best_movement(mcts: &mut MCTS, board: &Board, agent: usize) -> Movement {
+    if let Some(search_time) = mcts.config.search_time {
+        mcts.search_with_time(&board, search_time);
+    } else if let Some(iterations) = mcts.config.iterations {
+        mcts.search(&board, iterations);
+    } else {
+        panic!("Provide MCTS_SEARCH_TIME or MCTS_ITERATIONS");
+    }
+
+    mcts.get_best_movement(&board, agent)
+}
 
 #[get("/")]
 fn index() -> Json<api::responses::Info> {
@@ -43,8 +63,17 @@ fn index() -> Json<api::responses::Info> {
 }
 
 #[post("/start", data = "<body>")]
-fn start(body: String) -> Status {
+fn start(body: String, storage: &State<Storage>) -> Status {
     info!("START - {}", body);
+    if env::var("MCTS_PERSISTENT").is_ok() {
+        let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
+
+        let config = MCTSConfig::from_env();
+        let mcts = MCTS::new(config);
+
+        storage.mcts_instances.write().unwrap().insert(state.game.id, Mutex::new(mcts));
+    }
+
     Status::Ok
 }
 
@@ -55,10 +84,10 @@ fn movement_options() -> Status {
 }
 
 #[post("/move", data = "<body>")]
-fn movement(body: String) -> Json<api::responses::Move> {
+fn movement(storage: &State<Storage>, body: String) -> Json<api::responses::Move> {
     info!("MOVE - {}", body);
-
     let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
+
     let board = Board::from_api(&state);
 
     let my_index = state.board.snakes
@@ -66,37 +95,26 @@ fn movement(body: String) -> Json<api::responses::Move> {
         .position(|snake| snake.id == state.you.id)
         .unwrap();
 
-    let config = MCTSConfig::from_env();
-
-    let visits;
-    if let Ok(workers) = env::var("MCTS_WORKERS") {
-        let workers = workers.parse().expect("Invalid MCTS_WORKERS");
-        visits = root_parallelization(
-            &board,
-            workers,
-            config.search_time.expect("Parallel mcts uses MCTS_SEARCH_TIME"),
-            my_index);
+    let movement = if let Some(mcts_mutex) = storage.mcts_instances.read().unwrap().get(&state.game.id) {
+        let mut mcts = mcts_mutex.lock().unwrap();
+        get_best_movement(&mut mcts, &board, my_index)
     } else {
-        let mut mcts = MCTS::new(config);
-        if let Some(search_time) = config.search_time {
-            mcts.search_with_time(&board, search_time);
-        } else if let Some(iterations) = config.iterations {
-            mcts.search(&board, iterations);
-        } else {
-            panic!("Provide MCTS_SEARCH_TIME or MCTS_ITERATIONS");
-        }
+        let config = MCTSConfig::from_env();
+        let mcts = &mut MCTS::new(config);
+        get_best_movement(mcts, &board, my_index)
+    };
 
-        visits = mcts.get_movement_visits(&board, my_index);
-    }
-
-    let movement = get_best_movement_from_movement_visits(visits);
-    let movement = api::responses::Move::new(Movement::from_usize(movement));
+    let movement = api::responses::Move::new(movement);
     Json(movement)
 }
 
 #[post("/end", data = "<body>")]
-fn end(body: String) -> Status {
+fn end(storage: &State<Storage>, body: String) -> Status {
     info!("END - {}", body);
+    if env::var("MCTS_PERSISTENT").is_ok() {
+        let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
+        storage.mcts_instances.write().unwrap().remove(&state.game.id);
+    }
     Status::Ok
 }
 
@@ -120,5 +138,6 @@ fn rocket() -> _ {
             response.set_header(Header::new("Access-Control-Allow-Headers", "*"));
             response.set_header(Header::new("Access-Control-Allow-Credentials", "true"));
         })))
+        .manage(Storage {mcts_instances: RwLock::new(HashMap::new())})
         .mount("/", routes![index, start, movement, movement_options, end, flavored_flood_fill])
 }
