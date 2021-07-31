@@ -319,7 +319,7 @@ def dump_ratings(ratings, filename) -> None:
 
 def load_winrates(filename) -> DefaultDict[str, DefaultDict[str, int]]:
     winrates = json.load(open(filename)) if Path(filename).exists() else {}
-    return defaultdict(lambda: defaultdict(int), winrates)
+    return winrates
 
 
 def dump_winrates(winrate, filename) -> None:
@@ -435,6 +435,9 @@ class Arena:
                             for opponent in players:
                                 if player == opponent:
                                     continue
+
+                                if opponent.name not in winrates[player.name]:
+                                    winrates[player.name][opponent.name] = 0
 
                                 winrates[player.name][opponent.name] += 1
 
