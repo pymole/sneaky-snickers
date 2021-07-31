@@ -393,12 +393,12 @@ class Arena:
             raise
 
     # TODO: want to calculate win-rates
-    def run_ladder(self, reset_ratings):
+    def run_ladder(self, reset_stats):
         if self._number_of_players > len(self._bots):
             raise Exception(f'Not enough players to host {self._number_of_players}-players matches')
 
-        ratings = {} if reset_ratings else load_ratings(self._ratings_file)
-        winrates = load_winrates(self._winrates_file)
+        ratings = {} if reset_stats else load_ratings(self._ratings_file)
+        winrates = {} if reset_stats else load_winrates(self._winrates_file)
 
         for bot in self._bots:
             ratings.setdefault(bot.name, trueskill.Rating())
@@ -430,7 +430,7 @@ class Arena:
                         ratings[player.name] = new_rating
                         if player.name not in winrates:
                             winrates[player.name] = {}
-                        
+
                         if rank == 0:
                             for opponent in players:
                                 if player == opponent:
@@ -477,11 +477,18 @@ def main():
 
     argparser = ArgumentParser(description='Runs matches and computes ratings.')
     argparser.add_argument(
-        '--reset-ratings',
+        '--reset-stats',
         default=False,
         required=False,
         action='store_true',
         help='Forget all the regretful past and start with a clean slate.'
+    )
+    argparser.add_argument(
+        '--unmute',
+        default=False,
+        required=False,
+        action='store_true',
+        help='Umute all bots'
     )
     subparsers = argparser.add_subparsers(dest='command', required=False)
     subparsers.add_parser('up', help="Start bots until enter is pressed. Don't run games.")
@@ -489,6 +496,18 @@ def main():
 
     config = json.loads(_jsonnet.evaluate_file(str(CONFIG_PATH)))
     logging.info(f'Loaded config\n{textwrap.indent(json.dumps(config, indent=2), "    ")}')
+
+    # Ugly, hacky, but it works
+    if args.unmute:
+        for bot in config['bots']:
+            if bot['type'] == 'from_commit':
+                bot['run']['mute'] = False
+            elif bot['type'] == 'binary':
+                bot['mute'] = False
+            elif bot['type'] == 'umanaged':
+                pass
+            else:
+                assert False, 'Unknown bot type'
 
     arena = Arena(config)
     arena.prepare()
@@ -504,7 +523,7 @@ def main():
     elif args.command is None:
         arena.up()
         import time; time.sleep(2)
-        arena.run_ladder(reset_ratings=args.reset_ratings)
+        arena.run_ladder(reset_stats=args.reset_stats)
         arena.down()
     else:
         assert False
