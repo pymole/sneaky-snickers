@@ -1,7 +1,9 @@
-#![feature(proc_macro_hygiene, decl_macro, total_cmp)]
+// #![feature(proc_macro_hygiene, decl_macro, total_cmp)]
 mod api;
 mod game;
 mod engine;
+mod bandit;
+mod ucb;
 mod solver;
 mod vec2d;
 mod mcts;

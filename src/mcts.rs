@@ -4,213 +4,16 @@ use std::collections::HashMap;
 use std::env;
 use std::time::{Duration, Instant};
 use std::str::FromStr;
-use rand::distributions::WeightedIndex;
-use rand::prelude::*;
 
 use crate::api::objects::Movement;
 use crate::engine::{Action, EngineSettings, MOVEMENTS, advance_one_step_with_settings, food_spawner, safe_zone_shrinker};
 use crate::game::{Board, Object, Point, Snake};
+use crate::ucb::UCB;
+use crate::bandit::MultiArmedBandit;
 
-trait Formula {
-    fn get_best_movement(&mut self, mcts_config: &MCTSConfig, node_visits: u32) -> (usize, ActionContext);
-    fn get_final_movement(&self, mcts_config: &MCTSConfig, node_visits: u32) -> Movement;
-    fn backpropagate(&mut self, reward: f32, movement: usize, action_context: ActionContext);
-    fn print_stats(&self, mcts_config: &MCTSConfig, node_visits: u32);
-}
 
-#[derive(Clone, Debug)]
-struct UCB {
-    rewards: [f32; 4],
-    squared_rewards: [f32; 4],
-    visits: [u32; 4],
-    mask: [bool; 4],
-}
-
-impl UCB {
-    fn new(mask: [bool; 4]) -> UCB {
-        UCB {
-            rewards: [0f32; 4],
-            squared_rewards: [0f32; 4],
-            visits: [0u32; 4],
-            mask: mask,
-        }
-    }
-}
-
-impl Formula for UCB {
-    fn get_best_movement(&mut self, _mcts_config: &MCTSConfig, node_visits: u32) -> (usize, ActionContext) {
-        let mut max_ucb_action = 0;
-        let mut max_ucb = -1.0;
-
-        for action in (0..4).filter(|&m| self.mask[m]) {
-            let n = node_visits as f32;
-            let n_i = self.visits[action] as f32;
-
-            let ucb = if n_i > 0.0 {
-                let avg_reward = self.rewards[action] / n_i;
-                let avg_squared_reward = self.squared_rewards[action] / n_i;
-                let variance = avg_squared_reward - avg_reward * avg_reward;
-                let variance_ucb = (variance + (2.0 * n.ln() / n_i).sqrt()).min(0.25);
-
-                avg_reward + (variance_ucb * n.ln() / n_i).sqrt()
-            } else {
-                f32::INFINITY
-            };
-
-            if ucb > max_ucb {
-                max_ucb_action = action;
-                max_ucb = ucb;
-            }
-        }
-
-        (max_ucb_action, ActionContext::UCB)
-    }
-
-    fn get_final_movement(&self, _mcts_config: &MCTSConfig, _node_visits: u32) -> Movement {
-        let (best_movement, _) = self.visits
-            .iter()
-            .enumerate()
-            .max_by_key(|(_, &visits)| visits)
-            .unwrap_or((0, &0));
-
-        Movement::from_usize(best_movement)
-    }
-
-    fn backpropagate(&mut self, reward: f32, movement: usize, _action_context: ActionContext) {
-        self.rewards[movement] += reward;
-        self.squared_rewards[movement] += reward * reward;
-        self.visits[movement] += 1;
-    }
-
-    fn print_stats(&self, _mcts_config: &MCTSConfig, node_visits: u32) {
-        let n = node_visits as f32;
-
-        info!("UCB");
-        // let selecte_move = get_best_movement_from_movement_visits(ucb_instance.visits);
-        for action in 0..4 {
-            let n_i = self.visits[action] as f32;
-            if n_i > 0.0 {
-                // copy-paste
-                let avg_reward = self.rewards[action] / n_i;
-                let avg_squared_reward = self.squared_rewards[action] / n_i;
-                let variance = avg_squared_reward - avg_reward * avg_reward;
-                let variance_ucb = (variance + (2.0 * n.ln() / n_i).sqrt()).min(0.25);
-
-                let explore = (variance_ucb * n.ln() / n_i).sqrt();
-
-                // let (selected_move, _) = self.get_best_movement(mcts_config, node_visits);
-
-                info!(
-                    "[{}] - {:.4}  {:.4}   {}",
-                    Movement::from_usize(action),
-                    avg_reward,
-                    explore,
-                    n_i,
-                );
-            } else {
-                info!(" {}", Movement::from_usize(action));
-            }
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-struct RegretMatching {
-    regret: [f32; 4],
-    cumulative_p: [f32; 4],
-    mask: [bool; 4],
-}
-
-impl RegretMatching {
-    fn new(mask: [bool; 4]) -> RegretMatching {
-        RegretMatching {
-            regret: [0f32; 4],
-            cumulative_p: [0f32; 4],
-            mask: mask,
-        }
-    }
-}
-
-impl Formula for RegretMatching {
-
-    fn get_best_movement(&mut self, config: &MCTSConfig, _node_visits: u32) -> (usize, ActionContext) {
-        let rng = &mut rand::thread_rng();
-        let available_actions: Vec<_> = (0..4)
-            .filter(|&m| self.mask[m])
-            .collect();
-
-        if available_actions.is_empty() {
-            return (0, ActionContext::RM(1.0 / available_actions.len() as f32));
-        }
-
-        let positive_regret: Vec<_> = available_actions.iter()
-            .map(|&a| self.regret[a].max(0.0))
-            .collect();
-
-        let positive_regret_sum: f32 = positive_regret.iter().sum();
-        let mut p = if positive_regret_sum == 0.0 {
-            vec![1.0 / available_actions.len() as f32; available_actions.len()]
-        } else {
-            positive_regret.iter().map(|r| r/positive_regret_sum).collect()
-        };
-
-        for (pi, &a) in &mut p.iter_mut().zip(available_actions.iter()) {
-            *pi = (1.0 - config.y) * (*pi) + config.y / available_actions.len() as f32;
-
-            self.cumulative_p[a] += *pi;
-        }
-
-        let dist = WeightedIndex::new(&p).unwrap();
-        let best_index = dist.sample(rng);
-        let best_action = available_actions[best_index];
-
-        (best_action, ActionContext::RM(p[best_index]))
-    }
-
-    fn get_final_movement(&self, _mcts_config: &MCTSConfig, node_visits: u32) -> Movement {
-        let n = node_visits as f32;
-        // TODO: try max(0, pi / visits - 1 / moves_count)
-        let (best_movement, _) = self.cumulative_p
-            .iter()
-            .enumerate()
-            .filter(|(a, _)| self.mask[*a])
-            .map(|(a, pi)| (a, *pi / n))
-            .max_by(|(_, a_normalized_pi), (_, b_normalized_pi),| a_normalized_pi.total_cmp(b_normalized_pi))
-            .unwrap_or((0, 0.0));
-
-        Movement::from_usize(best_movement)
-    }
-
-    fn backpropagate(&mut self, reward: f32, movement: usize, action_context: ActionContext) {
-        match action_context {
-            ActionContext::RM(p) => {
-                for r in &mut self.regret {
-                    *r -= reward;
-                }
-
-                // let k = self.mask.iter().filter(|&&m| m).count() as f32;
-                self.regret[movement] += reward / p;
-            },
-            _ => panic!("Wrong context"),
-        }
-    }
-
-    fn print_stats(&self, _mcts_config: &MCTSConfig, node_visits: u32) {
-        info!("RM");
-        let visits = node_visits as f32;
-        self.cumulative_p
-            .iter()
-            .enumerate()
-            .filter(|(a, _)| self.mask[*a])
-            .for_each(|(a, pi)| info!("{} {}", Movement::from_usize(a), *pi / visits));
-    }
-}
-
-#[derive(Clone)]
-enum ActionContext {
-    UCB,
-    RM(f32),
-}
+// TODO: cfg for ucb and thompson
+type Strategy = UCB;
 
 struct Node {
     visits: u32,
@@ -220,7 +23,7 @@ struct Node {
 
 struct Agent {
     id: usize,
-    data: Box<dyn Formula + Send>,
+    bandit: Strategy,
 }
 
 impl Node {
@@ -296,10 +99,9 @@ impl MCTS {
 
         for agent in node.agents.iter() {
             info!("Snake {}", agent.id);
-            agent.data.print_stats(&self.config, node.visits);
+            agent.bandit.print_stats(&self.config, node.visits);
         }
     }
-
 
     pub fn search(&mut self, board: &Board, iterations_count: u32) {
         for _i in 0..iterations_count {
@@ -339,8 +141,6 @@ impl MCTS {
             let n = node.visits;
 
             // TODO: This is ugly. Maybe change snake_strategy on simple arguments pass.
-            let mut action_contexts = vec![ActionContext::UCB; node.agents.len()];
-
             let joint_action = advance_one_step_with_settings(
                 &mut board,
                 &mut engine_settings,
@@ -348,76 +148,51 @@ impl MCTS {
                     let agent_index = node.get_agent_index(i);
                     let agent = &mut node.agents[agent_index];
 
-                    let (best_action, context) = agent.data.get_best_movement(&self.config, n);
-                    action_contexts[agent_index] = context;
+                    let best_action = agent.bandit.get_best_movement(&self.config, n);
                     Action::Move(Movement::from_usize(best_action))
                 }
             );
 
-            path.push((node, joint_action, action_contexts));
+            path.push((node, joint_action));
         }
 
         let expansion_board = board.clone();
-        // let start_rollout = Instant::now() - start;
         let rewards = self.rollout(&mut board);
-        // let start_backpropagate = Instant::now() - start;
         self.backpropagate(path, rewards);
-        // let start_exapantion = Instant::now() - start;
         if !expansion_board.is_terminal() {
             self.expansion(&expansion_board);
         }
     }
 
     fn expansion(&mut self, board: &Board) {
-        // let start = Instant::now();
-        let masks = get_masks_with_risk_flag(board);
-        // let mask_duration = Instant::now() - start;
+        let masks = get_masks(board);
         let agents = masks
             .into_iter()
-            .map(|(agent, mask, risk)| {
-                if risk {
-                    Agent {
-                        id: agent,
-                        data: Box::new(RegretMatching::new(mask))
-                    }
-                } else {
-                    Agent {
-                        id: agent,
-                        data: Box::new(UCB::new(mask))
-                    }
+            .map(|(agent_id, mask)| {
+                Agent {
+                    id: agent_id,
+                    bandit: Strategy::new(mask)
                 }
             })
             .collect();
-        // let agent_duration = Instant::now() - start;
-
+        
         let node = Node::new(agents);
-        // let node_create = Instant::now() - start;
-
         let board_clone = board.clone();
-        // let board_clone_time = Instant::now() - start;
-
-        // let c = self.nodes.capacity();
         self.nodes.insert(board_clone, RefCell::new(node));
-        // let c_new = self.nodes.capacity();
-
-        // let end = Instant::now() - start;
-        // if end > Duration::from_millis(10) {
-        //     info!("EX {:?} {:?} {:?} {:?} {:?} {} {} {}", mask_duration, agent_duration, node_create, board_clone_time, end, self.nodes.len(), c, c_new);
-        // }
     }
 
-    fn backpropagate(&self, path: Vec<(RefMut<Node>, Vec<(usize, Action)>, Vec<ActionContext>)>, rewards: Vec<f32>) {
-        for (mut node, joint_action, action_contexts) in path {
+    fn backpropagate(&self, path: Vec<(RefMut<Node>, Vec<(usize, Action)>)>, rewards: Vec<f32>) {
+        for (mut node, joint_action) in path {
             node.visits += 1;
 
-            for ((agent, Action::Move(movement)), action_context) in joint_action.into_iter().zip(action_contexts.into_iter()) {
+            for (agent, Action::Move(movement)) in joint_action.into_iter() {
                 let agent_index = node.get_agent_index(agent);
 
                 let reward = rewards[agent];
                 let movement = movement as usize;
 
                 let agent = &mut node.agents[agent_index];
-                agent.data.backpropagate(reward, movement, action_context);
+                agent.bandit.backpropagate(reward, movement);
             }
         }
     }
@@ -481,58 +256,8 @@ impl GetBestMovement for MCTS {
         let node = self.nodes[board].borrow();
         let agent_index = node.get_agent_index(agent);
         let agent = &node.agents[agent_index];
-        agent.data.get_final_movement(&self.config, node.visits)
+        agent.bandit.get_final_movement(&self.config, node.visits)
     }
-}
-
-fn get_masks_with_risk_flag(board: &Board) -> Vec<(usize, [bool; 4], bool)> {
-    let tails: Vec<_> = board.snakes
-        .iter()
-        .filter(|snake| snake.is_alive())
-        .map(|snake| *snake.body.back().unwrap())
-        .collect();
-
-    let mut all_movement_positions = HashMap::new();
-
-    let masks: Vec<_> = board.snakes
-        .iter()
-        .enumerate()
-        .filter(|(_, snake)| snake.is_alive())
-        .map(|(snake_id, snake)| {
-            let mut movement_mask = [false; 4];
-            let movement_positions = get_movement_positions(snake.body[0]);
-
-            for (&movement_position, &movement) in movement_positions.iter().zip(MOVEMENTS.iter()) {
-                if board.contains(movement_position) && (tails.contains(&movement_position)
-                        || board.objects[movement_position] != Object::BodyPart) {
-
-                    movement_mask[movement as usize] = true;
-
-                    if let Some(multiple_snakes) = all_movement_positions.get_mut(&movement_position) {
-                        *multiple_snakes = true;
-                    } else {
-                        all_movement_positions.insert(movement_position, false);
-                    }
-                }
-            }
-
-            (snake_id, movement_mask, movement_positions)
-        })
-        .collect();
-
-    // info!("{:?}", movement_position_max_body);
-    masks.into_iter()
-        .map(|(snake_id, movement_mask, movement_positions)| {
-            let mut risk = false;
-            for (mask, position) in movement_mask.iter().zip(movement_positions.iter()) {
-                if *mask && *all_movement_positions.get(position).unwrap() {
-                    risk = true;
-                    break;
-                }
-            }
-            (snake_id, movement_mask, risk)
-        })
-        .collect()
 }
 
 fn get_masks(board: &Board) -> Vec<(usize, [bool; 4])> {
@@ -563,14 +288,14 @@ fn get_masks(board: &Board) -> Vec<(usize, [bool; 4])> {
         .collect()
 }
 
-fn get_movement_positions(position: Point) -> [Point; 4] {
-    [
-        get_movement_position(position, MOVEMENTS[0]),
-        get_movement_position(position, MOVEMENTS[1]),
-        get_movement_position(position, MOVEMENTS[2]),
-        get_movement_position(position, MOVEMENTS[3]),
-    ]
-}
+// fn get_movement_positions(position: Point) -> [Point; 4] {
+//     [
+//         get_movement_position(position, MOVEMENTS[0]),
+//         get_movement_position(position, MOVEMENTS[1]),
+//         get_movement_position(position, MOVEMENTS[2]),
+//         get_movement_position(position, MOVEMENTS[3]),
+//     ]
+// }
 
 fn get_movement_position(position: Point, movement: Movement) -> Point {
     match movement {
