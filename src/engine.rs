@@ -5,7 +5,7 @@ use crate::game::{
     Board,
     MAX_SNAKE_COUNT,
     Object,
-    Point,
+    Point, Rectangle,
 };
 
 pub use crate::api::objects::Movement;
@@ -102,24 +102,42 @@ pub mod food_spawner {
 pub mod safe_zone_shrinker {
     use super::*;
 
-    pub fn shrink(board: &mut Board, side: Movement) {
-        if board.safe_zone.empty() {
-            return;
-        }
-        match side {
-            Movement::Left => board.safe_zone.p0.x += 1,
-            Movement::Down => board.safe_zone.p0.y += 1,
-            Movement::Up => board.safe_zone.p1.y -= 1,
-            Movement::Right => board.safe_zone.p1.x -= 1,
-        }
-    }
-
     // TODO: pub fn standard
     pub fn standard(board: &mut Board) {
-        if board.turn != 0 && board.turn % 20 == 0 {
-            let side: Movement = rand::random();
-            shrink(board, side);
+        if board.turn == 3 {
+            // NOTE: To fill guessed hazard
+            board.hazard[board.hazard_start] = true;
+            return;
         }
+        if board.turn % 3 != 0 {
+            return;
+        }
+
+        let mut hazard_index = board.turn / 3 - 2;
+        let mut round = 8;
+        let mut quater = 2;
+        while round < hazard_index {
+            hazard_index -= round;
+            quater += 1;
+            round += 8;
+        }
+
+        let quater_index = hazard_index / quater;
+        hazard_index %= quater;
+
+        let new_hazard_shift = match quater_index {
+            // Up right
+            0 => Point {x: hazard_index, y: quater - 1},
+            // Right down
+            1 => Point {x: quater - 1, y: -hazard_index},
+            // Down left
+            2 => Point {x: -hazard_index, y: -quater + 1},
+            // Left up
+            3 => Point {x: -quater + 1, y: hazard_index},
+            _ => unreachable!(),
+        };
+        
+        board.hazard[board.hazard_start + new_hazard_shift] = true;
     }
 
     pub fn noop(_: &mut Board) {
@@ -170,8 +188,24 @@ pub fn advance_one_step_with_settings(
 
             let snake = &mut board.snakes[i];
             debug_assert!(snake.body.len() > 0);
+            
+            let mut head_position = snake.body[0] + movement.to_direction();
+            if cfg!(rules = "wrapped") {
+                if head_position.x < 0 {
+                    head_position.x = board.size.x - 1;
+                } else
+                if head_position.y < 0 {
+                    head_position.y = board.size.y - 1;
+                } else
+                if head_position.x == board.size.x {
+                    head_position.x = 0;
+                } else
+                if head_position.y == board.size.y {
+                    head_position.y = 0;
+                }
+            }
 
-            snake.body.push_front(snake.body[0] + movement.to_direction());
+            snake.body.push_front(head_position);
             let old_tail = snake.body.pop_back().unwrap();
             snake.health -= 1;
 
@@ -250,7 +284,6 @@ pub fn advance_one_step_with_settings(
     //     - Collided with another Battlesnake
     //     - Collided head-to-head and lost
     {
-
         let mut died_snakes = ArrayVec::<usize, MAX_SNAKE_COUNT>::new();
 
         for (&i, &object_under_head) in alive_snakes.iter().zip(&objects_under_head) {
@@ -287,7 +320,7 @@ pub fn advance_one_step_with_settings(
     // - Maybe shrink safe zone
     {
         for &i in alive_snakes.iter() {
-            if !board.safe_zone.contains(board.snakes[i].body[0]) {
+            if board.hazard[board.snakes[i].body[0]] {
                 board.snakes[i].health -= 15;
             }
         }

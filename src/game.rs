@@ -1,6 +1,9 @@
 use std::collections::VecDeque;
 use std::ops::{Add, AddAssign};
 use std::hash::{Hash, Hasher};
+use rand::thread_rng;
+use rand::Rng;
+
 use crate::api;
 use crate::vec2d::Vec2D;
 
@@ -12,7 +15,8 @@ pub struct Board {
     pub foods: Vec<Point>,
     pub snakes: Vec<Snake>,
     pub turn: i32,
-    pub safe_zone: Rectangle,
+    pub hazard: Vec2D<bool>,
+    pub hazard_start: Point,
     pub objects: Vec2D<Object>,
 }
 
@@ -46,6 +50,16 @@ impl Board {
         // TODO: validate that everything is inbounds.
         let objects = Self::calculate_objects(state_api);
 
+        let hazard_start = if state_api.turn < 3 {
+            let mut rnd = thread_rng();
+            Point {
+                x: rnd.gen_range(0..board_api.width),
+                y: rnd.gen_range(0..board_api.width),
+            }
+        } else {
+            board_api.hazards[0]
+        };
+
         Board {
             size: Point {
                 x: board_api.width,
@@ -54,7 +68,8 @@ impl Board {
             foods: board_api.food.clone(), // TODO: reserve capacity
             snakes: board_api.snakes.iter().map(Snake::from_api).collect(),
             turn: state_api.turn as i32,
-            safe_zone: Self::calcualate_safe_zone(board_api),
+            hazard: Self::calcualate_hazard(board_api),
+            hazard_start: hazard_start,
             objects: objects,
         }
     }
@@ -99,49 +114,20 @@ impl Board {
         objects
     }
 
-    fn calcualate_safe_zone(board_api : &api::objects::Board) -> Rectangle {
-        let is_safe = {
-            let mut mask = Vec2D::init_same(board_api.width as usize, board_api.height as usize, true);
-
-            for &p in &board_api.hazards {
-                mask[p] = false;
-            }
-
-            mask
-        };
-
-        let mut safe_zone = Rectangle {
-            p0: Point { x: board_api.width, y: board_api.height },
-            p1: Point { x: -1, y: -1 },
-        };
-
-        for x in 0..board_api.width {
-            for y in 0..board_api.height {
-                if is_safe[(x, y)] {
-                    safe_zone.p0.x = safe_zone.p0.x.min(x as i32);
-                    safe_zone.p1.x = safe_zone.p1.x.max(x as i32);
-                    safe_zone.p0.y = safe_zone.p0.y.min(y as i32);
-                    safe_zone.p1.y = safe_zone.p1.y.max(y as i32);
-                }
-            }
+    fn calcualate_hazard(board_api : &api::objects::Board) -> Vec2D<bool> {
+        let mut hazard = Vec2D::init_same(board_api.width as usize, board_api.height as usize, false);
+        
+        for &p in &board_api.hazards {
+            hazard[p] = true;
         }
 
-        // Add one to include borders ( rectangle represents [p0.x, p1.x) × [p0.y, p1.y) )
-        safe_zone.p1.x += 1;
-        safe_zone.p1.y += 1;
-
-        if safe_zone.empty() {
-            Rectangle { p0: Point::ZERO, p1: Point::ZERO }
-        }
-        else {
-            safe_zone
-        }
+        hazard
     }
 }
 
 impl Hash for Board {
     fn hash<H>(&self, state: &mut H) where H: Hasher {
-        (&self.snakes, &self.foods, &self.safe_zone).hash(state);
+        (&self.snakes, &self.foods, &self.hazard).hash(state);
     }
 }
 
