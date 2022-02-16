@@ -115,29 +115,43 @@ pub mod safe_zone_shrinker {
 
         let mut hazard_index = board.turn / 3 - 2;
         let mut round = 8;
-        let mut quater = 2;
+        let mut eighth = 1;
         while round < hazard_index {
             hazard_index -= round;
-            quater += 1;
+            eighth += 1;
             round += 8;
         }
+        let quater = eighth * 2;
 
-        let quater_index = hazard_index / quater;
-        hazard_index %= quater;
+        let quater_index;
+        if hazard_index < eighth {
+            quater_index = 0;
+            hazard_index += eighth
+        } else
+        if hazard_index >= eighth * 7 {
+            quater_index = 0;
+            hazard_index -= eighth * 7;
+        } else {
+            quater_index = hazard_index / quater;
+            hazard_index %= quater;
+        }
 
         let new_hazard_shift = match quater_index {
             // Up right
-            0 => Point {x: hazard_index, y: quater - 1},
+            0 => Point {x: hazard_index - eighth, y: eighth},
             // Right down
-            1 => Point {x: quater - 1, y: -hazard_index},
+            1 => Point {x: eighth, y: eighth - hazard_index},
             // Down left
-            2 => Point {x: -hazard_index, y: -quater + 1},
+            2 => Point {x: eighth - hazard_index, y: -eighth},
             // Left up
-            3 => Point {x: -quater + 1, y: hazard_index},
+            3 => Point {x: -eighth, y: hazard_index - eighth},
             _ => unreachable!(),
         };
         
-        board.hazard[board.hazard_start + new_hazard_shift] = true;
+        let new_hazard_position = board.hazard_start + new_hazard_shift;
+        if board.contains(new_hazard_position) {
+            board.hazard[new_hazard_position] = true;
+        }
     }
 
     pub fn noop(_: &mut Board) {
