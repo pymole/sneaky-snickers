@@ -190,21 +190,19 @@ pub fn advance_one_step_with_settings(
             debug_assert!(snake.body.len() > 0);
             
             let mut head_position = snake.body[0] + movement.to_direction();
-            if cfg!(rules = "wrapped") {
-                if head_position.x < 0 {
-                    head_position.x = board.size.x - 1;
-                } else
-                if head_position.y < 0 {
-                    head_position.y = board.size.y - 1;
-                } else
-                if head_position.x == board.size.x {
-                    head_position.x = 0;
-                } else
-                if head_position.y == board.size.y {
-                    head_position.y = 0;
-                }
+            if head_position.x < 0 {
+                head_position.x = board.size.x - 1;
+            } else
+            if head_position.y < 0 {
+                head_position.y = board.size.y - 1;
+            } else
+            if head_position.x == board.size.x {
+                head_position.x = 0;
+            } else
+            if head_position.y == board.size.y {
+                head_position.y = 0;
             }
-
+            
             snake.body.push_front(head_position);
             let old_tail = snake.body.pop_back().unwrap();
             snake.health -= 1;
