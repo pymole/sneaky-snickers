@@ -3,11 +3,15 @@ mod api;
 mod game;
 mod engine;
 mod bandit;
-mod ucb;
 mod solver;
 mod vec2d;
 mod mcts;
 mod parallelization;
+
+// #[cfg(all(not(feature = "ucb"), feature = "thompson"))]
+mod thompson;
+// #[cfg(all(not(feature = "thompson"), feature = "ucb"))]
+// mod ucb;
 
 #[cfg(test)]
 mod test_data;

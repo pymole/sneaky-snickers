@@ -8,12 +8,20 @@ use std::str::FromStr;
 use crate::api::objects::Movement;
 use crate::engine::{Action, EngineSettings, MOVEMENTS, advance_one_step_with_settings, food_spawner, safe_zone_shrinker};
 use crate::game::{Board, Object, Point, Snake};
-use crate::ucb::UCB;
 use crate::bandit::MultiArmedBandit;
 
 
 // TODO: cfg for ucb and thompson
-type Strategy = UCB;
+// #[cfg(strategy = "ucb")]
+// use crate::ucb::UCB;
+// #[cfg(strategy = "ucb")]
+// type Strategy = UCB;
+
+// #[cfg(strategy = "thompson")]
+use crate::thompson::ThompsonSampling;
+// #[cfg(strategy = "thompson")]
+type Strategy = ThompsonSampling;
+
 
 struct Node {
     visits: u32,
