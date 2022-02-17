@@ -276,10 +276,8 @@ fn get_masks(board: &Board) -> Vec<(usize, [bool; 4])> {
             MOVEMENTS
                 .iter()
                 .for_each(|&movement| {
-                    let movement_position = get_movement_position(snake.body[0], movement);
-                    if board.contains(movement_position)
-                        && (tails.contains(&movement_position)
-                            || board.objects[movement_position] != Object::BodyPart) {
+                    let movement_position = get_movement_position(snake.body[0], movement, board.size);
+                    if tails.contains(&movement_position) || board.objects[movement_position] != Object::BodyPart {
                         movement_mask[movement as usize] = true;
                     }
                 });
@@ -297,11 +295,11 @@ fn get_masks(board: &Board) -> Vec<(usize, [bool; 4])> {
 //     ]
 // }
 
-fn get_movement_position(position: Point, movement: Movement) -> Point {
+fn get_movement_position(position: Point, movement: Movement, borders: Point) -> Point {
     match movement {
-        Movement::Right => Point {x: position.x + 1, y: position.y},
-        Movement::Left => Point {x: position.x - 1, y: position.y},
-        Movement::Up => Point {x: position.x, y: position.y + 1},
-        Movement::Down => Point {x: position.x, y: position.y - 1},
+        Movement::Right => Point {x: (position.x + 1) % borders.x, y: position.y},
+        Movement::Left => Point {x: (borders.x + position.x - 1) % borders.x, y: position.y},
+        Movement::Up => Point {x: position.x, y: (position.y + 1) % borders.y },
+        Movement::Down => Point {x: position.x, y: (borders.y + position.y - 1) % borders.y},
     }
 }

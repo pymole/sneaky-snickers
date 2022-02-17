@@ -121,7 +121,6 @@ pub mod safe_zone_shrinker {
             eighth += 1;
             round += 8;
         }
-        let quater = eighth * 2;
 
         let quater_index;
         if hazard_index < eighth {
@@ -132,6 +131,7 @@ pub mod safe_zone_shrinker {
             quater_index = 0;
             hazard_index -= eighth * 7;
         } else {
+            let quater = eighth * 2;
             quater_index = hazard_index / quater;
             hazard_index %= quater;
         }
