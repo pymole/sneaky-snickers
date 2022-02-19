@@ -1,4 +1,6 @@
 use rand::seq::SliceRandom;
+use rand::prelude::*;
+use rand::thread_rng;
 use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
 use std::env;
@@ -236,19 +238,24 @@ impl MCTS {
                 &mut |snake, _| *actions.get(&snake).unwrap()
             );
         }
-
+        
         let alive_count = board.snakes.iter().filter(|snake| snake.is_alive()).count();
         let beta = self.config.rollout_beta;
         let health_norm : f32 = board.snakes.iter().map(|snake| (snake.health as f32).powf(beta)).sum();
-
-        let reward = |snake: &Snake|
-            if alive_count == 0 { self.config.draw_reward }
+        let reward = |snake: &Snake| {
+            let r = if alive_count == 0 {
+                self.config.draw_reward
+            }
             else {
                 (snake.is_alive() as u32 as f32) / (alive_count as f32)
                 * (snake.health as f32).powf(beta) / health_norm
-            } ;
+            };
+            let sampled_r: f32 = rand::random();
+            if sampled_r < r { 1.0 } else { 0.0 }
+        };
 
         let rewards = board.snakes.iter().map(reward).collect();
+        
 
         // info!("Started at {} turn and rolled out with {} turns and rewards {:?}", start_turn, board.turn - start_turn, rewards);
         rewards

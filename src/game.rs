@@ -50,7 +50,7 @@ impl Board {
         // TODO: validate that everything is inbounds.
         let objects = Self::calculate_objects(state_api);
 
-        let hazard_start = if state_api.turn < 3 {
+        let hazard_start = if state_api.turn < 3 || board_api.hazards.len() == 0 {
             let mut rnd = thread_rng();
             Point {
                 x: rnd.gen_range(0..board_api.width),

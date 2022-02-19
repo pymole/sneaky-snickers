@@ -3,6 +3,7 @@ use crate::mcts::MCTSConfig;
 use crate::engine::Movement;
 use rand::distributions::Distribution;
 use statrs::distribution::Beta;
+use statrs::statistics::{Distribution as StatsDistribution};
 
 
 #[derive(Clone, Debug)]
@@ -20,30 +21,38 @@ impl ThompsonSampling {
     }
 }
 
-fn _get_best_movement(ts: &ThompsonSampling) -> usize {
-    let mut max_action = 0;
-    let mut max_v = -1.0;
-
-    for action in (0..4).filter(|&m| ts.mask[m]) {
-        let beta = ts.beta_distributions[action];
-        let v = beta.sample(&mut rand::thread_rng());
-
-        if v > max_v {
-            max_action = action;
-            max_v = v;
-        }
-    }
-
-    max_action
-}
-
 impl MultiArmedBandit for ThompsonSampling {
     fn get_best_movement(&mut self, _mcts_config: &MCTSConfig, _node_visits: u32) -> usize {
-        _get_best_movement(self)
+        let mut max_action = 0;
+        let mut max_v = -1.0;
+
+        for action in (0..4).filter(|&m| self.mask[m]) {
+            let beta = self.beta_distributions[action];
+            let v = beta.sample(&mut rand::thread_rng());
+
+            if v > max_v {
+                max_action = action;
+                max_v = v;
+            }
+        }
+
+        max_action
     }
 
     fn get_final_movement(&self, _mcts_config: &MCTSConfig, _node_visits: u32) -> Movement {
-        let best_movement = _get_best_movement(self);
+        let mut best_movement = 0;
+        let mut max_mean = -1.0;
+    
+        for action in (0..4).filter(|&m| self.mask[m]) {
+            let beta = self.beta_distributions[action];
+            let mean = beta.mean().unwrap();
+    
+            if mean > max_mean {
+                best_movement = action;
+                max_mean = mean;
+            }
+        }
+    
         Movement::from_usize(best_movement)
     }
 
