@@ -1,6 +1,4 @@
 use rand::seq::SliceRandom;
-use rand::prelude::*;
-use rand::thread_rng;
 use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
 use std::env;
@@ -13,17 +11,15 @@ use crate::game::{Board, Object, Point, Snake};
 use crate::bandit::MultiArmedBandit;
 
 
-// TODO: cfg for ucb and thompson
-// #[cfg(strategy = "ucb")]
-// use crate::ucb::UCB;
-// #[cfg(strategy = "ucb")]
-// type Strategy = UCB;
-
-// #[cfg(strategy = "thompson")]
-use crate::thompson::ThompsonSampling;
-// #[cfg(strategy = "thompson")]
-type Strategy = ThompsonSampling;
-
+cfg_if::cfg_if! {
+    if #[cfg(feature = "ts")] {
+        use crate::thompson::ThompsonSampling;
+        type Strategy = ThompsonSampling;
+    } else {
+        use crate::ucb::UCB;
+        type Strategy = UCB;
+    }
+}
 
 struct Node {
     visits: u32,
