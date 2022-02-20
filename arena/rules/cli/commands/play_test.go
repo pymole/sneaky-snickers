@@ -1,9 +1,10 @@
 package commands
 
 import (
-	"github.com/BattlesnakeOfficial/rules"
-	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/BattlesnakeOfficial/rules"
+	"github.com/BattlesnakeOfficial/rules/test"
 )
 
 func TestGetIndividualBoardStateForSnake(t *testing.T) {
@@ -14,9 +15,28 @@ func TestGetIndividualBoardStateForSnake(t *testing.T) {
 		Width:  11,
 		Snakes: []rules.Snake{s1, s2},
 	}
-	bs := Battlesnake{Name: "one", URL: "", ID: "one"}
-	requestBody := getIndividualBoardStateForSnake(state, bs, nil, &rules.StandardRuleset{})
+	s1State := SnakeState{
+		ID:    "one",
+		Name:  "ONE",
+		URL:   "http://example1.com",
+		Head:  "safe",
+		Tail:  "curled",
+		Color: "#123456",
+	}
+	s2State := SnakeState{
+		ID:    "two",
+		Name:  "TWO",
+		URL:   "http://example2.com",
+		Head:  "silly",
+		Tail:  "bolt",
+		Color: "#654321",
+	}
+	snakeStates := map[string]SnakeState{
+		s1State.ID: s1State,
+		s2State.ID: s2State,
+	}
+	snakeRequest := getIndividualBoardStateForSnake(state, s1State, snakeStates, &rules.StandardRuleset{})
+	requestBody := serialiseSnakeRequest(snakeRequest)
 
-	expected := "{\"game\":{\"id\":\"\",\"timeout\":500,\"ruleset\":{\"name\":\"standard\",\"version\":\"cli\"}},\"turn\":0,\"board\":{\"height\":11,\"width\":11,\"food\":[],\"hazards\":[],\"snakes\":[{\"id\":\"one\",\"name\":\"\",\"health\":0,\"body\":[{\"x\":3,\"y\":3}],\"latency\":\"0\",\"head\":{\"x\":3,\"y\":3},\"length\":1,\"shout\":\"\",\"squad\":\"\"},{\"id\":\"two\",\"name\":\"\",\"health\":0,\"body\":[{\"x\":4,\"y\":3}],\"latency\":\"0\",\"head\":{\"x\":4,\"y\":3},\"length\":1,\"shout\":\"\",\"squad\":\"\"}]},\"you\":{\"id\":\"one\",\"name\":\"\",\"health\":0,\"body\":[{\"x\":3,\"y\":3}],\"latency\":\"0\",\"head\":{\"x\":3,\"y\":3},\"length\":1,\"shout\":\"\",\"squad\":\"\"}}"
-	require.Equal(t, expected, string(requestBody))
+	test.RequireJSONMatchesFixture(t, "testdata/snake_request_body.json", string(requestBody))
 }
