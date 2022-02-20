@@ -5,7 +5,7 @@ use crate::game::{
     Board,
     MAX_SNAKE_COUNT,
     Object,
-    Point, Rectangle,
+    Point,
 };
 
 pub use crate::api::objects::Movement;
@@ -249,9 +249,9 @@ pub fn advance_one_step_with_settings(
     //     - Additional body part placed on top of current tail (this will extend their visible length by one on the
     //       next turn).
     //     - The food is removed from the board.
+    let mut snake_ate_food = [false; MAX_SNAKE_COUNT];
     {
         let mut eaten_food = ArrayVec::<Point, MAX_SNAKE_COUNT>::new();
-
         for (&i, &object_under_head) in alive_snakes.iter().zip(&objects_under_head) {
             let snake = &mut board.snakes[i];
             let head = snake.body[0];
@@ -266,9 +266,9 @@ pub fn advance_one_step_with_settings(
             snake.body.push_back(tail);
             debug_assert_eq!(board.objects[tail], Object::BodyPart);
             eaten_food.push(head);
+            snake_ate_food[i] = true;
         }
-
-        for food in eaten_food {
+        for &food in eaten_food.iter() {
             if let Some(food_position) = board.foods.iter().position(|&x| x == food) {
                 board.foods.swap_remove(food_position);
                 board.objects[food] = Object::Empty;
@@ -332,8 +332,8 @@ pub fn advance_one_step_with_settings(
     // - Maybe shrink safe zone
     {
         for &i in alive_snakes.iter() {
-            if board.hazard[board.snakes[i].body[0]] {
-                board.snakes[i].health -= 15;
+            if !snake_ate_food[i] && board.hazard[board.snakes[i].body[0]] {
+                board.snakes[i].health -= 14;
             }
         }
 
