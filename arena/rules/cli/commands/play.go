@@ -214,6 +214,13 @@ func getRuleset(seed int64, snakeStates map[string]SnakeState) rules.Ruleset {
 		ruleset = &rules.WrappedRuleset{
 			StandardRuleset: standard,
 		}
+	case "wrapped+spiral":
+		ruleset = &rules.WrappedSpiralRuleset{
+			WrappedRuleset: rules.WrappedRuleset{
+				StandardRuleset: standard,
+			},
+			Seed: seed,
+		}
 	case "constrictor":
 		ruleset = &rules.ConstrictorRuleset{
 			StandardRuleset: standard,
