@@ -175,8 +175,10 @@ pub fn advance_one_step_with_settings(
     engine_settings: &mut EngineSettings,
     snake_strategy: SnakeStrategy
 ) -> Vec<(usize, Action)> {
+    board.zobrist_hash.xor_turn(board.turn);
     board.turn += 1;
-
+    board.zobrist_hash.xor_turn(board.turn);
+    
     let alive_snakes: ArrayVec<usize, MAX_SNAKE_COUNT> = (0..board.snakes.len())
         .filter(|&i| board.snakes[i].is_alive())
         .collect();
@@ -202,32 +204,43 @@ pub fn advance_one_step_with_settings(
 
             let snake = &mut board.snakes[i];
             debug_assert!(snake.body.len() > 0);
+            let head_position = snake.body[0];
             
-            let mut head_position = snake.body[0] + movement.to_direction();
-            if head_position.x < 0 {
-                head_position.x = board.size.x - 1;
+            let mut new_head_position = head_position + movement.to_direction();
+            if new_head_position.x < 0 {
+                new_head_position.x = board.size.x - 1;
             } else
-            if head_position.y < 0 {
-                head_position.y = board.size.y - 1;
+            if new_head_position.y < 0 {
+                new_head_position.y = board.size.y - 1;
             } else
-            if head_position.x == board.size.x {
-                head_position.x = 0;
+            if new_head_position.x == board.size.x {
+                new_head_position.x = 0;
             } else
-            if head_position.y == board.size.y {
-                head_position.y = 0;
+            if new_head_position.y == board.size.y {
+                new_head_position.y = 0;
             }
-            
-            snake.body.push_front(head_position);
-            let old_tail = snake.body.pop_back().unwrap();
-            snake.health -= 1;
 
+            snake.health -= 1;
+            
+            snake.body.push_front(new_head_position);
+            
+            // Old head position replaced with body part
+            board.zobrist_hash.xor_snake_head(head_position, i);
+            board.zobrist_hash.xor_snake_body_part(head_position, i);
+
+            let old_tail = snake.body.pop_back().unwrap();
             debug_assert_eq!(board.objects[old_tail], Object::BodyPart);
+            let new_tail = snake.body[snake.body.len() - 1];
+            // Only one snake piece on the cell supported. Prevert multiple xors.
+            if new_tail != old_tail {
+                board.zobrist_hash.xor_snake_body_part(old_tail, i);
+            }
 
             // TODO: benchmark alternative: if *snake.body.back().unwrap() != old_tail {
             board.objects[old_tail] = Object::Empty;
-            board.objects[*snake.body.back().unwrap()] = Object::BodyPart;
+            board.objects[new_tail] = Object::BodyPart;
 
-            // The head will be set in a separate loop.
+            // The head and its zobrist hash will be set in a separate loop.
         }
     }
 
@@ -272,11 +285,14 @@ pub fn advance_one_step_with_settings(
             if let Some(food_position) = board.foods.iter().position(|&x| x == food) {
                 board.foods.swap_remove(food_position);
                 board.objects[food] = Object::Empty;
+                board.zobrist_hash.xor_food(food);
             }
         }
     }
 
     // 3. Any new food spawning will be placed in empty objects on the board.
+    // TODO: Fix bag when food generated under new head position.
+    //  At this moment new head positions are empty
     {
         (engine_settings.food_spawner)(board);
     }
@@ -348,11 +364,14 @@ pub fn advance_one_step_with_settings(
                 board.snakes[i].health = 0;
 
                 if object_under_head != Object::BodyPart {
-                    board.objects[board.snakes[i].body[0]] = Object::Empty;
+                    let head_pos = board.snakes[i].body[0];
+                    board.objects[head_pos] = Object::Empty;
+                    board.zobrist_hash.xor_snake_head(head_pos, i);
                 }
 
                 for &p in board.snakes[i].body.iter().skip(1) {
                     board.objects[p] = Object::Empty;
+                    board.zobrist_hash.xor_snake_body_part(p, i);
                 }
             }
         }
@@ -360,7 +379,9 @@ pub fn advance_one_step_with_settings(
         // Restore alive heads, which were removed in previous loop in case of a head-to-head collision.
         for &i in alive_snakes.iter() {
             if board.snakes[i].is_alive() {
-                board.objects[board.snakes[i].body[0]] = Object::BodyPart;
+                let head_position = board.snakes[i].body[0];
+                board.objects[head_position] = Object::BodyPart;
+                board.zobrist_hash.xor_snake_head(head_position, i);
             }
         }
     }
@@ -378,7 +399,12 @@ mod tests {
     use super::*;
 
     fn create_board(api_str: &str) -> Board {
-        Board::from_api(&serde_json::from_str::<api::objects::State>(api_str).unwrap())
+        let state = serde_json::from_str::<api::objects::State>(api_str).unwrap();
+
+        let size = Point {x: state.board.width, y: state.board.height};
+        let players_count = state.board.snakes.len();
+    
+        Board::from_api(&state)
     }
 
     fn test_transition(state_before: &str, state_after: &str, snake_strategy: SnakeStrategy) {

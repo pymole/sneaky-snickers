@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate lazy_static;
+
 // #![feature(proc_macro_hygiene, decl_macro, total_cmp)]
 mod api;
 mod game;
@@ -7,6 +10,7 @@ mod solver;
 mod vec2d;
 mod mcts;
 mod parallelization;
+mod zobrist;
 
 
 cfg_if::cfg_if! {
@@ -43,21 +47,26 @@ use mcts::{MCTSConfig, MCTS, GetBestMovement};
 use engine::Movement;
 
 
+struct GameSession {
+    mcts: Option<MCTS>,
+    my_index: usize,
+}
+
 struct Storage {
-    mcts_instances: RwLock<HashMap<String, Mutex<MCTS>>>,
+    game_sessions: RwLock<HashMap<String, Mutex<GameSession>>>,
 }
 
 
 fn get_best_movement(mcts: &mut MCTS, board: &Board, agent: usize) -> Movement {
     if let Some(search_time) = mcts.config.search_time {
-        mcts.search_with_time(&board, search_time);
+        mcts.search_with_time(board, search_time);
     } else if let Some(iterations) = mcts.config.iterations {
-        mcts.search(&board, iterations);
+        mcts.search(board, iterations);
     } else {
         panic!("Provide MCTS_SEARCH_TIME or MCTS_ITERATIONS");
     }
 
-    mcts.get_best_movement(&board, agent)
+    mcts.get_best_movement(board, agent)
 }
 
 #[get("/")]
@@ -75,14 +84,25 @@ fn index() -> Json<api::responses::Info> {
 #[post("/start", data = "<body>")]
 fn start(body: String, storage: &State<Storage>) -> Status {
     info!("START - {}", body);
-    if env::var("MCTS_PERSISTENT").is_ok() {
-        let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
-
+    let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
+    let mcts = if env::var("MCTS_PERSISTENT").is_ok() {
         let config = MCTSConfig::from_env();
-        let mcts = MCTS::new(config);
+        Some(MCTS::new(config))
+    } else {
+        None
+    };
 
-        storage.mcts_instances.write().unwrap().insert(state.game.id, Mutex::new(mcts));
-    }
+    let my_index = state.board.snakes
+        .iter()
+        .position(|snake| snake.id == state.you.id)
+        .unwrap();
+
+    let game_session = GameSession {
+        mcts: mcts,
+        my_index: my_index,
+    };
+
+    storage.game_sessions.write().unwrap().insert(state.game.id, Mutex::new(game_session));
 
     Status::Ok
 }
@@ -98,33 +118,29 @@ fn movement(storage: &State<Storage>, body: String) -> Json<api::responses::Move
     info!("MOVE - {}", body);
     let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
 
+    let game_sessions = storage.game_sessions.read().unwrap();
+
+    let mut game_session = game_sessions.get(&state.game.id).unwrap().lock().unwrap();
+    let my_index = game_session.my_index;
     let board = Board::from_api(&state);
 
-    let my_index = state.board.snakes
-        .iter()
-        .position(|snake| snake.id == state.you.id)
-        .unwrap();
-
-    let movement = if let Some(mcts_mutex) = storage.mcts_instances.read().unwrap().get(&state.game.id) {
-        let mut mcts = mcts_mutex.lock().unwrap();
-        get_best_movement(&mut mcts, &board, my_index)
+    let movement = if let Some(mcts) = game_session.mcts.as_mut() {
+        get_best_movement(mcts, &board, my_index)
     } else {
         let config = MCTSConfig::from_env();
-        let mcts = &mut MCTS::new(config);
-        get_best_movement(mcts, &board, my_index)
+        let mut mcts = MCTS::new(config);
+        get_best_movement(&mut mcts, &board, my_index)
     };
 
-    let movement = api::responses::Move::new(movement);
-    Json(movement)
+    let move_ = api::responses::Move::new(movement);
+    Json(move_)
 }
 
 #[post("/end", data = "<body>")]
 fn end(storage: &State<Storage>, body: String) -> Status {
     info!("END - {}", body);
-    if env::var("MCTS_PERSISTENT").is_ok() {
-        let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
-        storage.mcts_instances.write().unwrap().remove(&state.game.id);
-    }
+    let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
+    storage.game_sessions.write().unwrap().remove(&state.game.id);
     Status::Ok
 }
 
@@ -148,6 +164,6 @@ fn rocket() -> _ {
             response.set_header(Header::new("Access-Control-Allow-Headers", "*"));
             response.set_header(Header::new("Access-Control-Allow-Credentials", "true"));
         })))
-        .manage(Storage {mcts_instances: RwLock::new(HashMap::new())})
+        .manage(Storage {game_sessions: RwLock::new(HashMap::new())})
         .mount("/", routes![index, start, movement, movement_options, end, flavored_flood_fill])
 }

@@ -267,6 +267,7 @@ impl GetBestMovement for MCTS {
         let node = self.nodes[board].borrow();
         let agent_index = node.get_agent_index(agent);
         let agent = &node.agents[agent_index];
+        
         agent.bandit.get_final_movement(&self.config, node.visits)
     }
 }

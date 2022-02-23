@@ -13,6 +13,7 @@ rand = "0.8.5"
 arrayvec = "0.7.2"
 statrs = "0.15.0"
 cfg-if = "0.1"
+lazy_static = "1.4.0"
 
 [features]
 default = ["ucb"]

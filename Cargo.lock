@@ -1270,6 +1270,7 @@ version = "0.1.0"
 dependencies = [
  "arrayvec",
  "cfg-if 0.1.10",
+ "lazy_static",
  "log",
  "log4rs",
  "rand",
