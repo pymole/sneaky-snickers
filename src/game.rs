@@ -6,7 +6,7 @@ use rand::Rng;
 
 use crate::api;
 use crate::vec2d::Vec2D;
-use crate::zobrist::ZobristHash;
+use crate::zobrist::{ZobristHash, body_direction};
 
 pub const MAX_SNAKE_COUNT: usize = 8;
 
@@ -24,12 +24,9 @@ pub struct Board {
 
 #[derive(PartialEq, Eq, Debug, Copy, Clone, Hash)]
 pub enum Object {
-    // Head used only in zobrist hash but maybe it can be used in the engine.rs
-    // Order is important for zobrist hash (head and body part used as indexes)
-    Head = 0,
-    BodyPart = 1,
-    Food = 2,
-    Empty = 3,
+    BodyPart,
+    Food,
+    Empty,
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Hash)]
@@ -117,7 +114,6 @@ impl Board {
                 Object::Empty => objects[*food] = Object::Food,
                 Object::BodyPart { .. } => unreachable!("Can't have food and snake body in the same square."),
                 Object::Food => unreachable!("Can't have two food pieces in the same square."),
-                Object::Head => unreachable!("Only for zobrist hash."),
             }
         }
 
@@ -137,15 +133,11 @@ impl Board {
     fn initial_zobrist_hash(zobrist_hash: &mut ZobristHash, state_api: &api::objects::State) {
         zobrist_hash.xor_turn(state_api.turn as i32);
         for (snake_index, snake) in state_api.board.snakes.iter().enumerate() {
-            zobrist_hash.xor_snake_head(snake.head, snake_index);
             for i in 1..snake.body.len() {
-                let body_part = snake.body[i];
-                // Only one snake piece on the cell supported. Prevert multiple xors.
-                // Cases of skip: eat food, start of the game.
-                if snake.body[i - 1] == body_part {
-                    break;
-                }
-                zobrist_hash.xor_snake_body_part(body_part, snake_index);
+                let prev = snake.body[i - 1];
+                let cur = snake.body[i];
+                let direction = body_direction(cur, prev);
+                zobrist_hash.xor_body_direction(cur, snake_index, direction);
             }
         }
     }

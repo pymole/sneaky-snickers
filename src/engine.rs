@@ -1,6 +1,7 @@
 use arrayvec::ArrayVec;
 use rand::distributions::{Distribution, Standard};
 use rand::Rng;
+use crate::zobrist::body_direction;
 use crate::game::{
     Board,
     MAX_SNAKE_COUNT,
@@ -76,7 +77,9 @@ pub mod food_spawner {
                 if board.objects[(x, y)] == Object::Empty {
                     if i == needle {
                         board.objects[(x, y)] = Object::Food;
-                        board.foods.push(Point { x: x as i32, y: y as i32 });
+                        let pos = Point { x: x as i32, y: y as i32 };
+                        board.foods.push(pos);
+                        board.zobrist_hash.xor_food(pos);
                         return;
                     }
 
@@ -224,23 +227,23 @@ pub fn advance_one_step_with_settings(
             
             snake.body.push_front(new_head_position);
             
-            // Old head position replaced with body part
-            board.zobrist_hash.xor_snake_head(head_position, i);
-            board.zobrist_hash.xor_snake_body_part(head_position, i);
+            // Move neck (first body part next to head)
+            let new_neck_direction = body_direction(head_position, new_head_position);
+            board.zobrist_hash.xor_body_direction(head_position, i, new_neck_direction);
 
+            // Remove old tail
             let old_tail = snake.body.pop_back().unwrap();
-            debug_assert_eq!(board.objects[old_tail], Object::BodyPart);
             let new_tail = snake.body[snake.body.len() - 1];
-            // Only one snake piece on the cell supported. Prevert multiple xors.
-            if new_tail != old_tail {
-                board.zobrist_hash.xor_snake_body_part(old_tail, i);
-            }
-
+            debug_assert_eq!(board.objects[old_tail], Object::BodyPart);
+            
+            let old_tail_direction = body_direction(old_tail, new_tail);
+            board.zobrist_hash.xor_body_direction(old_tail, i, old_tail_direction);
+            
             // TODO: benchmark alternative: if *snake.body.back().unwrap() != old_tail {
             board.objects[old_tail] = Object::Empty;
             board.objects[new_tail] = Object::BodyPart;
 
-            // The head and its zobrist hash will be set in a separate loop.
+            // The head will be set in a separate loop.
         }
     }
 
@@ -358,20 +361,22 @@ pub fn advance_one_step_with_settings(
 
     // Remove dead snakes from board.objects.
     {
-        for (&i, &object_under_head) in alive_snakes.iter().zip(&objects_under_head) {
-            if !board.snakes[i].is_alive() {
+        for (&snake_index, &object_under_head) in alive_snakes.iter().zip(&objects_under_head) {
+            let snake = &mut board.snakes[snake_index];
+            if !snake.is_alive() {
 
-                board.snakes[i].health = 0;
+                snake.health = 0;
 
                 if object_under_head != Object::BodyPart {
-                    let head_pos = board.snakes[i].body[0];
+                    let head_pos = snake.body[0];
                     board.objects[head_pos] = Object::Empty;
-                    board.zobrist_hash.xor_snake_head(head_pos, i);
                 }
 
-                for &p in board.snakes[i].body.iter().skip(1) {
-                    board.objects[p] = Object::Empty;
-                    board.zobrist_hash.xor_snake_body_part(p, i);
+                for i in 1..snake.body.len() {
+                    let body_part = snake.body[i];
+                    let body_part_direction = body_direction( body_part, snake.body[i - 1]);
+                    board.objects[body_part] = Object::Empty;
+                    board.zobrist_hash.xor_body_direction(body_part, snake_index, body_part_direction);
                 }
             }
         }
@@ -381,7 +386,6 @@ pub fn advance_one_step_with_settings(
             if board.snakes[i].is_alive() {
                 let head_position = board.snakes[i].body[0];
                 board.objects[head_position] = Object::BodyPart;
-                board.zobrist_hash.xor_snake_head(head_position, i);
             }
         }
     }
@@ -400,10 +404,6 @@ mod tests {
 
     fn create_board(api_str: &str) -> Board {
         let state = serde_json::from_str::<api::objects::State>(api_str).unwrap();
-
-        let size = Point {x: state.board.width, y: state.board.height};
-        let players_count = state.board.snakes.len();
-    
         Board::from_api(&state)
     }
 
