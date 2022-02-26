@@ -145,7 +145,7 @@ impl Board {
 
 impl Hash for Board {
     fn hash<H>(&self, state: &mut H) where H: Hasher {
-        self.zobrist_hash.get_value().hash(state);
+        state.write_u64(self.zobrist_hash.get_value());
     }
 }
 

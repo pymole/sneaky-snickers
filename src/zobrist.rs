@@ -1,3 +1,5 @@
+use std::hash::Hasher;
+
 use crate::game::Point;
 
 type ValueInt = u64;
@@ -48,6 +50,30 @@ impl ZobristHash {
     }
 }
 
+pub struct ZobristHasher {
+    v: u64
+}
+
+impl Hasher for ZobristHasher {
+    fn finish(&self) -> u64 {
+        self.v
+    }
+
+    // USE ONLY .write_u64() 
+    fn write(&mut self, _bytes: &[u8]) {
+
+    }
+
+    fn write_u64(&mut self, i: u64) {
+        self.v = i;
+    }
+}
+
+impl Default for ZobristHasher {
+    fn default() -> ZobristHasher {
+        ZobristHasher { v: 0 }
+    }
+}
 
 pub fn body_direction(start: Point, target: Point) -> BodyDirections {
     let x = target.x - start.x;

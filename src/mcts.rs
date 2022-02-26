@@ -2,6 +2,7 @@ use rand::seq::SliceRandom;
 use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
 use std::env;
+use std::hash::BuildHasherDefault;
 use std::time::{Duration, Instant};
 use std::str::FromStr;
 
@@ -9,7 +10,7 @@ use crate::api::objects::Movement;
 use crate::engine::{Action, EngineSettings, MOVEMENTS, advance_one_step_with_settings, food_spawner, safe_zone_shrinker};
 use crate::game::{Board, Object, Point, Snake};
 use crate::bandit::MultiArmedBandit;
-
+use crate::zobrist::ZobristHasher;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "ts")] {
@@ -89,19 +90,20 @@ impl MCTSConfig {
 
 pub struct MCTS {
     pub config: MCTSConfig,
-    nodes: HashMap<Board, RefCell<Node>>,
+    nodes: HashMap<u64, RefCell<Node>, BuildHasherDefault<ZobristHasher>>,
 }
+
 
 impl MCTS {
     pub fn new(config: MCTSConfig) -> MCTS {
         MCTS {
-            nodes: HashMap::with_capacity(config.table_capacity),
+            nodes: HashMap::with_capacity_and_hasher(config.table_capacity, BuildHasherDefault::<ZobristHasher>::default()),
             config,
         }
     }
 
     fn print_stats(&self, board: &Board) {
-        let node = self.nodes.get(board).unwrap().borrow();
+        let node = self.nodes.get(&board.zobrist_hash.get_value()).unwrap().borrow();
 
         for agent in node.agents.iter() {
             info!("Snake {}", agent.id);
@@ -142,7 +144,7 @@ impl MCTS {
             safe_zone_shrinker: &mut safe_zone_shrinker::standard,
         };
 
-        while let Some(node_cell) = self.nodes.get(&board) {
+        while let Some(node_cell) = self.nodes.get(&board.zobrist_hash.get_value()) {
             let mut node = node_cell.borrow_mut();
             let n = node.visits;
 
@@ -183,8 +185,7 @@ impl MCTS {
             .collect();
         
         let node = Node::new(agents);
-        let board_clone = board.clone();
-        self.nodes.insert(board_clone, RefCell::new(node));
+        self.nodes.insert(board.zobrist_hash.get_value(), RefCell::new(node));
     }
 
     fn backpropagate(&self, path: Vec<(RefMut<Node>, Vec<(usize, Action)>)>, rewards: Vec<f32>) {
@@ -238,20 +239,15 @@ impl MCTS {
         let alive_count = board.snakes.iter().filter(|snake| snake.is_alive()).count();
         let beta = self.config.rollout_beta;
         let health_norm : f32 = board.snakes.iter().map(|snake| (snake.health as f32).powf(beta)).sum();
-        let reward = |snake: &Snake| {
-            let r = if alive_count == 0 {
-                self.config.draw_reward
-            }
+
+        let reward = |snake: &Snake|
+            if alive_count == 0 { self.config.draw_reward }
             else {
                 (snake.is_alive() as u32 as f32) / (alive_count as f32)
                 * (snake.health as f32).powf(beta) / health_norm
-            };
-            let sampled_r: f32 = rand::random();
-            if sampled_r < r { 1.0 } else { 0.0 }
-        };
+            } ;
 
         let rewards = board.snakes.iter().map(reward).collect();
-        
 
         // info!("Started at {} turn and rolled out with {} turns and rewards {:?}", start_turn, board.turn - start_turn, rewards);
         rewards
@@ -264,7 +260,7 @@ pub trait GetBestMovement {
 
 impl GetBestMovement for MCTS {
     fn get_best_movement(&self, board: &Board, agent: usize) -> Movement {
-        let node = self.nodes[board].borrow();
+        let node = self.nodes[&board.zobrist_hash.get_value()].borrow();
         let agent_index = node.get_agent_index(agent);
         let agent = &node.agents[agent_index];
         

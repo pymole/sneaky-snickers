@@ -1,6 +1,3 @@
-#[macro_use]
-extern crate lazy_static;
-
 // #![feature(proc_macro_hygiene, decl_macro, total_cmp)]
 mod api;
 mod game;
