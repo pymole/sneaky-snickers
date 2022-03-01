@@ -76,19 +76,20 @@ impl Default for ZobristHasher {
 }
 
 pub fn body_direction(start: Point, target: Point) -> BodyDirections {
-    let x = target.x - start.x;
-    let y = target.y - start.y;
-    if x == y {
+    let diff_x = target.x - start.x;
+    let diff_y = target.y - start.y;
+    if diff_x == diff_y {
         return BodyDirections::Still;
     } else
-    if x > 0 {
-        return BodyDirections::Right;
+    if diff_x > 0 {
+        if diff_x == 1 {BodyDirections::Right} else {BodyDirections::Left}
     } else
-    if y > 0 {
-        return BodyDirections::Up;
+    if diff_x < 0 {
+        if diff_x == -1 {BodyDirections::Left} else {BodyDirections::Right}
     } else
-    if y < 0 {
-        return BodyDirections::Down;
+    if diff_y > 0 {
+        if diff_y == 1 {BodyDirections::Up} else {BodyDirections::Down}
+    } else {
+        if diff_y == -1 {BodyDirections::Down} else {BodyDirections::Up}
     }
-    return BodyDirections::Left;
 }
