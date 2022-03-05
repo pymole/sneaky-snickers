@@ -35,7 +35,7 @@ cfg_if::cfg_if! {
         use crate::mcts::parallel::ParallelMCTS as MCTS;
         use crate::mcts::parallel::ParallelMCTSConfig as MCTSConfig;
     } else {
-        use crate::mcts::seq::SequentialMCTS;
+        use crate::mcts::seq::SequentialMCTS as MCTS;
         use crate::mcts::seq::SequentialMCTSConfig as MCTSConfig;
     }
 }
