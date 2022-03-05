@@ -1272,6 +1272,7 @@ dependencies = [
  "cfg-if 0.1.10",
  "log",
  "log4rs",
+ "num_cpus",
  "rand",
  "rocket",
  "serde",

@@ -2,21 +2,9 @@
 mod api;
 mod game;
 mod engine;
-mod bandit;
-mod solver;
 mod vec2d;
 mod mcts;
-mod parallelization;
 mod zobrist;
-
-
-cfg_if::cfg_if! {
-    if #[cfg(feature = "ts")] {
-        mod thompson;
-    } else {
-        mod ucb;
-    }
-}
 
 #[cfg(test)]
 mod test_data;
@@ -39,10 +27,18 @@ use rocket::State;
 use log::info;
 
 use game::Board;
-use mcts::{MCTSConfig, MCTS, GetBestMovement};
-// use parallelization::root_parallelization;
 use engine::Movement;
 
+use crate::mcts::config::MCTSConfig as _;
+cfg_if::cfg_if! {
+    if #[cfg(feature = "par")] {
+        use crate::mcts::parallel::ParallelMCTS as MCTS;
+        use crate::mcts::parallel::ParallelMCTSConfig as MCTSConfig;
+    } else {
+        use crate::mcts::seq::SequentialMCTS;
+        use crate::mcts::seq::SequentialMCTSConfig as MCTSConfig;
+    }
+}
 
 struct GameSession {
     mcts: Option<MCTS>,
@@ -63,7 +59,7 @@ fn get_best_movement(mcts: &mut MCTS, board: &Board, agent: usize) -> Movement {
         panic!("Provide MCTS_SEARCH_TIME or MCTS_ITERATIONS");
     }
 
-    mcts.get_best_movement(board, agent)
+    mcts.get_final_movement(board, agent)
 }
 
 #[get("/")]
@@ -137,17 +133,12 @@ fn movement(storage: &State<Storage>, body: String) -> Json<api::responses::Move
 fn end(storage: &State<Storage>, body: String) -> Status {
     info!("END - {}", body);
     let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
-    storage.game_sessions.write().unwrap().remove(&state.game.id);
+    let mut game_session_mutex = storage.game_sessions.write().unwrap().remove(&state.game.id).unwrap();
+    let game_session = game_session_mutex.get_mut().unwrap();
+    let mcts = game_session.mcts.as_ref().unwrap();
+    mcts.shutdown();
+
     Status::Ok
-}
-
-#[post("/flavored_flood_fill", data = "<body>")]
-fn flavored_flood_fill(body: String) -> Json<solver::FloodFill> {
-    info!("FLOOD - {}", body);
-    let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
-    let board = Board::from_api(&state);
-
-    Json(solver::flavored_flood_fill(&board))
 }
 
 #[launch]
@@ -162,5 +153,5 @@ fn rocket() -> _ {
             response.set_header(Header::new("Access-Control-Allow-Credentials", "true"));
         })))
         .manage(Storage {game_sessions: RwLock::new(HashMap::new())})
-        .mount("/", routes![index, start, movement, movement_options, end, flavored_flood_fill])
+        .mount("/", routes![index, start, movement, movement_options, end])
 }

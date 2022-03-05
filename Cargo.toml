@@ -13,8 +13,11 @@ rand = "0.8.5"
 arrayvec = "0.7.2"
 statrs = "0.15.0"
 cfg-if = "0.1"
+num_cpus = "1.13.1"
 
 [features]
-default = ["ucb"]
+default = ["ucb", "seq"]
 ucb = []
 ts = []
+seq = []
+par = []
