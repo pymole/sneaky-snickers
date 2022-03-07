@@ -1,16 +1,14 @@
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::time::{Duration, Instant};
-use std::cell::{RefCell, RefMut};
-use std::sync::Arc;
 use rand::seq::SliceRandom;
+use rocket::futures::future::Inspect;
 
 use crate::api::objects::Movement;
 use crate::engine::{Action, EngineSettings, advance_one_step_with_settings, food_spawner, safe_zone_shrinker};
 use crate::game::{Board, Snake};
 use crate::zobrist::ZobristHasher;
 use crate::mcts::utils::get_masks;
-use crate::mcts::bandit::MultiArmedBandit;
 
 use super::bu_uct::BUUCT;
 use super::config::ParallelMCTSConfig;
@@ -18,13 +16,14 @@ use super::pool::{Pool, Task};
 
 type Strategy = BUUCT;
 
-struct Node {
-    visits: u32,
+pub struct Node {
+    pub visits: f32,
     // Alive snakes
-    agents: Vec<Agent>,
+    pub agents: Vec<Agent>,
+    pub unobserved_samples: f32,
 }
 
-struct Agent {
+pub struct Agent {
     id: usize,
     bandit: Strategy,
 }
@@ -32,8 +31,9 @@ struct Agent {
 impl Node {
     fn new(agents: Vec<Agent>) -> Node {
         Node {
-            visits: 0,
-            agents: agents,
+            agents,
+            visits: 0.0,
+            unobserved_samples: 0.0,
         }
     }
 
@@ -46,7 +46,13 @@ pub struct ParallelMCTS {
     pub config: ParallelMCTSConfig,
     nodes: HashMap<u64, Node, BuildHasherDefault<ZobristHasher>>,
     simulation_pool: Pool<(usize, Vec<f32>)>,
-    iterations: usize,
+    iteration: usize,
+    iterations_complited: usize,
+    max_depth_reached: usize,
+
+    selection_time: Duration,
+    expansion_time: Duration,
+    backpropagate_time: Duration,
 }
 
 
@@ -58,12 +64,25 @@ impl ParallelMCTS {
             nodes: HashMap::with_capacity_and_hasher(config.table_capacity, BuildHasherDefault::<ZobristHasher>::default()),
             config,
             simulation_pool,
-            iterations: 0,
+            iteration: 0,
+            iterations_complited: 0,
+            max_depth_reached: 0,
+            selection_time: Duration::new(0, 0),
+            expansion_time: Duration::new(0, 0),
+            backpropagate_time: Duration::new(0, 0),
         }
     }
 
     fn print_stats(&self, board: &Board) {
         let node = self.nodes.get(&board.zobrist_hash.get_value()).unwrap();
+
+        info!("Node visits: {}", node.visits);
+        info!("Max depth reached: {}", self.max_depth_reached);
+        info!("Simulation pool wait time: {:?}; Worker avg wait: {}ms", self.simulation_pool.wait_time(), self.simulation_pool.wait_time().as_millis() as f32 / self.config.simulation_workers as f32);
+        info!("Selection time: {:?}; avg: {}ms", self.selection_time, self.selection_time.as_millis() as f32 / self.iterations_complited as f32);
+        info!("Expansion time: {:?}; avg: {}ms", self.expansion_time, self.expansion_time.as_millis() as f32 / self.iterations_complited as f32);
+        info!("Backpropagate time: {:?}; avg: {}ms", self.backpropagate_time, self.backpropagate_time.as_millis() as f32 / self.iterations_complited as f32);
+        info!("Rollouts complited vs queued: {}/{}", self.iterations_complited, self.iteration);
 
         for agent in node.agents.iter() {
             info!("Snake {}", agent.id);
@@ -77,50 +96,63 @@ impl ParallelMCTS {
         for _i in 0..iterations_count {
             // info!("iteration {}", i);
             self.rollout(board, &mut simulation_contexts);
-            self.iterations += 1;
+            self.iteration += 1;
         }
         self.print_stats(board);
     }
 
     pub fn search_with_time(&mut self, board: &Board, target_duration: Duration) {
-        let mut simulation_contexts = HashMap::with_capacity(self.config.simulation_workers);
+        let mut rollout_contexts = HashMap::with_capacity(self.config.simulation_workers);
 
         let time_start = Instant::now();
         let time_end = time_start + target_duration;
 
         while Instant::now() < time_end {
-            self.rollout(board, &mut simulation_contexts);
-            self.iterations += 1;
+            self.rollout(board, &mut rollout_contexts);
+            self.iteration += 1;
         }
 
         let actual_duration = Instant::now() - time_start;
         self.print_stats(board);
-        info!("Searched {} iterations in {} ms (target={} ms)", self.iterations, actual_duration.as_millis(), target_duration.as_millis());
+        info!("Searched {} iterations in {} ms (target={} ms)", self.iterations_complited, actual_duration.as_millis(), target_duration.as_millis());
     }
 
-    fn rollout(&mut self, board: &Board, simulation_contexts: &mut HashMap<usize, Vec<(u64, Vec<(usize, Action)>)>>) {
+    fn rollout(&mut self, board: &Board, rollout_contexts: &mut HashMap<usize, Vec<(u64, Vec<(usize, Action)>)>>) {
         // let start = Instant::now();
-        let path = self.selection(board.clone());
+        let mut board = board.clone();
+        
+        if self.nodes.len() == 0 {
+            self.expansion(&board);
+        }
+
+        let path = self.selection(&mut board);
+
+        if self.max_depth_reached < path.len() {
+            self.max_depth_reached = path.len();
+        }
 
         if !board.is_terminal() {
             self.expansion(&board);
         }
-        let key = self.iterations.clone();
-        simulation_contexts.insert(key, path);
+        rollout_contexts.insert(self.iteration, path);
 
-        self.simulation(&board);
+        self.simulation(&board, self.iteration);
 
         if self.simulation_pool.tasks_count() < self.config.simulation_workers {
             return;
         }
 
-        let (simulation_id, rewards) = self.simulation_pool.wait_result();
-        let path = simulation_contexts.remove(&simulation_id).unwrap();
+        let (rollout_id, rewards) = self.simulation_pool.wait_result();
+        // info!("Sims {:?}", simulation_contexts.keys());
+        // info!("Sim id {}", simulation_id);
+        let path = rollout_contexts.remove(&rollout_id).unwrap();
 
         self.backpropagate(path, rewards);
     }
 
-    fn selection(&mut self, mut board: Board) -> Vec<(u64, Vec<(usize, Action)>)> {
+    fn selection(&mut self, board: &mut Board) -> Vec<(u64, Vec<(usize, Action)>)> {
+        let start = Instant::now();
+
         let mut path = Vec::new();
 
         let mut engine_settings = EngineSettings {
@@ -129,30 +161,43 @@ impl ParallelMCTS {
         };
 
         let config = &self.config;
+        let iteration = self.iteration;
 
-        while let Some(node) = self.nodes.get_mut(&board.zobrist_hash.get_value()) {
-            let n = node.visits;
+        while path.len() < self.config.max_select_depth {
+            let node_option = self.nodes.get_mut(&board.zobrist_hash.get_value());
+            if node_option.is_none() {
+                break
+            }
+            let node = node_option.unwrap();
+
+            node.unobserved_samples += 1.0;
+            let node_key = board.zobrist_hash.get_value();
 
             // TODO: This is ugly. Maybe change snake_strategy on simple arguments pass.
             let joint_action = advance_one_step_with_settings(
-                &mut board,
+                board,
                 &mut engine_settings,
                 &mut |i, _| {
                     let agent_index = node.get_agent_index(i);
                     let agent = &mut node.agents[agent_index];
 
-                    let best_action = agent.bandit.get_best_movement(config, n);
+                    let best_action = agent.bandit.get_best_movement(config, node.visits, node.unobserved_samples, iteration);
+                    agent.bandit.incomplete_update(best_action);
                     Action::Move(Movement::from_usize(best_action))
                 }
             );
 
-            path.push((board.zobrist_hash.get_value(), joint_action));
+            path.push((node_key, joint_action));
         }
+
+        self.selection_time += Instant::now() - start;
 
         path
     }
 
     fn expansion(&mut self, board: &Board) {
+        let start = Instant::now();
+
         let masks = get_masks(board);
         let agents = masks
             .into_iter()
@@ -166,15 +211,15 @@ impl ParallelMCTS {
         
         let node = Node::new(agents);
         self.nodes.insert(board.zobrist_hash.get_value(), node);
+
+        self.expansion_time += Instant::now() - start;
     }
 
-    fn simulation(&mut self, board: &Board) {
+    fn simulation(&mut self, board: &Board, rollout_id: usize) {
         let mut board = board.clone();
         let rollout_cutoff = self.config.rollout_cutoff;
         let beta = self.config.rollout_beta;
         let draw_reward = self.config.draw_reward;
-
-        let simulation_id = self.iterations;
 
         let task = Task {
             fn_box: Box::new(move || {
@@ -222,7 +267,7 @@ impl ParallelMCTS {
                 let rewards = board.snakes.iter().map(reward).collect();
     
                 // info!("Started at {} turn and rolled out with {} turns and rewards {:?}", start_turn, board.turn - start_turn, rewards);
-                (simulation_id, rewards)
+                (rollout_id, rewards)
             })
         };
         
@@ -230,9 +275,14 @@ impl ParallelMCTS {
     }
 
     fn backpropagate(&mut self, path: Vec<(u64, Vec<(usize, Action)>)>, rewards: Vec<f32>) {
+        let start = Instant::now();
+        // info!("{:?}", self.nodes.keys());
+        // info!("{:?}", path);
         for (node_key, joint_action) in path {
+            // info!("{}", node_key);
             let node = self.nodes.get_mut(&node_key).unwrap();
-            node.visits += 1;
+            node.visits += 1.0;
+            node.unobserved_samples -= 1.0;
 
             for (agent, Action::Move(movement)) in joint_action.into_iter() {
                 let agent_index = node.get_agent_index(agent);
@@ -244,6 +294,9 @@ impl ParallelMCTS {
                 agent.bandit.backpropagate(reward, movement);
             }
         }
+        self.iterations_complited += 1;
+
+        self.backpropagate_time += Instant::now() - start;
     }
 
     pub fn get_final_movement(&mut self, board: &Board, agent: usize) -> Movement {

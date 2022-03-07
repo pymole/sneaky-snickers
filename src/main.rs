@@ -112,6 +112,8 @@ fn movement(storage: &State<Storage>, body: String) -> Json<api::responses::Move
     let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
 
     let game_sessions = storage.game_sessions.read().unwrap();
+    info!("{:?}", game_sessions.keys());
+    info!("{:?}", state.game.id);
 
     let mut game_session = game_sessions.get(&state.game.id).unwrap().lock().unwrap();
     let my_index = game_session.my_index;
@@ -122,7 +124,9 @@ fn movement(storage: &State<Storage>, body: String) -> Json<api::responses::Move
     } else {
         let config = MCTSConfig::from_env();
         let mut mcts = MCTS::new(config);
-        get_best_movement(&mut mcts, &board, my_index)
+        let movement = get_best_movement(&mut mcts, &board, my_index);
+        mcts.shutdown();
+        movement
     };
 
     let move_ = api::responses::Move::new(movement);
@@ -135,8 +139,9 @@ fn end(storage: &State<Storage>, body: String) -> Status {
     let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
     let mut game_session_mutex = storage.game_sessions.write().unwrap().remove(&state.game.id).unwrap();
     let game_session = game_session_mutex.get_mut().unwrap();
-    let mcts = game_session.mcts.as_ref().unwrap();
-    mcts.shutdown();
+    if let Some(mcts) = game_session.mcts.as_ref() {
+        mcts.shutdown();
+    }
 
     Status::Ok
 }

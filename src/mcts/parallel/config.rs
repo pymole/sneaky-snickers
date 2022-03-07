@@ -13,6 +13,9 @@ pub struct ParallelMCTSConfig {
     pub rollout_beta: f32,
     pub draw_reward: f32,
     pub simulation_workers: usize,
+    pub m_max: f32,
+    pub c: f32,
+    pub max_select_depth: usize,
 }
 
 impl MCTSConfig for ParallelMCTSConfig {
@@ -30,9 +33,13 @@ impl MCTSConfig for ParallelMCTSConfig {
             rollout_beta:           parse_env("MCTS_ROLLOUT_BETA").unwrap_or(3.0),
             draw_reward:            parse_env("MCTS_DRAW_REWARD").unwrap_or(NORMALIZED_DRAW_REWARD),
             simulation_workers:     parse_env("MCTS_SIMULATION_WORKERS").unwrap_or(num_cpus()),
+            m_max:                  parse_env("MCTS_M_MAX").unwrap_or(0.8),
+            c:                      parse_env("MCTS_C").unwrap_or(0.8),
+            max_select_depth:       parse_env("MCTS_SELECT_DEPTH").unwrap_or(50),
         };
 
         assert!(config.rollout_cutoff >= 1);
+        assert!(config.m_max >= 0.0 && config.m_max <= 1.0);
 
         config
     }
