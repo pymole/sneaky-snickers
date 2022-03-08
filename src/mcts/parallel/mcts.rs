@@ -1,8 +1,8 @@
+use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::time::{Duration, Instant};
 use rand::seq::SliceRandom;
-use rocket::futures::future::Inspect;
 
 use crate::api::objects::Movement;
 use crate::engine::{Action, EngineSettings, advance_one_step_with_settings, food_spawner, safe_zone_shrinker};
@@ -44,7 +44,7 @@ impl Node {
 
 pub struct ParallelMCTS {
     pub config: ParallelMCTSConfig,
-    nodes: HashMap<u64, Node, BuildHasherDefault<ZobristHasher>>,
+    nodes: HashMap<u64, Arc<Mutex<Node>>, BuildHasherDefault<ZobristHasher>>,
     simulation_pool: Pool<(usize, Vec<f32>)>,
     iteration: usize,
     iterations_complited: usize,
@@ -74,7 +74,7 @@ impl ParallelMCTS {
     }
 
     fn print_stats(&self, board: &Board) {
-        let node = self.nodes.get(&board.zobrist_hash.get_value()).unwrap();
+        let node = self.nodes.get(&board.zobrist_hash.get_value()).unwrap().lock().unwrap();
 
         info!("Node visits: {}", node.visits);
         info!("Max depth reached: {}", self.max_depth_reached);
@@ -117,7 +117,7 @@ impl ParallelMCTS {
         info!("Searched {} iterations in {} ms (target={} ms)", self.iterations_complited, actual_duration.as_millis(), target_duration.as_millis());
     }
 
-    fn rollout(&mut self, board: &Board, rollout_contexts: &mut HashMap<usize, Vec<(u64, Vec<(usize, Action)>)>>) {
+    fn rollout(&mut self, board: &Board, rollout_contexts: &mut HashMap<usize, Vec<(Arc<Mutex<Node>>, Vec<(usize, Action)>)>>) {
         // let start = Instant::now();
         let mut board = board.clone();
         
@@ -130,11 +130,11 @@ impl ParallelMCTS {
         if self.max_depth_reached < path.len() {
             self.max_depth_reached = path.len();
         }
+        // rollout_contexts.insert(self.iteration, path);
 
         if !board.is_terminal() {
             self.expansion(&board);
         }
-        rollout_contexts.insert(self.iteration, path);
 
         self.simulation(&board, self.iteration);
 
@@ -150,7 +150,7 @@ impl ParallelMCTS {
         self.backpropagate(path, rewards);
     }
 
-    fn selection(&mut self, board: &mut Board) -> Vec<(u64, Vec<(usize, Action)>)> {
+    fn selection(&mut self, board: &mut Board) -> Vec<(Arc<Mutex<Node>>, Vec<(usize, Action)>)> {
         let start = Instant::now();
 
         let mut path = Vec::new();
@@ -164,14 +164,17 @@ impl ParallelMCTS {
         let iteration = self.iteration;
 
         while path.len() < self.config.max_select_depth {
-            let node_option = self.nodes.get_mut(&board.zobrist_hash.get_value());
+            let node_option = self.nodes.get(&board.zobrist_hash.get_value());
             if node_option.is_none() {
                 break
             }
-            let node = node_option.unwrap();
+            let node_arc = node_option.unwrap();
+            let mut node = node_arc.lock().unwrap();
 
             node.unobserved_samples += 1.0;
-            let node_key = board.zobrist_hash.get_value();
+
+            let node_visits = node.visits;
+            let node_unobserved_samples = node.unobserved_samples;
 
             // TODO: This is ugly. Maybe change snake_strategy on simple arguments pass.
             let joint_action = advance_one_step_with_settings(
@@ -181,13 +184,13 @@ impl ParallelMCTS {
                     let agent_index = node.get_agent_index(i);
                     let agent = &mut node.agents[agent_index];
 
-                    let best_action = agent.bandit.get_best_movement(config, node.visits, node.unobserved_samples, iteration);
+                    let best_action = agent.bandit.get_best_movement(config, node_visits, node_unobserved_samples, iteration);
                     agent.bandit.incomplete_update(best_action);
                     Action::Move(Movement::from_usize(best_action))
                 }
             );
 
-            path.push((node_key, joint_action));
+            path.push((Arc::clone(node_arc), joint_action));
         }
 
         self.selection_time += Instant::now() - start;
@@ -210,7 +213,7 @@ impl ParallelMCTS {
             .collect();
         
         let node = Node::new(agents);
-        self.nodes.insert(board.zobrist_hash.get_value(), node);
+        self.nodes.insert(board.zobrist_hash.get_value(), Arc::new(Mutex::new(node)));
 
         self.expansion_time += Instant::now() - start;
     }
@@ -274,13 +277,13 @@ impl ParallelMCTS {
         self.simulation_pool.add_task(task);
     }
 
-    fn backpropagate(&mut self, path: Vec<(u64, Vec<(usize, Action)>)>, rewards: Vec<f32>) {
+    fn backpropagate(&mut self, path: Vec<(Arc<Mutex<Node>>, Vec<(usize, Action)>)>, rewards: Vec<f32>) {
         let start = Instant::now();
         // info!("{:?}", self.nodes.keys());
         // info!("{:?}", path);
-        for (node_key, joint_action) in path {
+        for (node_arc, joint_action) in path {
+            let mut node = node_arc.lock().unwrap();
             // info!("{}", node_key);
-            let node = self.nodes.get_mut(&node_key).unwrap();
             node.visits += 1.0;
             node.unobserved_samples -= 1.0;
 
@@ -300,7 +303,7 @@ impl ParallelMCTS {
     }
 
     pub fn get_final_movement(&mut self, board: &Board, agent: usize) -> Movement {
-        let node = self.nodes.get_mut(&board.zobrist_hash.get_value()).unwrap();
+        let node = self.nodes.get(&board.zobrist_hash.get_value()).unwrap().lock().unwrap();
         let agent_index = node.get_agent_index(agent);
         let agent = &node.agents[agent_index];
         

@@ -54,8 +54,8 @@ pub struct SequentialMCTS {
 
 
 impl SequentialMCTS {
-    pub fn new(config: SequentialMCTSConfig) -> MCTS {
-        MCTS {
+    pub fn new(config: SequentialMCTSConfig) -> SequentialMCTS {
+        SequentialMCTS {
             nodes: HashMap::with_capacity_and_hasher(config.table_capacity, BuildHasherDefault::<ZobristHasher>::default()),
             config,
         }
@@ -95,17 +95,9 @@ impl SequentialMCTS {
 
     fn rollout(&mut self, board: &Board) {
         // let start = Instant::now();
-        let board = board.clone();
-        let path = self.selection(board);
-        if !board.is_terminal() {
-            self.expansion(&board);
-        }
-        let rewards = self.simulation(&mut board);
-        self.backpropagate(path, rewards);
+        let mut board = board.clone();
+        // let path = self.selection(&mut board);
 
-    }
-
-    fn selection(&self, board: Board) -> Vec<(RefMut<Node>, Vec<(usize, Action)>)> {
         let mut path = Vec::new();
 
         let mut engine_settings = EngineSettings {
@@ -113,7 +105,9 @@ impl SequentialMCTS {
             safe_zone_shrinker: &mut safe_zone_shrinker::standard,
         };
 
-        while let Some(node_cell) = self.nodes.get(&board.zobrist_hash.get_value()) {
+        let nodes = &self.nodes;
+
+        while let Some(node_cell) = nodes.get(&board.zobrist_hash.get_value()) {
             let mut node = node_cell.borrow_mut();
             let n = node.visits;
 
@@ -133,8 +127,19 @@ impl SequentialMCTS {
             path.push((node, joint_action));
         }
 
-        path
+        if !board.is_terminal() {
+            self.expansion(&board);
+        }
+        let rewards = self.simulation(&mut board);
+        self.backpropagate(path, rewards);
+
     }
+
+    // fn selection(&self, board: &mut Board) -> Vec<(RefMut<Node>, Vec<(usize, Action)>)> {
+
+
+    //     path
+    // }
 
     fn expansion(&mut self, board: &Board) {
         let masks = get_masks(board);
