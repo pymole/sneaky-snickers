@@ -94,9 +94,17 @@ impl SequentialMCTS {
     }
 
     fn rollout(&mut self, board: &Board) {
-        // let start = Instant::now();
         let mut board = board.clone();
-        // let path = self.selection(&mut board);
+        let path = self.selection(&mut board);
+        let rewards = self.simulation(board.clone());
+        self.backpropagate(path, rewards);
+        if !board.is_terminal() {
+            self.expansion(&board);
+        }
+    }
+
+    fn selection(&self, board: &mut Board) -> Vec<(RefMut<Node>, Vec<(usize, Action)>)> {
+        // let start = Instant::now();
 
         let mut path = Vec::new();
 
@@ -113,7 +121,7 @@ impl SequentialMCTS {
 
             // TODO: This is ugly. Maybe change snake_strategy on simple arguments pass.
             let joint_action = advance_one_step_with_settings(
-                &mut board,
+                board,
                 &mut engine_settings,
                 &mut |i, _| {
                     let agent_index = node.get_agent_index(i);
@@ -127,19 +135,8 @@ impl SequentialMCTS {
             path.push((node, joint_action));
         }
 
-        if !board.is_terminal() {
-            self.expansion(&board);
-        }
-        let rewards = self.simulation(&mut board);
-        self.backpropagate(path, rewards);
-
+        path
     }
-
-    // fn selection(&self, board: &mut Board) -> Vec<(RefMut<Node>, Vec<(usize, Action)>)> {
-
-
-    //     path
-    // }
 
     fn expansion(&mut self, board: &Board) {
         let masks = get_masks(board);
@@ -173,7 +170,7 @@ impl SequentialMCTS {
         }
     }
 
-    fn simulation(&self, board: &mut Board) -> Vec<f32> {
+    fn simulation(&self, mut board: Board) -> Vec<f32> {
         let random = &mut rand::thread_rng();
 
         let mut engine_settings = EngineSettings {
@@ -183,7 +180,7 @@ impl SequentialMCTS {
 
         let end_turn = board.turn + self.config.rollout_cutoff;
         while board.turn <= end_turn && !board.is_terminal() {
-            let actions: HashMap<_, _> = get_masks(board)
+            let actions: HashMap<_, _> = get_masks(&board)
                 .into_iter()
                 .map(|(snake, movement_masks)| {
                     let &movement = movement_masks
@@ -199,21 +196,20 @@ impl SequentialMCTS {
                 .collect();
 
             advance_one_step_with_settings(
-                board,
+                &mut board,
                 &mut engine_settings,
                 &mut |snake, _| *actions.get(&snake).unwrap()
             );
         }
         
         let alive_count = board.snakes.iter().filter(|snake| snake.is_alive()).count();
-        let beta = self.config.rollout_beta;
-        let health_norm : f32 = board.snakes.iter().map(|snake| (snake.health as f32).powf(beta)).sum();
+        let len_norm: f32 = board.snakes.iter().map(|snake| snake.body.len() as f32).sum();
 
         let reward = |snake: &Snake|
             if alive_count == 0 { self.config.draw_reward }
             else {
                 (snake.is_alive() as u32 as f32) / (alive_count as f32)
-                * (snake.health as f32).powf(beta) / health_norm
+                * (snake.body.len() as f32) / len_norm
             } ;
 
         let rewards = board.snakes.iter().map(reward).collect();

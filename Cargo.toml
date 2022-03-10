@@ -4,6 +4,9 @@ version = "0.1.0"
 authors = ["pymole <goglbummm@gmail.com>", "dimin <demindf@gmail.com>"]
 edition = "2018"
 
+[profile.bench]
+debug = true
+
 [dependencies]
 rocket = { version = "0.5.0-rc.1", features = ["json"] }
 serde = {version = "1.0.136", features = ["derive"]}

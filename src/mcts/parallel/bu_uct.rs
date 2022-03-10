@@ -48,7 +48,7 @@ impl BUUCT {
                 //     -f32::INFINITY
                 // }
             } else {
-                f32::INFINITY
+                return action;
             };
 
             if bu_uct > max_value {

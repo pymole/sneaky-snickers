@@ -19,7 +19,7 @@ pub fn get_masks(board: &Board) -> Vec<(usize, [bool; 4])> {
                 .iter()
                 .for_each(|&movement| {
                     let movement_position = get_movement_position(snake.body[0], movement, board.size);
-                    if tails.contains(&movement_position) || board.objects[movement_position] != Object::BodyPart {
+                    if board.objects[movement_position] != Object::BodyPart || tails.contains(&movement_position) {
                         movement_mask[movement as usize] = true;
                     }
                 });

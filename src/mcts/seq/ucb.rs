@@ -39,7 +39,7 @@ impl MultiArmedBandit<SequentialMCTSConfig> for UCB {
 
                 avg_reward + (variance_ucb * n.ln() / n_i).sqrt()
             } else {
-                f32::INFINITY
+                return action;
             };
 
             if ucb > max_ucb {

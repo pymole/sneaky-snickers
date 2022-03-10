@@ -130,7 +130,7 @@ impl ParallelMCTS {
         if self.max_depth_reached < path.len() {
             self.max_depth_reached = path.len();
         }
-        // rollout_contexts.insert(self.iteration, path);
+        rollout_contexts.insert(self.iteration, path);
 
         if !board.is_terminal() {
             self.expansion(&board);
