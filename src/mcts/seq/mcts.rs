@@ -109,7 +109,7 @@ impl SequentialMCTS {
         let mut path = Vec::new();
 
         let mut engine_settings = EngineSettings {
-            food_spawner: &mut food_spawner::noop,
+            food_spawner: &mut food_spawner::create_standard,
             safe_zone_shrinker: &mut safe_zone_shrinker::standard,
         };
 
@@ -174,7 +174,7 @@ impl SequentialMCTS {
         let random = &mut rand::thread_rng();
 
         let mut engine_settings = EngineSettings {
-            food_spawner: &mut food_spawner::noop,
+            food_spawner: &mut food_spawner::create_standard,
             safe_zone_shrinker: &mut safe_zone_shrinker::standard,
         };
 
