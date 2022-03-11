@@ -221,7 +221,6 @@ impl ParallelMCTS {
     fn simulation(&mut self, board: &Board, rollout_id: usize) {
         let mut board = board.clone();
         let rollout_cutoff = self.config.rollout_cutoff;
-        let beta = self.config.rollout_beta;
         let draw_reward = self.config.draw_reward;
 
         let task = Task {
@@ -258,17 +257,17 @@ impl ParallelMCTS {
                 }
                 
                 let alive_count = board.snakes.iter().filter(|snake| snake.is_alive()).count();
-                let health_norm : f32 = board.snakes.iter().map(|snake| (snake.health as f32).powf(beta)).sum();
-    
+                let len_norm: f32 = board.snakes.iter().map(|snake| snake.body.len() as f32).sum();
+
                 let reward = |snake: &Snake|
                     if alive_count == 0 { draw_reward }
                     else {
                         (snake.is_alive() as u32 as f32) / (alive_count as f32)
-                        * (snake.health as f32).powf(beta) / health_norm
-                    };
-    
+                        * (snake.body.len() as f32) / len_norm
+                    } ;
+
                 let rewards = board.snakes.iter().map(reward).collect();
-    
+
                 // info!("Started at {} turn and rolled out with {} turns and rewards {:?}", start_turn, board.turn - start_turn, rewards);
                 (rollout_id, rewards)
             })
