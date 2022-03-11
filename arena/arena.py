@@ -245,7 +245,7 @@ class Rules:
             'play',
             '--width', '11',
             '--height', '11',
-            '--gametype', 'royale'
+            '--gametype', 'wrapped+spiral'
         ]
 
         game_names = [f'{i}_{player.name}' for i, player in enumerate(players)]

@@ -51,7 +51,8 @@ impl Board {
         // TODO: validate that everything is inbounds.
         let objects = Self::calculate_objects(state_api);
 
-        let hazard_start = if state_api.turn < 3 || board_api.hazards.len() == 0 {
+        assert!((state_api.turn < 3) == (board_api.hazards.len() == 0));
+        let hazard_start = if board_api.hazards.len() == 0 {
             let mut rnd = thread_rng();
             Point {
                 x: rnd.gen_range(0..board_api.width),
@@ -121,7 +122,7 @@ impl Board {
 
     fn calcualate_hazard(board_api : &api::objects::Board) -> Vec2D<bool> {
         let mut hazard = Vec2D::init_same(board_api.width as usize, board_api.height as usize, false);
-        
+
         for &p in &board_api.hazards {
             hazard[p] = true;
         }
