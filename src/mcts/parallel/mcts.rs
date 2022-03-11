@@ -78,7 +78,9 @@ impl ParallelMCTS {
 
         info!("Node visits: {}", node.visits);
         info!("Max depth reached: {}", self.max_depth_reached);
-        info!("Simulation pool wait time: {:?}; Worker avg wait: {}ms", self.simulation_pool.wait_time(), self.simulation_pool.wait_time().as_millis() as f32 / self.config.simulation_workers as f32);
+        let workers_wait_time = self.simulation_pool.workers_wait_time();
+        info!("Simulation workers wait time: {:?}; Worker avg wait: {}ms", workers_wait_time, workers_wait_time.as_millis() as f32 / self.config.simulation_workers as f32);
+        info!("Simulation result wait time: {:?}", self.simulation_pool.result_wait_time());
         info!("Selection time: {:?}; avg: {}ms", self.selection_time, self.selection_time.as_millis() as f32 / self.iterations_complited as f32);
         info!("Expansion time: {:?}; avg: {}ms", self.expansion_time, self.expansion_time.as_millis() as f32 / self.iterations_complited as f32);
         info!("Backpropagate time: {:?}; avg: {}ms", self.backpropagate_time, self.backpropagate_time.as_millis() as f32 / self.iterations_complited as f32);

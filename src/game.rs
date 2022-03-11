@@ -51,7 +51,7 @@ impl Board {
         // TODO: validate that everything is inbounds.
         let objects = Self::calculate_objects(state_api);
 
-        assert!((state_api.turn < 3) == (board_api.hazards.len() == 0));
+        // assert!((state_api.turn < 3) == (board_api.hazards.len() == 0));
         let hazard_start = if board_api.hazards.len() == 0 {
             let mut rnd = thread_rng();
             Point {

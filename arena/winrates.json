@@ -1,6 +1,8 @@
 {
-    "ucb#t=200": {
-        "move-dist#t=200": 1
+    "zero-draw#t=200": {
+        "norm-draw#t=200": 40
     },
-    "move-dist#t=200": {}
+    "norm-draw#t=200": {
+        "zero-draw#t=200": 50
+    }
 }

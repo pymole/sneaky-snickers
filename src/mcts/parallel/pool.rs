@@ -1,8 +1,7 @@
-use std::sync::mpsc::channel;
 use std::thread::{spawn, JoinHandle};
-use std::sync::mpsc::{Sender, Receiver};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
+use crossbeam_channel::{unbounded, Sender, Receiver};
 
 pub struct Task<R> {
     pub fn_box: Box<dyn FnOnce() -> R + Send + 'static>,
@@ -20,7 +19,8 @@ pub struct Pool<R>
     tasks_count: usize,
     command_sender: Sender<Command<R>>,
     result_receiver: Receiver<R>,
-    wait_time: Arc<Mutex<Duration>>,
+    workers_wait_time: Arc<Mutex<Duration>>,
+    result_wait_time: Duration,
 }
 
 impl<R> Pool<R>
@@ -30,30 +30,27 @@ where
     pub fn new(workers: usize) -> Pool<R> {
         assert!(workers > 0);
 
-        let (command_sender, command_receiver) = channel();
-        let (result_sender, result_receiver) = channel();
+        let (command_sender, command_receiver) = unbounded();
+        let (result_sender, result_receiver) = unbounded();
 
-        let command_receiver: Arc<Mutex<Receiver<Command<R>>>> = Arc::new(Mutex::new(command_receiver));
-        let result_sender: Arc<Mutex<Sender<R>>> = Arc::new(Mutex::new(result_sender));
-
-        let wait_time = Arc::new(Mutex::new(Duration::new(0, 0)));
+        let workers_wait_time = Arc::new(Mutex::new(Duration::new(0, 0)));
         
         let workers = (0..workers).into_iter()
             .map(|_| {
                 let command_receiver_ = command_receiver.clone();
                 let result_sender_ = result_sender.clone();
-                let wait_time_ = wait_time.clone();
+                let workers_wait_time_ = workers_wait_time.clone();
                 
                 spawn(move || {
                     loop {
                         let start = Instant::now();
-                        let command = command_receiver_.lock().unwrap().recv().unwrap();
-                        *wait_time_.lock().unwrap() += Instant::now() - start;
+                        let command = command_receiver_.recv().unwrap();
+                        *workers_wait_time_.lock().unwrap() += Instant::now() - start;
                         
                         match command {
                             Command::Execute(task) => {
                                 let result = (task.fn_box)();
-                                result_sender_.lock().unwrap().send(result).unwrap();
+                                result_sender_.send(result).unwrap();
                             }
                             Command::Stop => break
                         }
@@ -67,7 +64,8 @@ where
             tasks_count: 0,
             command_sender,
             result_receiver,
-            wait_time,
+            workers_wait_time,
+            result_wait_time: Duration::from_secs(0),
         }
     }
 
@@ -77,7 +75,10 @@ where
     }
 
     pub fn wait_result(&mut self) -> R {
+        let start = Instant::now();
         let result = self.result_receiver.recv().unwrap();
+        self.result_wait_time += Instant::now() - start;
+
         self.tasks_count -= 1;
         result
     }
@@ -86,8 +87,12 @@ where
         self.tasks_count
     }
 
-    pub fn wait_time(&self) -> Duration {
-        self.wait_time.lock().unwrap().clone()
+    pub fn workers_wait_time(&self) -> Duration {
+        self.workers_wait_time.lock().unwrap().clone()
+    }
+
+    pub fn result_wait_time(&self) -> Duration {
+        self.result_wait_time
     }
 
     pub fn shutdown(&self) {

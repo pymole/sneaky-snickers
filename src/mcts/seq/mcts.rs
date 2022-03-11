@@ -210,7 +210,7 @@ impl SequentialMCTS {
             else {
                 (snake.is_alive() as u32 as f32) / (alive_count as f32)
                 * (snake.body.len() as f32) / len_norm
-            } ;
+            };
 
         let rewards = board.snakes.iter().map(reward).collect();
 

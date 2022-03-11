@@ -37,9 +37,10 @@ local Bots = {
         // Bots.from_commit("v2.8#t=200", "v2.8", { "MCTS_SEARCH_TIME": "200" }),
 
         // Version that is currently deployed
-        Bots.from_commit("v3.0#t=200", "v3.0", { "MCTS_SEARCH_TIME": "200" }),
+        //Bots.from_commit("v3.0#t=200", "v3.0", { "MCTS_SEARCH_TIME": "200" }),
 
-        // Bots.binary("current#t=200", { "MCTS_SEARCH_TIME": "200" }),
+        Bots.binary("norm-draw#t=200", { "MCTS_SEARCH_TIME": "200" }, exe="target/seq/sneaky-snickers"),
+        Bots.binary("zero-draw#t=200", { "MCTS_SEARCH_TIME": "200" }, exe="target/seq_without_draw/sneaky-snickers"),
         // Bots.unmanaged("current"),
     ],
 
@@ -64,7 +65,7 @@ local Bots = {
 
         // How many games are run in parallel.
         // For maximum efficiency usually you want (number_of_players⋅parallel) ≈ cpu_count.
-        parallel: 5,
+        parallel: 3,
 
         // Regulates sampling of players.
         // beta=0 — uniform.
