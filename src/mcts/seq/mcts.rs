@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use crate::api::objects::Movement;
 use crate::engine::{Action, EngineSettings, advance_one_step_with_settings, food_spawner, safe_zone_shrinker};
 use crate::game::{Board, Snake};
-use crate::zobrist::ZobristHasher;
+use crate::zobrist::{ZobristHasher, ValueInt};
 use crate::mcts::utils::get_masks;
 use crate::mcts::bandit::MultiArmedBandit;
 
@@ -96,10 +96,15 @@ impl SequentialMCTS {
     fn rollout(&mut self, board: &Board) {
         let mut board = board.clone();
         let path = self.selection(&mut board);
-        let rewards = self.simulation(board.clone());
+
+        let masks = get_masks(&board);
+        let is_terminal = board.is_terminal();
+        let zobrist_value = board.zobrist_hash.get_value();
+
+        let rewards = self.simulation(board);
         self.backpropagate(path, rewards);
-        if !board.is_terminal() {
-            self.expansion(&board);
+        if !is_terminal {
+            self.expansion(masks, zobrist_value);
         }
     }
 
@@ -138,8 +143,8 @@ impl SequentialMCTS {
         path
     }
 
-    fn expansion(&mut self, board: &Board) {
-        let masks = get_masks(board);
+    fn expansion(&mut self, masks: Vec<(usize, [bool; 4])>, zobrist_value: ValueInt) {
+        // let masks = get_masks(board);
         let agents = masks
             .into_iter()
             .map(|(agent_id, mask)| {
@@ -149,9 +154,9 @@ impl SequentialMCTS {
                 }
             })
             .collect();
-        
+
         let node = Node::new(agents);
-        self.nodes.insert(board.zobrist_hash.get_value(), RefCell::new(node));
+        self.nodes.insert(zobrist_value, RefCell::new(node));
     }
 
     fn backpropagate(&self, path: Vec<(RefMut<Node>, Vec<(usize, Action)>)>, rewards: Vec<f32>) {
@@ -201,7 +206,7 @@ impl SequentialMCTS {
                 &mut |snake, _| *actions.get(&snake).unwrap()
             );
         }
-        
+
         let alive_count = board.snakes.iter().filter(|snake| snake.is_alive()).count();
         let len_norm: f32 = board.snakes.iter().map(|snake| snake.body.len() as f32).sum();
 
@@ -222,7 +227,7 @@ impl SequentialMCTS {
         let node = self.nodes[&board.zobrist_hash.get_value()].borrow();
         let agent_index = node.get_agent_index(agent);
         let agent = &node.agents[agent_index];
-        
+
         agent.bandit.get_final_movement(&self.config, node.visits)
     }
 

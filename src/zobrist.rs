@@ -2,7 +2,7 @@ use std::hash::Hasher;
 
 use crate::game::Point;
 
-type ValueInt = u64;
+pub type ValueInt = u64;
 
 const MAX_SNAKE_COUNT: usize = 4;
 const MAX_WIDTH: usize = 11;
@@ -59,7 +59,7 @@ impl Hasher for ZobristHasher {
         self.v
     }
 
-    // USE ONLY .write_u64() 
+    // USE ONLY .write_u64()
     fn write(&mut self, _bytes: &[u8]) {
 
     }
