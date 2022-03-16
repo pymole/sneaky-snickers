@@ -2,11 +2,12 @@ use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::time::{Duration, Instant};
+use arrayvec::ArrayVec;
 use rand::seq::SliceRandom;
 
 use crate::api::objects::Movement;
 use crate::engine::{Action, EngineSettings, advance_one_step_with_settings, food_spawner, safe_zone_shrinker};
-use crate::game::{Board, Snake};
+use crate::game::{Board, Snake, MAX_SNAKE_COUNT};
 use crate::zobrist::ZobristHasher;
 use crate::mcts::utils::get_masks;
 
@@ -45,7 +46,7 @@ impl Node {
 pub struct ParallelMCTS {
     pub config: ParallelMCTSConfig,
     nodes: HashMap<u64, Arc<Mutex<Node>>, BuildHasherDefault<ZobristHasher>>,
-    simulation_pool: Pool<(usize, Vec<f32>)>,
+    simulation_pool: Pool<(usize, ArrayVec<f32, MAX_SNAKE_COUNT>)>,
     iteration: usize,
     iterations_complited: usize,
     max_depth_reached: usize,
@@ -58,7 +59,7 @@ pub struct ParallelMCTS {
 
 impl ParallelMCTS {
     pub fn new(config: ParallelMCTSConfig) -> ParallelMCTS {
-        let simulation_pool = Pool::<(usize, Vec<f32>)>::new(config.simulation_workers);
+        let simulation_pool = Pool::<(usize, ArrayVec<f32, MAX_SNAKE_COUNT>)>::new(config.simulation_workers);
 
         ParallelMCTS {
             nodes: HashMap::with_capacity_and_hasher(config.table_capacity, BuildHasherDefault::<ZobristHasher>::default()),
@@ -119,7 +120,7 @@ impl ParallelMCTS {
         info!("Searched {} iterations in {} ms (target={} ms)", self.iterations_complited, actual_duration.as_millis(), target_duration.as_millis());
     }
 
-    fn rollout(&mut self, board: &Board, rollout_contexts: &mut HashMap<usize, Vec<(Arc<Mutex<Node>>, Vec<(usize, Action)>)>>) {
+    fn rollout(&mut self, board: &Board, rollout_contexts: &mut HashMap<usize, Vec<(Arc<Mutex<Node>>, ArrayVec<(usize, Action), MAX_SNAKE_COUNT>)>>) {
         // let start = Instant::now();
         let mut board = board.clone();
         
@@ -152,7 +153,7 @@ impl ParallelMCTS {
         self.backpropagate(path, rewards);
     }
 
-    fn selection(&mut self, board: &mut Board) -> Vec<(Arc<Mutex<Node>>, Vec<(usize, Action)>)> {
+    fn selection(&mut self, board: &mut Board) -> Vec<(Arc<Mutex<Node>>, ArrayVec<(usize, Action), MAX_SNAKE_COUNT>)> {
         let start = Instant::now();
 
         let mut path = Vec::new();
@@ -278,7 +279,7 @@ impl ParallelMCTS {
         self.simulation_pool.add_task(task);
     }
 
-    fn backpropagate(&mut self, path: Vec<(Arc<Mutex<Node>>, Vec<(usize, Action)>)>, rewards: Vec<f32>) {
+    fn backpropagate(&mut self, path: Vec<(Arc<Mutex<Node>>, ArrayVec<(usize, Action), MAX_SNAKE_COUNT>)>, rewards: ArrayVec<f32, MAX_SNAKE_COUNT>) {
         let start = Instant::now();
         // info!("{:?}", self.nodes.keys());
         // info!("{:?}", path);

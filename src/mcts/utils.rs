@@ -1,9 +1,11 @@
 use crate::api::objects::Movement;
 use crate::engine::MOVEMENTS;
-use crate::game::{Board, Object, Point};
+use crate::game::{Board, Object, Point, MAX_SNAKE_COUNT};
+use arrayvec::ArrayVec;
 
-pub fn get_masks(board: &Board) -> Vec<(usize, [bool; 4])> {
-    let tails: Vec<_> = board.snakes
+
+pub fn get_masks(board: &Board) -> ArrayVec<(usize, [bool; 4]), MAX_SNAKE_COUNT> {
+    let tails: ArrayVec<_, MAX_SNAKE_COUNT> = board.snakes
         .iter()
         .filter(|snake| snake.is_alive())
         .map(|snake| *snake.body.back().unwrap())
