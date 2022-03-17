@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 use std::ops::{Add, AddAssign};
 use std::hash::{Hash, Hasher};
+use arrayvec::ArrayVec;
 use rand::thread_rng;
 use rand::Rng;
 
@@ -8,13 +9,13 @@ use crate::api;
 use crate::vec2d::Vec2D;
 use crate::zobrist::{ZobristHash, body_direction};
 
-pub const MAX_SNAKE_COUNT: usize = 8;
+pub const MAX_SNAKE_COUNT: usize = 4;
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Board {
     pub size: Point,
     pub foods: Vec<Point>,
-    pub snakes: Vec<Snake>,
+    pub snakes: ArrayVec<Snake, MAX_SNAKE_COUNT>,
     pub turn: i32,
     pub hazard: Vec2D<bool>,
     pub hazard_start: Point,

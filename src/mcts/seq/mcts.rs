@@ -1,4 +1,6 @@
 use rand::seq::SliceRandom;
+use arrayvec::ArrayVec;
+
 use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
@@ -6,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use crate::api::objects::Movement;
 use crate::engine::{Action, EngineSettings, advance_one_step_with_settings, food_spawner, safe_zone_shrinker};
-use crate::game::{Board, Snake};
+use crate::game::{Board, Snake, MAX_SNAKE_COUNT};
 use crate::zobrist::ZobristHasher;
 use crate::mcts::utils::get_masks;
 use crate::mcts::bandit::MultiArmedBandit;
@@ -103,7 +105,7 @@ impl SequentialMCTS {
         }
     }
 
-    fn selection(&self, board: &mut Board) -> Vec<(RefMut<Node>, Vec<(usize, Action)>)> {
+    fn selection(&self, board: &mut Board) -> Vec<(RefMut<Node>, ArrayVec<(usize, Action), MAX_SNAKE_COUNT>)> {
         // let start = Instant::now();
 
         let mut path = Vec::new();
@@ -154,7 +156,7 @@ impl SequentialMCTS {
         self.nodes.insert(board.zobrist_hash.get_value(), RefCell::new(node));
     }
 
-    fn backpropagate(&self, path: Vec<(RefMut<Node>, Vec<(usize, Action)>)>, rewards: Vec<f32>) {
+    fn backpropagate(&self, path: Vec<(RefMut<Node>, ArrayVec<(usize, Action), MAX_SNAKE_COUNT>)>, rewards: Vec<f32>) {
         for (mut node, joint_action) in path {
             node.visits += 1;
 

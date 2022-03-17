@@ -163,7 +163,7 @@ pub mod safe_zone_shrinker {
 
 type SnakeStrategy<'a> = &'a mut dyn FnMut(/*snake_index:*/ usize, &Board) -> Action;
 
-pub fn advance_one_step(board: &mut Board, snake_strategy: SnakeStrategy) -> Vec<(usize, Action)> {
+pub fn advance_one_step(board: &mut Board, snake_strategy: SnakeStrategy) -> ArrayVec<(usize, Action), MAX_SNAKE_COUNT> {
     let mut settings = EngineSettings {
         food_spawner: &mut food_spawner::noop,
         safe_zone_shrinker: &mut safe_zone_shrinker::noop,
@@ -177,7 +177,7 @@ pub fn advance_one_step_with_settings(
     board: &mut Board,
     engine_settings: &mut EngineSettings,
     snake_strategy: SnakeStrategy
-) -> Vec<(usize, Action)> {
+) -> ArrayVec<(usize, Action), MAX_SNAKE_COUNT> {
     board.zobrist_hash.xor_turn(board.turn);
     board.turn += 1;
     board.zobrist_hash.xor_turn(board.turn);
@@ -196,7 +196,7 @@ pub fn advance_one_step_with_settings(
     //     - Last body part (their tail) is removed from the board.
     //     - Health is reduced by 1.
 
-    let actions: Vec<(usize, Action)> = alive_snakes
+    let actions: ArrayVec<(usize, Action), MAX_SNAKE_COUNT> = alive_snakes
         .iter()
         .map(|&i| (i, snake_strategy(i, &board)))
         .collect();
