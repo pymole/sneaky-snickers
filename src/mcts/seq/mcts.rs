@@ -26,7 +26,8 @@ cfg_if::cfg_if! {
 }
 
 struct Node {
-    visits: u32,
+    visits: f32,
+    visits_ln: f32,
     // Alive snakes
     agents: Vec<Agent>,
 }
@@ -39,7 +40,8 @@ struct Agent {
 impl Node {
     fn new(agents: Vec<Agent>) -> Node {
         Node {
-            visits: 0,
+            visits: 0.0,
+            visits_ln: 0.0,
             agents: agents,
         }
     }
@@ -49,16 +51,19 @@ impl Node {
     }
 }
 
+type JointMove = ArrayVec<(usize, Action), MAX_SNAKE_COUNT>;
+
 pub struct SequentialMCTS {
     pub config: SequentialMCTSConfig,
     nodes: HashMap<u64, RefCell<Node>, BuildHasherDefault<ZobristHasher>>,
+    transitions: HashMap<u64, Vec<(JointMove, u64)>>
 }
-
 
 impl SequentialMCTS {
     pub fn new(config: SequentialMCTSConfig) -> SequentialMCTS {
         SequentialMCTS {
             nodes: HashMap::with_capacity_and_hasher(config.table_capacity, BuildHasherDefault::<ZobristHasher>::default()),
+            transitions: HashMap::with_capacity(config.table_capacity),
             config,
         }
     }
@@ -97,15 +102,29 @@ impl SequentialMCTS {
 
     fn rollout(&mut self, board: &Board) {
         let mut board = board.clone();
-        let path = self.selection(&mut board);
+
+        if self.nodes.len() == 0 {
+            self.expansion(&board);
+        }
+
+        let (path, last_node_key) = self.selection(&mut board);
         let rewards = self.simulation(board.clone());
+
+        let child_key = board.zobrist_hash.get_value();
+        let parent_key = last_node_key;
+        let joint_move = path[path.len() - 1].1.clone();
+
         self.backpropagate(path, rewards);
+
+        let children = self.transitions.entry(parent_key).or_default();
+        children.push((joint_move, child_key));
+
         if !board.is_terminal() {
             self.expansion(&board);
         }
     }
 
-    fn selection(&self, board: &mut Board) -> Vec<(RefMut<Node>, ArrayVec<(usize, Action), MAX_SNAKE_COUNT>)> {
+    fn selection(&self, board: &mut Board) -> (Vec<(RefMut<Node>, JointMove)>, u64) {
         // let start = Instant::now();
 
         let mut path = Vec::new();
@@ -116,10 +135,13 @@ impl SequentialMCTS {
         };
 
         let nodes = &self.nodes;
+        let mut last_node_key = board.zobrist_hash.get_value();
 
         while let Some(node_cell) = nodes.get(&board.zobrist_hash.get_value()) {
             let mut node = node_cell.borrow_mut();
-            let n = node.visits;
+            let n_ln = node.visits_ln;
+
+            last_node_key = board.zobrist_hash.get_value();
 
             // TODO: This is ugly. Maybe change snake_strategy on simple arguments pass.
             let joint_action = advance_one_step_with_settings(
@@ -129,7 +151,7 @@ impl SequentialMCTS {
                     let agent_index = node.get_agent_index(i);
                     let agent = &mut node.agents[agent_index];
 
-                    let best_action = agent.bandit.get_best_movement(&self.config, n);
+                    let best_action = agent.bandit.get_best_movement(&self.config, n_ln);
                     Action::Move(Movement::from_usize(best_action))
                 }
             );
@@ -137,7 +159,7 @@ impl SequentialMCTS {
             path.push((node, joint_action));
         }
 
-        path
+        (path, last_node_key)
     }
 
     fn expansion(&mut self, board: &Board) {
@@ -156,9 +178,10 @@ impl SequentialMCTS {
         self.nodes.insert(board.zobrist_hash.get_value(), RefCell::new(node));
     }
 
-    fn backpropagate(&self, path: Vec<(RefMut<Node>, ArrayVec<(usize, Action), MAX_SNAKE_COUNT>)>, rewards: Vec<f32>) {
+    fn backpropagate(&self, path: Vec<(RefMut<Node>, JointMove)>, rewards: Vec<f32>) {
         for (mut node, joint_action) in path {
-            node.visits += 1;
+            node.visits += 1.0;
+            node.visits_ln = node.visits.ln();
 
             for (agent, Action::Move(movement)) in joint_action.into_iter() {
                 let agent_index = node.get_agent_index(agent);
@@ -221,11 +244,57 @@ impl SequentialMCTS {
     }
 
     pub fn get_final_movement(&self, board: &Board, agent: usize) -> Movement {
-        let node = self.nodes[&board.zobrist_hash.get_value()].borrow();
-        let agent_index = node.get_agent_index(agent);
-        let agent = &node.agents[agent_index];
+        let (movement, a) = self.minimax(board.zobrist_hash.get_value(), agent);
+        info!("{}", a);
+        Movement::from_usize(movement)
+    }
+
+    fn minimax(&self, node_key: u64, agent_id: usize) -> (usize, f32) {
+        let node = self.nodes[&node_key].borrow();
+        let transitions = &self.transitions[&node_key];
+
+        let pov_agent_index = node.get_agent_index(agent_id);
+        let pov_agent = &node.agents[pov_agent_index];
+
+        let mut actions_min = [-f32::INFINITY; 4];
+        for action in 0..4 {
+            if pov_agent.bandit.mask[action] {
+                actions_min[action] = f32::INFINITY;
+            }
+        }
         
-        agent.bandit.get_final_movement(&self.config, node.visits)
+        for (joint_move, node_key) in transitions {
+            // TODO: rework to use indexes
+            for (agent_index, action) in joint_move {
+                if *agent_index == pov_agent_index {
+                    let Action::Move(action) = *action;
+                    let action = action as usize;
+                    let min = if self.transitions.contains_key(&node_key) {
+                        self.minimax(*node_key, agent_id).1
+                    } else {
+                        pov_agent.bandit.movement_value(&self.config, action, node.visits_ln)
+                    };
+
+                    if min < actions_min[action] {
+                        actions_min[action] = min;
+                    }
+
+                    break;
+                }
+            }
+        }
+
+        let mut max_value = 0.0;
+        let mut max_action = 0;
+        for action in 0..4 {
+            let min = actions_min[action];
+            if min > max_value {
+                max_value = min;
+                max_action = action;
+            }
+        }
+
+        (max_action, max_value)
     }
 
     pub fn shutdown(&self) {}
