@@ -14,8 +14,7 @@ extern crate rocket;
 
 use std::env;
 
-use std::collections::HashMap;
-use std::sync::{Mutex, RwLock};
+use std::sync::{Mutex};
 
 use rocket::fairing::AdHoc;
 use rocket::http::Header;
@@ -23,6 +22,7 @@ use rocket::http::Status;
 use rocket::serde::json::Json;
 use rocket::serde::json::serde_json;
 use rocket::State;
+use dashmap::DashMap;
 
 use log::info;
 
@@ -46,7 +46,7 @@ struct GameSession {
 }
 
 struct Storage {
-    game_sessions: RwLock<HashMap<String, Mutex<GameSession>>>,
+    game_sessions: DashMap<String, Mutex<GameSession>>,
 }
 
 
@@ -95,7 +95,7 @@ fn start(body: String, storage: &State<Storage>) -> Status {
         my_index: my_index,
     };
 
-    storage.game_sessions.write().unwrap().insert(state.game.id, Mutex::new(game_session));
+    storage.game_sessions.insert(state.game.id, Mutex::new(game_session));
 
     Status::Ok
 }
@@ -111,11 +111,11 @@ fn movement(storage: &State<Storage>, body: String) -> Json<api::responses::Move
     info!("MOVE - {}", body);
     let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
 
-    let game_sessions = storage.game_sessions.read().unwrap();
-    info!("{:?}", game_sessions.keys());
-    info!("{:?}", state.game.id);
+    // info!("{:?}", storage.game_sessions.iter(). );
+    // info!("{:?}", state.game.id);
 
-    let mut game_session = game_sessions.get(&state.game.id).unwrap().lock().unwrap();
+    let game_session_mutex = storage.game_sessions.get(&state.game.id).unwrap();
+    let mut game_session = game_session_mutex.lock().unwrap();
     let my_index = game_session.my_index;
     let board = Board::from_api(&state);
 
@@ -137,7 +137,7 @@ fn movement(storage: &State<Storage>, body: String) -> Json<api::responses::Move
 fn end(storage: &State<Storage>, body: String) -> Status {
     info!("END - {}", body);
     let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
-    let mut game_session_mutex = storage.game_sessions.write().unwrap().remove(&state.game.id).unwrap();
+    let mut game_session_mutex = storage.game_sessions.remove(&state.game.id).unwrap().1;
     let game_session = game_session_mutex.get_mut().unwrap();
     if let Some(mcts) = game_session.mcts.as_ref() {
         mcts.shutdown();
@@ -157,6 +157,6 @@ fn rocket() -> _ {
             response.set_header(Header::new("Access-Control-Allow-Headers", "*"));
             response.set_header(Header::new("Access-Control-Allow-Credentials", "true"));
         })))
-        .manage(Storage {game_sessions: RwLock::new(HashMap::new())})
+        .manage(Storage {game_sessions: DashMap::new()})
         .mount("/", routes![index, start, movement, movement_options, end])
 }
