@@ -284,9 +284,14 @@ impl SequentialMCTS {
             }
         }
 
-        let mut max_value = 0.0;
-        let mut max_action = 0;
-        for action in 0..4 {
+        let found = agent.mask.iter().enumerate().find(|(_, m)| m);
+        if found.is_none() {
+            return (0, 0.0);
+        }
+
+        let (mut max_action, _) = found.unwrap();
+        let mut max_value = action_min[max_action];
+        for action in (max_action + 1)..4 {
             let min = actions_min[action];
             if min > max_value {
                 max_value = min;
