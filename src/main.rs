@@ -14,11 +14,12 @@ extern crate rocket;
 
 use std::env;
 
-use std::sync::{Mutex};
+use std::sync::Mutex;
 
 use rocket::fairing::AdHoc;
 use rocket::http::Header;
 use rocket::http::Status;
+use rocket::routes;
 use rocket::serde::json::Json;
 use rocket::serde::json::serde_json;
 use rocket::State;
