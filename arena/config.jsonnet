@@ -31,16 +31,24 @@ local Bots = {
     }
 };
 
+local Settings = {
+    search_with_time: { "MCTS_SEARCH_TIME": "200" },
+    iterations: { "MCTS_ITERATIONS": "1000" },
+};
+
+local DefaultSetting = Settings.search_with_time;
+
 {
     bots: [
         // Bots.from_commit("v1", "v1"),
         // Bots.from_commit("v2.8#t=200", "v2.8", { "MCTS_SEARCH_TIME": "200" }),
 
         // Version that is currently deployed
-        //Bots.from_commit("v3.0#t=200", "v3.0", { "MCTS_SEARCH_TIME": "200" }),
+        //Bots.from_commit("v3.0#t=200", "v3.0", DefaultSetting),
 
-        Bots.binary("norm-draw#t=200", { "MCTS_SEARCH_TIME": "200" }, exe="target/seq/sneaky-snickers"),
-        Bots.binary("zero-draw#t=200", { "MCTS_SEARCH_TIME": "200" }, exe="target/seq_without_draw/sneaky-snickers"),
+        // Bots.binary("norm-draw#t=200", { "MCTS_SEARCH_TIME": "200" }, exe="target/seq/sneaky-snickers"),
+        // Bots.binary("zero-draw#t=200", { "MCTS_SEARCH_TIME": "200" }, exe="target/seq_without_draw/sneaky-snickers"),
+        Bots.binary("master", DefaultSetting, mute=false),
         // Bots.unmanaged("current"),
     ],
 
