@@ -20,3 +20,11 @@ Only changes in agent playing ability are mentioned here.
     - Drop support for royale mode.
     - Initial support for wrapped+spiral mode.
     - Reserve
+- `v3.1`
+    - 75 Wins, 10 Draws, 15 Losses against `v3.0` (in single-threaded mode)
+    - update logic of eating food in hazard zone
+    - zobrist hash
+    - optimize code: reduce memory allocations, cache q value
+    - generate food during mcts
+    - prefer being longer instead of being healthier in reward
+    - implement multi-threaded mode
