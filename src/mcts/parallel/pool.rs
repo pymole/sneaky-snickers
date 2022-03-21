@@ -50,7 +50,9 @@ where
                         match command {
                             Command::Execute(task) => {
                                 let result = (task.fn_box)();
-                                result_sender_.send(result).unwrap();
+                                if let Err(_) = result_sender_.send(result) {
+                                    break
+                                }
                             }
                             Command::Stop => break
                         }
