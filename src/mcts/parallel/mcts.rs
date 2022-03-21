@@ -1,14 +1,14 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::thread;
 use std::time::{Duration, Instant};
 
 use arrayvec::ArrayVec;
-use dashmap::mapref::one::Ref;
 use rand::seq::SliceRandom;
 use dashmap::DashMap;
+use spin::mutex::Mutex;
 
 use crate::api::objects::Movement;
 use crate::engine::{Action, EngineSettings, advance_one_step_with_settings, food_spawner, safe_zone_shrinker};
@@ -48,11 +48,10 @@ impl Node {
 }
 
 
-type Nodes = Arc<DashMap<u64, RwLock<Node>, BuildHasherDefault<ZobristHasher>>>;
+type Nodes = Arc<DashMap<u64, Mutex<Node>, BuildHasherDefault<ZobristHasher>>>;
 pub struct ParallelMCTS {
     pub config: Arc<ParallelMCTSConfig>,
     nodes: Nodes,
-    iterations_complited: Arc<AtomicUsize>,
     max_depth_reached: Arc<AtomicUsize>,
 
     // selection_time: Duration,
@@ -62,19 +61,18 @@ pub struct ParallelMCTS {
 
 impl ParallelMCTS {
     pub fn new(config: ParallelMCTSConfig) -> ParallelMCTS {
-        let nodes = Arc::new(DashMap::<u64, RwLock<Node>, BuildHasherDefault<ZobristHasher>>::with_capacity_and_hasher(config.table_capacity, BuildHasherDefault::<ZobristHasher>::default()));
+        let nodes = Arc::new(DashMap::<u64, Mutex<Node>, BuildHasherDefault<ZobristHasher>>::with_capacity_and_hasher(config.table_capacity, BuildHasherDefault::<ZobristHasher>::default()));
         
         ParallelMCTS {
             config: Arc::new(config),
             nodes,
-            iterations_complited: Arc::new(AtomicUsize::new(0)),
             max_depth_reached: Arc::new(AtomicUsize::new(0)),
         }
     }
 
     fn print_stats(&self, board: &Board) {
         let node_ref = self.nodes.get(&board.zobrist_hash.get_value()).unwrap();
-        let node = node_ref.read().unwrap();
+        let node = node_ref.lock();
 
         info!("Node visits: {}", node.visits);
         // info!("Max depth reached: {}", self.max_depth_reached.load(Ordering::));
@@ -102,12 +100,14 @@ impl ParallelMCTS {
 
             let join_handle = thread::spawn(move || {
                 worker.search(board_clone, iterations_per_worker);
+                worker.iterations
             });
             join_handles.push(join_handle);
         }
 
+        let mut iterations = 0;
         join_handles.into_iter().for_each(|join_handle| {
-            join_handle.join();
+            iterations += join_handle.join().unwrap();
         });
 
         self.print_stats(board);
@@ -123,32 +123,33 @@ impl ParallelMCTS {
 
             let join_handle = thread::spawn(move || {
                 worker.search_with_time(board_clone, target_duration);
+                worker.iterations
             });
             join_handles.push(join_handle);
         }
 
+        let mut iterations = 0;
         join_handles.into_iter().for_each(|join_handle| {
-            join_handle.join();
+            iterations += join_handle.join().unwrap();
         });
 
         let actual_duration = Instant::now() - time_start;
         self.print_stats(board);
-        info!("Searched {} iterations in {} ms (target={} ms)", self.iterations_complited.load(Ordering::Relaxed), actual_duration.as_millis(), target_duration.as_millis());
+        info!("Searched {} iterations in {} ms (target={} ms)", iterations, actual_duration.as_millis(), target_duration.as_millis());
     }
 
     fn create_worker(&self, id: usize) -> ParallelMCTSWorker {
-        ParallelMCTSWorker {
+        ParallelMCTSWorker::new(
             id,
-            nodes: self.nodes.clone(),
-            config: self.config.clone(),
-            iterations_complited: self.iterations_complited.clone(),
-            max_depth_reached: self.max_depth_reached.clone(),
-        }
+            self.config.clone(),
+            self.nodes.clone(),
+            self.max_depth_reached.clone(),
+        )
     }
 
     pub fn get_final_movement(&self, board: &Board, agent: usize) -> Movement {
         let node_ref = self.nodes.get(&board.zobrist_hash.get_value()).unwrap();
-        let node = node_ref.read().unwrap();
+        let node = node_ref.lock();
         let agent_index = node.get_agent_index(agent);
         let agent = &node.agents[agent_index];
         
@@ -162,19 +163,19 @@ struct ParallelMCTSWorker {
     id: usize,
     config: Arc<ParallelMCTSConfig>,
     nodes: Nodes,
-    iterations_complited: Arc<AtomicUsize>,
+    iterations: usize,
     max_depth_reached: Arc<AtomicUsize>,
 }
 
 
 impl ParallelMCTSWorker {
-    pub fn new(id: usize, config: Arc<ParallelMCTSConfig>, nodes: Nodes, iterations_complited: Arc<AtomicUsize>, max_depth_reached: Arc<AtomicUsize>) -> ParallelMCTSWorker {
+    pub fn new(id: usize, config: Arc<ParallelMCTSConfig>, nodes: Nodes, max_depth_reached: Arc<AtomicUsize>) -> ParallelMCTSWorker {
         ParallelMCTSWorker {
             id,
             nodes,
             config,
-            iterations_complited,
             max_depth_reached,
+            iterations: 0,
         }
     }
 
@@ -191,7 +192,7 @@ impl ParallelMCTSWorker {
 
         while Instant::now() < time_end {
             self.rollout(&board);
-            self.iterations_complited.fetch_add(1, Ordering::Relaxed);
+            self.iterations += 1;
         }
     }
 
@@ -206,7 +207,7 @@ impl ParallelMCTSWorker {
         for _i in 0..iterations_count {
             // info!("iteration {}", i);
             self.rollout(&board);
-            self.iterations_complited.fetch_add(1, Ordering::Relaxed);
+            self.iterations += 1;
         }
     }
 
@@ -246,7 +247,7 @@ impl ParallelMCTSWorker {
             safe_zone_shrinker: &mut safe_zone_shrinker::standard,
         };
 
-        let iteration = self.iterations_complited.load(Ordering::SeqCst);
+        let iteration = self.iterations;
 
         while path.len() < self.config.max_select_depth {
             let node_key = board.zobrist_hash.get_value();
@@ -258,7 +259,7 @@ impl ParallelMCTSWorker {
             let node_ref = node_option.unwrap();
 
             let joint_action = {
-                let mut node = node_ref.write().unwrap();
+                let mut node = node_ref.lock();
 
                 node.unobserved_samples += 1.0;
     
@@ -304,7 +305,7 @@ impl ParallelMCTSWorker {
         
         let node = Node::new(agents);
 
-        self.nodes.insert(node_key, RwLock::new(node));
+        self.nodes.insert(node_key, Mutex::new(node));
     }
 
     fn simulation(&self, board: &Board) -> ArrayVec<f32, MAX_SNAKE_COUNT> {
@@ -365,7 +366,7 @@ impl ParallelMCTSWorker {
         // info!("{:?}", path);
         for (node_key, joint_action) in path {
             let node_ref = self.nodes.get(&node_key).unwrap();
-            let mut node = node_ref.write().unwrap();
+            let mut node = node_ref.lock();
             // info!("{}", node_key);
             node.visits += 1.0;
             node.unobserved_samples -= 1.0;
