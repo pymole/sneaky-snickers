@@ -98,6 +98,7 @@ pub mod food_spawner {
         }
     }
 
+    #[allow(dead_code)]
     pub fn noop(_: &mut Board) {
     }
 }
@@ -157,12 +158,14 @@ pub mod safe_zone_shrinker {
         }
     }
 
+    #[allow(dead_code)]
     pub fn noop(_: &mut Board) {
     }
 }
 
 type SnakeStrategy<'a> = &'a mut dyn FnMut(/*snake_index:*/ usize, &Board) -> Action;
 
+#[allow(dead_code)]
 pub fn advance_one_step(board: &mut Board, snake_strategy: SnakeStrategy) -> ArrayVec<(usize, Action), MAX_SNAKE_COUNT> {
     let mut settings = EngineSettings {
         food_spawner: &mut food_spawner::noop,
