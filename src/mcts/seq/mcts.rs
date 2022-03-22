@@ -151,7 +151,7 @@ impl SequentialMCTS {
                 }
             })
             .collect();
-        
+
         let node = Node::new(agents);
         self.nodes.insert(board.zobrist_hash.get_value(), RefCell::new(node));
     }
@@ -203,7 +203,7 @@ impl SequentialMCTS {
                 &mut |snake, _| *actions.get(&snake).unwrap()
             );
         }
-        
+
         let alive_count = board.snakes.iter().filter(|snake| snake.is_alive()).count();
         let len_norm: f32 = board.snakes.iter().map(|snake| snake.body.len() as f32).sum();
 
@@ -224,7 +224,7 @@ impl SequentialMCTS {
         let node = self.nodes[&board.zobrist_hash.get_value()].borrow();
         let agent_index = node.get_agent_index(agent);
         let agent = &node.agents[agent_index];
-        
+
         agent.bandit.get_final_movement(&self.config, node.visits)
     }
 

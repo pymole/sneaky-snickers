@@ -23,9 +23,9 @@ turn_stats = defaultdict(TurnStat)
 for start_turn, turn, rewards in rollouts:
     turn = int(turn)
     rewards = [float(r) for r in rewards[2:-2].split(', ')]
-    
+
     stat = turn_stats[start_turn]
-    
+
     stat.turn_sum += turn
     stat.turns_count += 1
 

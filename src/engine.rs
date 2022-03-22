@@ -151,7 +151,7 @@ pub mod safe_zone_shrinker {
             3 => Point {x: -eighth, y: hazard_index - eighth},
             _ => unreachable!(),
         };
-        
+
         let new_hazard_position = board.hazard_start + new_hazard_shift;
         if board.contains(new_hazard_position) {
             board.hazard[new_hazard_position] = true;
@@ -184,7 +184,7 @@ pub fn advance_one_step_with_settings(
     board.zobrist_hash.xor_turn(board.turn);
     board.turn += 1;
     board.zobrist_hash.xor_turn(board.turn);
-    
+
     let alive_snakes: ArrayVec<usize, MAX_SNAKE_COUNT> = (0..board.snakes.len())
         .filter(|&i| board.snakes[i].is_alive())
         .collect();
@@ -211,7 +211,7 @@ pub fn advance_one_step_with_settings(
             let snake = &mut board.snakes[i];
             debug_assert!(snake.body.len() > 0);
             let head_position = snake.body[0];
-            
+
             let mut new_head_position = head_position + movement.to_direction();
             if new_head_position.x < 0 {
                 new_head_position.x = board.size.x - 1;
@@ -227,9 +227,9 @@ pub fn advance_one_step_with_settings(
             }
 
             snake.health -= 1;
-            
+
             snake.body.push_front(new_head_position);
-            
+
             // Move neck (first body part next to head)
             let new_neck_direction = body_direction(head_position, new_head_position);
             board.zobrist_hash.xor_body_direction(head_position, i, new_neck_direction);
@@ -238,10 +238,10 @@ pub fn advance_one_step_with_settings(
             let old_tail = snake.body.pop_back().unwrap();
             let new_tail = snake.body[snake.body.len() - 1];
             debug_assert_eq!(board.objects[old_tail], Object::BodyPart);
-            
+
             let old_tail_direction = body_direction(old_tail, new_tail);
             board.zobrist_hash.xor_body_direction(old_tail, i, old_tail_direction);
-            
+
             // TODO: benchmark alternative: if *snake.body.back().unwrap() != old_tail {
             board.objects[old_tail] = Object::Empty;
             board.objects[new_tail] = Object::BodyPart;

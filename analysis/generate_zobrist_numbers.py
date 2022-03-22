@@ -18,7 +18,7 @@ def generate(width: int, height: int, players: int, rust_integer: RustInt):
     low, high = rust_integer.diapason
 
     random_number = lambda: random.randint(low, high)
-    
+
     food = [
         [0] * height
         for _ in range(width)
@@ -44,7 +44,7 @@ def generate(width: int, height: int, players: int, rust_integer: RustInt):
     print(f"const MAX_SNAKE_COUNT: usize = {players};")
     print(f"const MAX_WIDTH: usize = {width};")
     print(f"const MAX_HEIGHT: usize = {height};")
-    
+
     food_str = "const FOOD: [[{}; MAX_HEIGHT]; MAX_WIDTH] = {};".format(
         rust_integer.name,
         food,
@@ -56,7 +56,7 @@ def generate(width: int, height: int, players: int, rust_integer: RustInt):
 
     print(food_str)
     print(body_direcions_str)
-    
+
 
 if __name__ == "__main__":
     generate(11, 11, 4, u64)

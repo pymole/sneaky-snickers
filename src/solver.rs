@@ -73,7 +73,7 @@ pub fn flavored_flood_fill(board: &Board) -> FloodFill {
 
     let mut flood_fronts = Vec::with_capacity(board.snakes.len());
     let mut seized_points = vec![vec![]; board.snakes.len()];
-    
+
     for snake in board.snakes.iter() {
         if snake.health <= 0 {
             continue;
@@ -92,7 +92,7 @@ pub fn flavored_flood_fill(board: &Board) -> FloodFill {
 
     loop {
         let mut contenders_at_point = HashMap::<Point, Vec<usize>>::new();
-        
+
         for (snake_index, flood_front) in flood_fronts.iter_mut().enumerate() {
             while let Some(point) = flood_front.pop() {
                 for movement_position in movement_positions(board.size.x, board.size.y, point) {
@@ -120,7 +120,7 @@ pub fn flavored_flood_fill(board: &Board) -> FloodFill {
                 }
             }
         }
-        
+
         let mut all_fronts_empty = true;
         for (point, contenders) in contenders_at_point {
             visited.insert(point);
@@ -133,7 +133,7 @@ pub fn flavored_flood_fill(board: &Board) -> FloodFill {
                 winner_id = 0;
                 let mut largest_size = 0;
                 let mut several_largest = false;
-                
+
                 for contender in contenders {
                     let size = sizes[contender];
                     if largest_size < size {
