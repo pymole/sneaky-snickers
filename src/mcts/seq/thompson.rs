@@ -44,17 +44,17 @@ impl MultiArmedBandit<SequentialMCTSConfig> for ThompsonSampling {
     fn get_final_movement(&self, _mcts_config: &SequentialMCTSConfig, _node_visits: u32) -> Movement {
         let mut best_movement = 0;
         let mut max_mean = -1.0;
-    
+
         for action in (0..4).filter(|&m| self.mask[m]) {
             let beta = self.beta_distributions[action];
             let mean = beta.mean().unwrap();
-    
+
             if mean > max_mean {
                 best_movement = action;
                 max_mean = mean;
             }
         }
-    
+
         Movement::from_usize(best_movement)
     }
 

@@ -31,7 +31,7 @@ class Ruleset:
     food_spawn_chance: int
     name: str
     minimum_food: int
-    shrink_every_n_turns: int
+    # shrink_every_n_turns: int
 
 
 @dataclass
@@ -67,7 +67,7 @@ def battlesnake_frames_to_snickers_match(data: dict) -> SnickersMatch:
         food_spawn_chance=int(game_ruleset['foodSpawnChance']),
         name=game_ruleset['name'],
         minimum_food=int(game_ruleset['minimumFood']),
-        shrink_every_n_turns=int(game_ruleset['shrinkEveryNTurns']),
+        # shrink_every_n_turns=int(game_ruleset['shrinkEveryNTurns']),
     )
 
     game_frames = data['Frames']

@@ -196,6 +196,7 @@ impl Rectangle {
         self.p0.y <= p.y && p.y < self.p1.y
     }
 
+    #[allow(dead_code)]
     pub fn empty(&self) -> bool {
         self.p0.x >= self.p1.x ||
         self.p0.y >= self.p1.y
