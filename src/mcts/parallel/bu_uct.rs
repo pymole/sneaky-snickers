@@ -5,11 +5,13 @@ use super::config::ParallelMCTSConfig;
 #[derive(Clone, Debug)]
 pub struct BUUCT {
     q: [f32; 4],
+    variance: [f32; 4],
     rewards: [f32; 4],
+    squared_rewards: [f32; 4],
     visits: [f32; 4],
     mask: [bool; 4],
     unobserved_samples: [f32; 4],
-    unobserved_samples_avg: [f32; 4],
+    // unobserved_samples_avg: [f32; 4],
 }
 
 impl BUUCT {
@@ -18,9 +20,11 @@ impl BUUCT {
             q: [0.0; 4],
             rewards: [0.0; 4],
             visits: [0.0; 4],
+            variance: [0.0; 4],
+            squared_rewards: [0.0; 4],
             mask,
             unobserved_samples: [0.0; 4],
-            unobserved_samples_avg: [0.0; 4],
+            // unobserved_samples_avg: [0.0; 4],
         }
     }
 }
@@ -32,18 +36,21 @@ impl BUUCT {
         let N = node_visits;
         let O = node_unobserved_samples;
 
+        let N_add_O_ln = (N + O).ln();
+
         for action in (0..4).filter(|&m| self.mask[m]) {
             let n = self.visits[action];
             let o = self.unobserved_samples[action];
 
             let n_add_o = n + o;
-
-            let bu_uct = if n_add_o > 0.0 {
+            
+            let ucb = if n_add_o > 0.0 {
                 // let surrogate_gap = self.unobserved_samples_avg[action];
                 
                 // if surrogate_gap < config.m_max * config.simulation_workers as f32 {
-                let q = self.q[action];
-                q + config.c * (2.0 * (N + O).ln() / n_add_o).sqrt()
+                
+                let variance_ucb = (self.variance[action] + (2.0 * N_add_O_ln / n_add_o).sqrt()).min(0.25);
+                self.q[action] + (variance_ucb * N_add_O_ln / n_add_o).sqrt()
                 // } else {
                 //     -f32::INFINITY
                 // }
@@ -51,9 +58,9 @@ impl BUUCT {
                 return action;
             };
 
-            if bu_uct > max_value {
+            if ucb > max_value {
                 max_action = action;
-                max_value = bu_uct;
+                max_value = ucb;
             }
         }
 
@@ -73,24 +80,26 @@ impl BUUCT {
     pub fn incomplete_update(&mut self, movement: usize) {
         self.unobserved_samples[movement] += 1.0;
 
-        let n = self.visits[movement];
-        let o = self.unobserved_samples[movement];
-        let n_add_o = n + o;
-        let o_avg = self.unobserved_samples_avg[movement];
-
-        self.unobserved_samples_avg[movement] = (n_add_o - 1.0) / n_add_o * o_avg + o / n_add_o;
+        // let n = self.visits[movement];
+        // let o = self.unobserved_samples[movement];
+        // let n_add_o = n + o;
+        // let o_avg = self.unobserved_samples_avg[movement];
+        // self.unobserved_samples_avg[movement] = (n_add_o - 1.0) / n_add_o * o_avg + o / n_add_o;
     }
 
     pub fn backpropagate(&mut self, reward: f32, movement: usize) {        
         self.visits[movement] += 1.0;
         self.unobserved_samples[movement] -= 1.0;
+
         self.rewards[movement] += reward;
+        self.squared_rewards[movement] += reward * reward;
 
-        let n = self.visits[movement];
-        let r_cummulative = self.rewards[movement];
-        // let q = self.q[movement];
+        // Recalculate caches
+        let q = self.rewards[movement] / self.visits[movement];
+        self.q[movement] = q;
 
-        self.q[movement] = r_cummulative / n;
+        let avg_squared_reward = self.squared_rewards[movement] / self.visits[movement];
+        self.variance[movement] = avg_squared_reward - q * q;
     }
 
     pub fn print_stats(&self, _mcts_config: &ParallelMCTSConfig, _node_visits: f32) {
@@ -98,7 +107,7 @@ impl BUUCT {
         info!("{:?}", self.visits);
         info!("{:?}", self.rewards);
         info!("{:?}", self.unobserved_samples);
-        info!("{:?}", self.unobserved_samples_avg);
+        // info!("{:?}", self.unobserved_samples_avg);
         info!("{:?}", self.q);
 
         for action in 0..4 {
