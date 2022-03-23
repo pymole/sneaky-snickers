@@ -16,7 +16,7 @@ use crate::game::{Board, Snake, MAX_SNAKE_COUNT};
 use crate::zobrist::ZobristHasher;
 use crate::mcts::utils::get_masks;
 
-use super::bu_uct::BUUCT;
+use super::wu_uct::BUUCT;
 use super::config::ParallelMCTSConfig;
 
 type Strategy = BUUCT;

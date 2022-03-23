@@ -11,7 +11,6 @@ pub struct BUUCT {
     visits: [f32; 4],
     mask: [bool; 4],
     unobserved_samples: [f32; 4],
-    // unobserved_samples_avg: [f32; 4],
 }
 
 impl BUUCT {
@@ -24,7 +23,6 @@ impl BUUCT {
             squared_rewards: [0.0; 4],
             mask,
             unobserved_samples: [0.0; 4],
-            // unobserved_samples_avg: [0.0; 4],
         }
     }
 }
@@ -45,15 +43,8 @@ impl BUUCT {
             let n_add_o = n + o;
             
             let ucb = if n_add_o > 0.0 {
-                // let surrogate_gap = self.unobserved_samples_avg[action];
-                
-                // if surrogate_gap < config.m_max * config.simulation_workers as f32 {
-                
                 let variance_ucb = (self.variance[action] + (2.0 * N_add_O_ln / n_add_o).sqrt()).min(0.25);
                 self.q[action] + (variance_ucb * N_add_O_ln / n_add_o).sqrt()
-                // } else {
-                //     -f32::INFINITY
-                // }
             } else {
                 return action;
             };
@@ -79,12 +70,6 @@ impl BUUCT {
 
     pub fn incomplete_update(&mut self, movement: usize) {
         self.unobserved_samples[movement] += 1.0;
-
-        // let n = self.visits[movement];
-        // let o = self.unobserved_samples[movement];
-        // let n_add_o = n + o;
-        // let o_avg = self.unobserved_samples_avg[movement];
-        // self.unobserved_samples_avg[movement] = (n_add_o - 1.0) / n_add_o * o_avg + o / n_add_o;
     }
 
     pub fn backpropagate(&mut self, reward: f32, movement: usize) {        

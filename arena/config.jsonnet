@@ -46,9 +46,9 @@ local DefaultSetting = Settings.search_with_time;
         // Version that is currently deployed
         //Bots.from_commit("v3.0#t=200", "v3.0", DefaultSetting),
 
-        // Bots.binary("norm-draw#t=200", { "MCTS_SEARCH_TIME": "200" }, exe="target/seq/sneaky-snickers"),
-        // Bots.binary("zero-draw#t=200", { "MCTS_SEARCH_TIME": "200" }, exe="target/seq_without_draw/sneaky-snickers"),
-        Bots.binary("master", DefaultSetting, mute=false),
+        Bots.binary("par-ucb-tuned#t=200#w=4", { "MCTS_SEARCH_TIME": "200", "MCTS_WORKERS": "4" }, exe="target/par_ucb_tuned/sneaky-snickers"),
+        Bots.binary("par#t=200#w=4", { "MCTS_SEARCH_TIME": "200", "MCTS_WORKERS": "4" }, exe="target/par_local/sneaky-snickers"),
+        //Bots.binary("master", DefaultSetting, mute=false),
         // Bots.unmanaged("current"),
     ],
 

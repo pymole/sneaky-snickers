@@ -1,6 +1,6 @@
 mod mcts;
 mod config;
-mod bu_uct;
+mod wu_uct;
 mod pool;
 
 pub use mcts::ParallelMCTS;
