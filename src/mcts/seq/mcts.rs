@@ -244,9 +244,19 @@ impl SequentialMCTS {
     }
 
     pub fn get_final_movement(&self, board: &Board, agent: usize) -> Movement {
-        let (movement, a) = self.minimax(board.zobrist_hash.get_value(), agent);
-        info!("{}", a);
-        Movement::from_usize(movement)
+        let alive_snakes =  board.snakes.iter().filter(|s| s.is_alive()).count();
+        
+        if alive_snakes > 2 {
+            let (movement, value) = self.minimax(board.zobrist_hash.get_value(), agent);
+            info!("{}", value);
+            Movement::from_usize(movement)
+        } else {
+            let node = self.nodes.get(&board.zobrist_hash.get_value()).unwrap().borrow();
+            let agent_index = node.get_agent_index(agent);
+            let agent = &node.agents[agent_index];
+            
+            agent.bandit.get_final_movement(&self.config, node.visits)
+        }
     }
 
     fn minimax(&self, node_key: u64, agent_id: usize) -> (usize, f32) {
