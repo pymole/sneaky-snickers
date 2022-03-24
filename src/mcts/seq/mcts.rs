@@ -284,13 +284,13 @@ impl SequentialMCTS {
             }
         }
 
-        let found = agent.mask.iter().enumerate().find(|(_, m)| m);
+        let found = pov_agent.bandit.mask.iter().enumerate().find(|(_, m)| **m);
         if found.is_none() {
             return (0, 0.0);
         }
 
         let (mut max_action, _) = found.unwrap();
-        let mut max_value = action_min[max_action];
+        let mut max_value = actions_min[max_action];
         for action in (max_action + 1)..4 {
             let min = actions_min[action];
             if min > max_value {
