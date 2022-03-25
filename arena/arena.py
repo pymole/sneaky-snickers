@@ -427,16 +427,22 @@ class Arena:
 
                     players, ranks = game_result.result()
                     new_ratings = trueskill.rate([(ratings[player.name],) for player in players], ranks=ranks)
+                    is_draw = all(rank != 0 for rank in ranks)
                     for (new_rating,), player, rank in zip(new_ratings, players, ranks):
                         ratings[player.name] = new_rating
 
-                        if rank == 0:
-                            for opponent in players:
-                                if player == opponent:
-                                    continue
-
-                                winrates[player.name].setdefault(opponent.name, 0)
-                                winrates[player.name][opponent.name] += 1
+                        for opponent, opponent_rank in zip(players, ranks):
+                            if player == opponent:
+                                continue
+                            winrates[player.name].setdefault(opponent.name, {'wins': 0, 'draws': 0, 'losses': 0, 'lost-together': 0})
+                            if is_draw:
+                                winrates[player.name][opponent.name]['draws'] += 1
+                            elif rank == 0:
+                                winrates[player.name][opponent.name]['wins'] += 1
+                            elif rank > opponent_rank:
+                                winrates[player.name][opponent.name]['losses'] += 1
+                            else:
+                                winrates[player.name][opponent.name]['lost-together'] += 1
 
                     with weights.lock:
                         weights.value[:] = compute_weights()
