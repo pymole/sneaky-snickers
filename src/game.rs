@@ -10,6 +10,9 @@ use crate::vec2d::Vec2D;
 use crate::zobrist::{ZobristHash, body_direction};
 
 pub const MAX_SNAKE_COUNT: usize = 4;
+pub const WIDTH: usize = 11;
+pub const HEIGHT: usize = 11;
+pub const SIZE: usize = WIDTH * HEIGHT;
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Board {

@@ -38,3 +38,14 @@ pub fn get_movement_position(position: Point, movement: Movement, borders: Point
         Movement::Down => Point {x: position.x, y: (borders.y + position.y - 1) % borders.y},
     }
 }
+
+pub fn movement_positions(position: Point, borders: Point) -> [Point; 4] {
+    let positions = [
+        Point {x: position.x, y: (position.y + 1) % borders.y },
+        Point {x: (position.x + 1) % borders.x, y: position.y},
+        Point {x: position.x, y: (borders.y + position.y - 1) % borders.y},
+        Point {x: (borders.x + position.x - 1) % borders.x, y: position.y},
+    ];
+
+    positions
+}
