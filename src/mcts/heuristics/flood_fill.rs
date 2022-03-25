@@ -106,6 +106,7 @@ pub fn flood_fill(board: &Board) -> FloodFill {
     seized_points
 }
 
+#[allow(dead_code)]
 pub fn flood_fill_estimate(board: &Board) -> [f32; MAX_SNAKE_COUNT] {
     let flood_fill = flood_fill(board);
     let squares_count = board.objects.len1 * board.objects.len2;
