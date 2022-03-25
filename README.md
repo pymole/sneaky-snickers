@@ -31,4 +31,6 @@ Only changes in agent playing ability are mentioned here.
 - `v3.2`
     - Bugfix: snake used to work incorrectly in >2 player games and would crash sometimes
     - improvemed performance for multi-threaded mode
+- `v3.2.1` — unrestricted MCTS_ROLLOUT_CUTOFF
 - `v3.3` — New flood fill reward heuiristic
+- `v3.3.1` — unrestricted MCTS_ROLLOUT_CUTOFF
