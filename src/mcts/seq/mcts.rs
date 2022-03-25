@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use crate::api::objects::Movement;
 use crate::engine::{Action, EngineSettings, advance_one_step_with_settings, food_spawner, safe_zone_shrinker};
-use crate::game::{Board, Snake, MAX_SNAKE_COUNT};
+use crate::game::{Board, MAX_SNAKE_COUNT};
 use crate::zobrist::ZobristHasher;
 use crate::mcts::utils::get_masks;
 use crate::mcts::bandit::MultiArmedBandit;

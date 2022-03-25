@@ -1,7 +1,7 @@
 use arrayvec::ArrayVec;
 use std::collections::HashMap;
 
-use crate::{game::{Point, Board, MAX_SNAKE_COUNT, WIDTH, HEIGHT}, mcts::utils::movement_positions};
+use crate::{game::{Point, Board, MAX_SNAKE_COUNT, WIDTH, HEIGHT, Object}, mcts::utils::movement_positions};
 
 pub type FloodFill = [Vec<Point>; MAX_SNAKE_COUNT];
 
@@ -9,7 +9,7 @@ pub fn flood_fill(board: &Board) -> FloodFill {
     let mut body_part_empty_at = HashMap::new();
     let mut sizes = [0; MAX_SNAKE_COUNT];
 
-    let mut flood_fronts: [Vec<Point>; MAX_SNAKE_COUNT] = Default::default();
+    let mut flood_fronts: [Vec<(i32, Point)>; MAX_SNAKE_COUNT] = Default::default();
     let mut seized_points: [Vec<Point>; MAX_SNAKE_COUNT] = Default::default();
 
     for (i, snake) in board.snakes.iter().enumerate() {
@@ -22,17 +22,19 @@ pub fn flood_fill(board: &Board) -> FloodFill {
         }
 
         sizes[i] = snake.body.len();
-        flood_fronts[i] = vec![snake.body[0]];
+        flood_fronts[i].push((snake.health, snake.body[0]));
     }
 
     let mut visited = [[false; HEIGHT]; WIDTH];
     let mut turn = 1;
 
     loop {
-        let mut contenders_at_point = HashMap::<Point, ArrayVec<usize, MAX_SNAKE_COUNT>>::new();
+        let mut contenders_at_point = HashMap::<Point, ArrayVec<(usize, i32), MAX_SNAKE_COUNT>>::new();
 
         for (snake_index, flood_front) in flood_fronts.iter_mut().enumerate() {
-            while let Some(point) = flood_front.pop() {
+            while let Some((mut health, point)) = flood_front.pop() {
+                health -= 1;
+                
                 for movement_position in movement_positions(point, board.size) {
                     if visited[movement_position.x as usize][movement_position.y as usize] {
                         // Somebody already seized this point
@@ -40,7 +42,7 @@ pub fn flood_fill(board: &Board) -> FloodFill {
                     }
                     if let Some(contenders) = contenders_at_point.get(&movement_position) {
                         // Already contesting for this point
-                        if contenders.contains(&snake_index) {
+                        if contenders.iter().any(|(contender, _)| *contender == snake_index) {
                             continue;
                         }
                     }
@@ -51,10 +53,23 @@ pub fn flood_fill(board: &Board) -> FloodFill {
                         }
                     }
 
+                    let next_health = if board.objects[point] == Object::Food {
+                        100
+                    } else if board.hazard[point] {
+                        health - 14
+                    } else {
+                        health
+                    };
+
+                    if next_health <= 0 {
+                        // At this point snake died of starvation
+                        continue;
+                    }
+
                     contenders_at_point
                         .entry(movement_position)
                         .or_insert(ArrayVec::new())
-                        .push(snake_index);
+                        .push((snake_index, health));
                 }
             }
         }
@@ -64,18 +79,24 @@ pub fn flood_fill(board: &Board) -> FloodFill {
             visited[point.x as usize][point.y as usize] = true;
 
             let mut winner_index;
+            let mut winner_health;
             if contenders.len() == 1 {
-                winner_index = contenders[0];
+                let c = contenders[0];
+                winner_index = c.0;
+                winner_health = c.1;
             } else {
                 // Largest snake get the point
                 winner_index = 0;
+                winner_health = 0;
+                
                 let mut largest_size = 0;
                 let mut several_largest = false;
 
-                for contender in contenders {
+                for (contender, health) in contenders {
                     let size = sizes[contender];
                     if largest_size < size {
                         winner_index = contender;
+                        winner_health = health;
                         several_largest = false;
                         largest_size = size;
                     } else if largest_size == size {
@@ -83,7 +104,7 @@ pub fn flood_fill(board: &Board) -> FloodFill {
                     }
                 }
 
-                // If there is multiple snakes that bigger than others then no one get the point
+                // If there is multiple snakes that bigger than others together (equal size) then no one get the point
                 if several_largest {
                     continue;
                 }
@@ -91,7 +112,7 @@ pub fn flood_fill(board: &Board) -> FloodFill {
 
             let flood_front = &mut flood_fronts[winner_index];
             let seized = &mut seized_points[winner_index];
-            flood_front.push(point);
+            flood_front.push((winner_health, point));
             seized.push(point);
             all_fronts_empty = false;
         }
