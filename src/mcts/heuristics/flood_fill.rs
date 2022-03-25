@@ -109,11 +109,11 @@ pub fn flood_fill(board: &Board) -> FloodFill {
 #[allow(dead_code)]
 pub fn flood_fill_estimate(board: &Board) -> [f32; MAX_SNAKE_COUNT] {
     let flood_fill = flood_fill(board);
-    let squares_count = board.objects.len1 * board.objects.len2;
+    let squares_count = (board.objects.len1 * board.objects.len2) as f32;
 
     let mut estimates = [0.0; MAX_SNAKE_COUNT];
     for i in 0..MAX_SNAKE_COUNT {
-        estimates[i] = (flood_fill[i].len() / squares_count) as f32;
+        estimates[i] = flood_fill[i].len() as f32 / squares_count;
     }
 
     estimates

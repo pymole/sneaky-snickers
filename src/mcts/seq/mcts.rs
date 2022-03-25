@@ -12,6 +12,7 @@ use crate::game::{Board, Snake, MAX_SNAKE_COUNT};
 use crate::zobrist::ZobristHasher;
 use crate::mcts::utils::get_masks;
 use crate::mcts::bandit::MultiArmedBandit;
+use crate::mcts::heuristics::flood_fill::flood_fill_estimate;
 
 use super::config::SequentialMCTSConfig;
 
@@ -204,17 +205,8 @@ impl SequentialMCTS {
             );
         }
 
-        let alive_count = board.snakes.iter().filter(|snake| snake.is_alive()).count();
-        let len_norm: f32 = board.snakes.iter().map(|snake| snake.body.len() as f32).sum();
-
-        let reward = |snake: &Snake|
-            if alive_count == 0 { self.config.draw_reward }
-            else {
-                (snake.is_alive() as u32 as f32) / (alive_count as f32)
-                * (snake.body.len() as f32) / len_norm
-            };
-
-        let rewards = board.snakes.iter().map(reward).collect();
+        let rewards = flood_fill_estimate(&board);
+        let rewards = Vec::from(&rewards[0..board.snakes.len()]);
 
         // info!("Started at {} turn and rolled out with {} turns and rewards {:?}", start_turn, board.turn - start_turn, rewards);
         rewards
