@@ -33,3 +33,4 @@ Only changes in agent playing ability are mentioned here.
     - improvemed performance for multi-threaded mode
 - `v3.2.1` — unrestricted MCTS_ROLLOUT_CUTOFF
 - `v3.3` — New flood fill reward heuiristic
+- `v3.3.1` — unrestricted MCTS_ROLLOUT_CUTOFF
