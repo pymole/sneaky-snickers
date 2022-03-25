@@ -27,8 +27,6 @@ impl MCTSConfig for SequentialMCTSConfig {
             draw_reward:    parse_env("MCTS_DRAW_REWARD").unwrap_or(NORMALIZED_DRAW_REWARD),
         };
 
-        assert!(config.rollout_cutoff >= 1);
-
         config
     }
 }
