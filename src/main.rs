@@ -152,10 +152,11 @@ fn flood_fill(body: String) -> Json<mcts::heuristics::flood_fill::FloodFill> {
     info!("FLOOD - {}", body);
     let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
     let board = Board::from_api(&state);
-    let f = mcts::heuristics::flood_fill::flood_fill(&board);
+
+    let f = mcts::heuristics::flood_fill::flood_fill_estimate(&board);
     info!("{:?}", f);
 
-    Json(f)
+    Json(mcts::heuristics::flood_fill::flood_fill(&board))
 }
 
 #[post("/end", data = "<body>")]
