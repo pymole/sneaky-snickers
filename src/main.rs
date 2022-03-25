@@ -14,14 +14,15 @@ extern crate rocket;
 
 use std::env;
 
-use std::sync::{Mutex};
+use std::sync::Mutex;
 
 use rocket::fairing::AdHoc;
 use rocket::http::Header;
 use rocket::http::Status;
+use rocket::routes;
 use rocket::serde::json::Json;
 use rocket::serde::json::serde_json;
-use rocket::{State, routes};
+use rocket::State;
 use dashmap::DashMap;
 
 use log::info;
@@ -42,7 +43,6 @@ cfg_if::cfg_if! {
 
 struct GameSession {
     mcts: Option<MCTS>,
-    my_index: usize,
 }
 
 struct Storage {
@@ -62,6 +62,13 @@ fn get_best_movement(mcts: &mut MCTS, board: &Board, agent: usize) -> Movement {
     mcts.get_final_movement(board, agent)
 }
 
+fn our_snake_index(state: &api::objects::State) -> usize {
+    state.board.snakes
+        .iter()
+        .position(|snake| snake.id == state.you.id)
+        .unwrap()
+}
+
 #[get("/")]
 fn index() -> Json<api::responses::Info> {
     Json(api::responses::Info {
@@ -78,24 +85,25 @@ fn index() -> Json<api::responses::Info> {
 fn start(body: String, storage: &State<Storage>) -> Status {
     info!("START - {}", body);
     let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
+
     let mcts = if env::var("MCTS_PERSISTENT").is_ok() {
-        let config = MCTSConfig::from_env();
-        Some(MCTS::new(config))
+        Some(MCTS::new(MCTSConfig::from_env()))
     } else {
         None
     };
 
-    let my_index = state.board.snakes
-        .iter()
-        .position(|snake| snake.id == state.you.id)
-        .unwrap();
-
     let game_session = GameSession {
         mcts: mcts,
-        my_index: my_index,
     };
 
-    storage.game_sessions.insert(state.game.id, Mutex::new(game_session));
+    if let Some(mut game_session_mutex) = storage.game_sessions.insert(state.game.id, Mutex::new(game_session)) {
+        warn!("Game with given id already exists! Replacing...");
+        // TODO: copy-pasta
+        let game_session = game_session_mutex.get_mut().unwrap();
+        if let Some(mcts) = game_session.mcts.as_ref() {
+            mcts.shutdown();
+        }
+    }
 
     Status::Ok
 }
@@ -106,31 +114,31 @@ fn movement_options() -> Status {
     Status::Ok
 }
 
+fn try_move_using_existing_game_session(storage: &State<Storage>, state: &api::objects::State) -> Option<Movement> {
+    if let Some(game_session_mutex) = storage.game_sessions.get(&state.game.id) {
+        if let Some(mcts) = game_session_mutex.lock().unwrap().mcts.as_mut() {
+            let board = Board::from_api(&state);
+            return Some(get_best_movement(mcts, &board, our_snake_index(&state)));
+        }
+    }
+
+    None
+}
+
 #[post("/move", data = "<body>")]
 fn movement(storage: &State<Storage>, body: String) -> Json<api::responses::Move> {
     info!("MOVE - {}", body);
     let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
 
-    // info!("{:?}", storage.game_sessions.iter(). );
-    // info!("{:?}", state.game.id);
-
-    let game_session_mutex = storage.game_sessions.get(&state.game.id).unwrap();
-    let mut game_session = game_session_mutex.lock().unwrap();
-    let my_index = game_session.my_index;
-    let board = Board::from_api(&state);
-
-    let movement = if let Some(mcts) = game_session.mcts.as_mut() {
-        get_best_movement(mcts, &board, my_index)
-    } else {
-        let config = MCTSConfig::from_env();
-        let mut mcts = MCTS::new(config);
-        let movement = get_best_movement(&mut mcts, &board, my_index);
+    let movement = try_move_using_existing_game_session(storage, &state).unwrap_or_else(|| {
+        let board = Board::from_api(&state);
+        let mut mcts = MCTS::new(MCTSConfig::from_env());
+        let movement = get_best_movement(&mut mcts, &board, our_snake_index(&state));
         mcts.shutdown();
         movement
-    };
+    });
 
-    let move_ = api::responses::Move::new(movement);
-    Json(move_)
+    Json(api::responses::Move::new(movement))
 }
 
 // This route is needed for CORS
@@ -154,10 +162,11 @@ fn flood_fill(body: String) -> Json<mcts::heuristics::flood_fill::FloodFill> {
 fn end(storage: &State<Storage>, body: String) -> Status {
     info!("END - {}", body);
     let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
-    let mut game_session_mutex = storage.game_sessions.remove(&state.game.id).unwrap().1;
-    let game_session = game_session_mutex.get_mut().unwrap();
-    if let Some(mcts) = game_session.mcts.as_ref() {
-        mcts.shutdown();
+    if let Some((_, mut game_session_mutex)) = storage.game_sessions.remove(&state.game.id) {
+        let game_session = game_session_mutex.get_mut().unwrap();
+        if let Some(mcts) = game_session.mcts.as_ref() {
+            mcts.shutdown();
+        }
     }
 
     Status::Ok
