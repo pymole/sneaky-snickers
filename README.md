@@ -20,7 +20,7 @@ Only changes in agent playing ability are mentioned here.
     - Drop support for royale mode.
     - Initial support for wrapped+spiral mode.
     - Reserve
-- `v3.1`
+- `v3.1` (note: has a bug in >2 player games)
     - 75 Wins, 10 Draws, 15 Losses against `v3.0` (in single-threaded mode)
     - update logic of eating food in hazard zone
     - zobrist hash
@@ -31,4 +31,4 @@ Only changes in agent playing ability are mentioned here.
 - `v3.2`
     - Bugfix: snake used to work incorrectly in >2 player games and would crash sometimes
     - improvemed performance for multi-threaded mode
-
+- `v3.3` — New flood fill reward heuiristic
