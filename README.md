@@ -28,3 +28,7 @@ Only changes in agent playing ability are mentioned here.
     - generate food during mcts
     - prefer being longer instead of being healthier in reward
     - implement multi-threaded mode
+- `v3.2`
+    - Bugfix: snake used to work incorrectly in >2 player games and would crash sometimes
+    - improvemed performance for multi-threaded mode
+
