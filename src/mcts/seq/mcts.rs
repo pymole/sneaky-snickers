@@ -205,8 +205,21 @@ impl SequentialMCTS {
             );
         }
 
-        let rewards = flood_fill_estimate(&board);
-        let rewards = Vec::from(&rewards[0..board.snakes.len()]);
+        let alive_count = board.snakes.iter().filter(|snake| snake.is_alive()).count();
+        if alive_count == 0 {
+            return vec![self.config.draw_reward; board.snakes.len()];
+        }
+
+        let len_sum: f32 = board.snakes.iter().map(|snake| snake.body.len() as f32).sum();
+
+        let rewards = flood_fill_estimate(&board);        
+        let mut rewards = Vec::from(&rewards[0..board.snakes.len()]);
+
+        for i in 0..board.snakes.len() {
+            if board.snakes[i].is_alive() {
+                rewards[i] *= board.snakes[i].body.len() as f32 / len_sum;
+            }
+        }
 
         // info!("Started at {} turn and rolled out with {} turns and rewards {:?}", start_turn, board.turn - start_turn, rewards);
         rewards
