@@ -1,3 +1,6 @@
+use rand::thread_rng;
+use rand::prelude::*;
+use rand::seq::SliceRandom;
 use crate::mcts::bandit::MultiArmedBandit;
 use crate::engine::Movement;
 
@@ -27,7 +30,17 @@ impl UCB {
 }
 
 impl MultiArmedBandit<SequentialMCTSConfig> for UCB {
-    fn get_best_movement(&mut self, _mcts_config: &SequentialMCTSConfig, node_visits: u32) -> usize {
+    fn get_best_movement(&mut self, mcts_config: &SequentialMCTSConfig, node_visits: u32) -> usize {
+        let mut rnd = thread_rng();
+        let chance: f32 = rnd.gen();
+        if chance < mcts_config.noise {
+            let moves: Vec<usize> = self.mask.iter().enumerate().filter(|(_, m)| **m).map(|(i, _)| i).collect();
+            if moves.len() == 0 {
+                return 0;
+            }
+            return *moves.choose(&mut rnd).unwrap();
+        }
+
         let mut max_ucb_action = 0;
         let mut max_ucb = -1.0;
         let n = node_visits as f32;

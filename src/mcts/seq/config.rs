@@ -9,6 +9,7 @@ pub struct SequentialMCTSConfig {
     pub rollout_cutoff: i32,
     pub rollout_beta: f32,
     pub draw_reward: f32,
+    pub noise: f32,
 }
 
 impl MCTSConfig for SequentialMCTSConfig {
@@ -25,6 +26,7 @@ impl MCTSConfig for SequentialMCTSConfig {
             rollout_cutoff: parse_env("MCTS_ROLLOUT_CUTOFF").unwrap_or(21),
             rollout_beta:   parse_env("MCTS_ROLLOUT_BETA").unwrap_or(3.0),
             draw_reward:    parse_env("MCTS_DRAW_REWARD").unwrap_or(NORMALIZED_DRAW_REWARD),
+            noise:          parse_env("MCTS_NOISE").unwrap_or(0.10),
         };
 
         assert!(config.rollout_cutoff >= 1);
