@@ -43,12 +43,14 @@ local DefaultSetting = Settings.search_with_time;
         // Bots.from_commit("v1", "v1"),
         // Bots.from_commit("v2.8#t=200", "v2.8", { "MCTS_SEARCH_TIME": "200" }),
 
-        // Version that is currently deployed
-        //Bots.from_commit("v3.0#t=200", "v3.0", DefaultSetting),
+        // Bots.from_commit("v3.0", "v3.0", DefaultSetting),
+        // Bots.from_commit("v3.2.1#cutoff=0", "v3.2.1", DefaultSetting { MCTS_ROLLOUT_CUTOFF: "0" }),
+        // Bots.from_commit("v3.2.1#cutoff=3", "v3.2.1", DefaultSetting { MCTS_ROLLOUT_CUTOFF: "3" }),
+        // Bots.from_commit("v3.3.1#cutoff=0", "v3.3.1", DefaultSetting { MCTS_ROLLOUT_CUTOFF: "0" }),
+        // Bots.from_commit("v3.4#cutoff=0", "v3.4", DefaultSetting { MCTS_ROLLOUT_CUTOFF: "0" }),
 
-        Bots.binary("par-ucb-tuned#t=200#w=4", { "MCTS_SEARCH_TIME": "200", "MCTS_WORKERS": "4" }, exe="target/par_ucb_tuned/sneaky-snickers"),
-        Bots.binary("par#t=200#w=4", { "MCTS_SEARCH_TIME": "200", "MCTS_WORKERS": "4" }, exe="target/par_local/sneaky-snickers"),
-        //Bots.binary("master", DefaultSetting, mute=false),
+        Bots.binary("master", DefaultSetting),
+
         // Bots.unmanaged("current"),
     ],
 

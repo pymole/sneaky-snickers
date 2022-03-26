@@ -27,7 +27,7 @@ impl MCTSConfig for ParallelMCTSConfig {
             table_capacity:         parse_env("MCTS_TABLE_CAPACITY").unwrap_or(200000),
             iterations:             parse_env("MCTS_ITERATIONS"),
             search_time:            Some(Duration::from_millis(parse_env("MCTS_SEARCH_TIME").unwrap_or(300))),
-            rollout_cutoff:         parse_env("MCTS_ROLLOUT_CUTOFF").unwrap_or(21),
+            rollout_cutoff:         parse_env("MCTS_ROLLOUT_CUTOFF").unwrap_or(0),
             rollout_beta:           parse_env("MCTS_ROLLOUT_BETA").unwrap_or(3.0),
             draw_reward:            parse_env("MCTS_DRAW_REWARD").unwrap_or(NORMALIZED_DRAW_REWARD),
             workers:                parse_env("MCTS_WORKERS").unwrap_or(num_cpus()),
