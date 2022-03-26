@@ -76,7 +76,7 @@ fn index() -> Json<api::responses::Info> {
     Json(api::responses::Info {
         apiversion: "1".to_string(),
         author: Some("Snickers".to_string()),
-        color: Some("#4a3120".to_string()),
+        color: Some("#dd3333".to_string()),
         head: Some("bendr".to_string()),
         tail: Some("round-bum".to_string()),
         version: Some("0".to_string()),
