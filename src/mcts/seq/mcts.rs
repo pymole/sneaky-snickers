@@ -12,7 +12,7 @@ use crate::game::{Board, Snake, MAX_SNAKE_COUNT};
 use crate::zobrist::ZobristHasher;
 use crate::mcts::utils::get_masks;
 use crate::mcts::bandit::MultiArmedBandit;
-use crate::mcts::heuristics::flood_fill::flood_fill_estimate;
+use crate::mcts::heuristics::flood_fill::flood_fill;
 
 use super::config::SequentialMCTSConfig;
 
@@ -212,7 +212,7 @@ impl SequentialMCTS {
 
         let len_sum: f32 = board.snakes.iter().map(|snake| snake.body.len() as f32).sum();
 
-        let rewards = flood_fill_estimate(&board);        
+        let rewards = flood_fill(&board);        
         let mut rewards = Vec::from(&rewards[0..board.snakes.len()]);
 
         for i in 0..board.snakes.len() {

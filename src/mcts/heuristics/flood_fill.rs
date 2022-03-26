@@ -5,7 +5,7 @@ use crate::{
     mcts::utils::movement_positions
 };
 
-pub type FloodFill = [Vec<Point>; MAX_SNAKE_COUNT];
+pub type FloodFill = [f32; MAX_SNAKE_COUNT];
 
 #[derive(Clone)]
 struct ContendersInfo {
@@ -32,7 +32,8 @@ pub fn flood_fill(board: &Board) -> FloodFill {
     let mut sizes = [0; MAX_SNAKE_COUNT];
 
     let mut flood_fronts: [Vec<Point>; MAX_SNAKE_COUNT] = Default::default();
-    let mut seized_points: [Vec<Point>; MAX_SNAKE_COUNT] = Default::default();
+    // let mut seized_points: [Vec<Point>; MAX_SNAKE_COUNT] = Default::default();
+    let mut seized_points = [0f32; MAX_SNAKE_COUNT];
 
     let mut contenders_at_point: [[ContendersInfo; HEIGHT]; WIDTH] = Default::default();
 
@@ -45,7 +46,6 @@ pub fn flood_fill(board: &Board) -> FloodFill {
             contenders_at_point[body_part.x as usize][body_part.y as usize].body_part_empty_at = empty_at + 1;
         }
         
-        seized_points[i].reserve_exact(SIZE);
         flood_fronts[i].reserve_exact(SIZE);
 
         sizes[i] = snake.body.len();
@@ -95,10 +95,12 @@ pub fn flood_fill(board: &Board) -> FloodFill {
 
             if !contenders_info.several_largest {
                 let flood_front = &mut flood_fronts[contenders_info.winner_index];
-                let seized = &mut seized_points[contenders_info.winner_index];
+                seized_points[contenders_info.winner_index] += 1.0;
+                
                 flood_front.push(point);
-                seized.push(point);
                 all_fronts_empty = false;
+                // let seized = &mut seized_points[contenders_info.winner_index];
+                // seized.push(point);
             }
         }
 
@@ -125,18 +127,11 @@ pub fn flood_fill(board: &Board) -> FloodFill {
     //     info!("{:?}", v);
     // }
 
-    seized_points
-}
+    let size = SIZE as f32;
 
-#[allow(dead_code)]
-pub fn flood_fill_estimate(board: &Board) -> [f32; MAX_SNAKE_COUNT] {
-    let flood_fill = flood_fill(board);
-    let squares_count = (board.objects.len1 * board.objects.len2) as f32;
-
-    let mut estimates = [0.0; MAX_SNAKE_COUNT];
     for i in 0..MAX_SNAKE_COUNT {
-        estimates[i] = flood_fill[i].len() as f32 / squares_count;
+        seized_points[i] /= size;
     }
 
-    estimates
+    seized_points
 }

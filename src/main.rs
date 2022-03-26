@@ -15,8 +15,8 @@ extern crate rocket;
 use std::env;
 
 use std::sync::Mutex;
-// use std::time::Duration;
-// use std::time::Instant;
+use std::time::Duration;
+use std::time::Instant;
 
 use rocket::fairing::AdHoc;
 use rocket::http::Header;
@@ -155,19 +155,20 @@ fn flood_fill(body: String) -> Json<mcts::heuristics::flood_fill::FloodFill> {
     let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
     let board = Board::from_api(&state);
 
-    let f = mcts::heuristics::flood_fill::flood_fill_estimate(&board);
+    let f = mcts::heuristics::flood_fill::flood_fill(&board);
+
     info!("{:?}", f);
 
-    // let mut d = Duration::from_secs(0);
-    // for i in 0..100000 {
-    //     let start = Instant::now();
-    //     let f = mcts::heuristics::flood_fill::flood_fill(&board);
-    //     d += Instant::now() - start;
-    // }
+    let mut d = Duration::from_secs(0);
+    for i in 0..100000 {
+        let start = Instant::now();
+        let f = mcts::heuristics::flood_fill::flood_fill(&board);
+        d += Instant::now() - start;
+    }
 
-    // info!("{:?}", d.as_micros() as f32 / 100000.0);
+    info!("{:?}", d.as_micros() as f32 / 100000.0);
 
-    Json(mcts::heuristics::flood_fill::flood_fill(&board))
+    Json(f)
 }
 
 #[post("/end", data = "<body>")]
