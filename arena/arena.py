@@ -23,7 +23,7 @@ import urllib.request
 
 ARENA_DIR = Path(__file__).parent
 ROOT_DIR = ARENA_DIR.parent
-CONFIG_PATH = ARENA_DIR / 'config.jsonnet'
+DEFAULT_CONFIG_PATH = ARENA_DIR / 'config.jsonnet'
 
 
 Address = str
@@ -493,11 +493,17 @@ def main():
         action='store_true',
         help='Umute all bots'
     )
+    argparser.add_argument(
+        '--config',
+        default=DEFAULT_CONFIG_PATH,
+        required=False,
+        help=f'Path to config file. Default: ${DEFAULT_CONFIG_PATH}',
+    )
     subparsers = argparser.add_subparsers(dest='command', required=False)
     subparsers.add_parser('up', help="Start bots until enter is pressed. Don't run games.")
     args = argparser.parse_args()
 
-    config = json.loads(_jsonnet.evaluate_file(str(CONFIG_PATH)))
+    config = json.loads(_jsonnet.evaluate_file(str(args.config)))
     logging.info(f'Loaded config\n{textwrap.indent(json.dumps(config, indent=2), "    ")}')
 
     # Ugly, hacky, but it works
