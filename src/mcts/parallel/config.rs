@@ -29,7 +29,7 @@ impl MCTSConfig for ParallelMCTSConfig {
             search_time:            Some(Duration::from_millis(parse_env("MCTS_SEARCH_TIME").unwrap_or(300))),
             rollout_cutoff:         parse_env("MCTS_ROLLOUT_CUTOFF").unwrap_or(0),
             rollout_beta:           parse_env("MCTS_ROLLOUT_BETA").unwrap_or(3.0),
-            draw_reward:            parse_env("MCTS_DRAW_REWARD").unwrap_or(NORMALIZED_DRAW_REWARD),
+            draw_reward:            parse_env("MCTS_DRAW_REWARD").unwrap_or(0.01),
             workers:                parse_env("MCTS_WORKERS").unwrap_or(num_cpus()),
             max_select_depth:       parse_env("MCTS_SELECT_DEPTH").unwrap_or(50),
         };
