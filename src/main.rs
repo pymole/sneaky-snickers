@@ -15,6 +15,8 @@ extern crate rocket;
 use std::env;
 
 use std::sync::Mutex;
+// use std::time::Duration;
+// use std::time::Instant;
 
 use rocket::fairing::AdHoc;
 use rocket::http::Header;
@@ -155,6 +157,15 @@ fn flood_fill(body: String) -> Json<mcts::heuristics::flood_fill::FloodFill> {
 
     let f = mcts::heuristics::flood_fill::flood_fill_estimate(&board);
     info!("{:?}", f);
+
+    // let mut d = Duration::from_secs(0);
+    // for i in 0..100000 {
+    //     let start = Instant::now();
+    //     let f = mcts::heuristics::flood_fill::flood_fill(&board);
+    //     d += Instant::now() - start;
+    // }
+
+    // info!("{:?}", d.as_micros() as f32 / 100000.0);
 
     Json(mcts::heuristics::flood_fill::flood_fill(&board))
 }
