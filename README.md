@@ -37,3 +37,12 @@ Only changes in agent playing ability are mentioned here.
 - `v3.4`
     - Improved heuristic: flood_fill% * length%
     - Approx. 8x speedup of flood fill procedure
+- `v3.5`
+    - Version that played in Spring League 2022 tournament and reached finals (--features="par ucb" with default
+      settings (search_time 300ms) on 32 vCPU machine in Yandex Cloud).
+    - Set default MCTS_ROLLOUT_CUTOFF=0
+    - Optimize parallel mcts
+    - (possibly) Optimize engine interface
+    - Use flood fill in parallel mcts
+    - Recolor to #dd3333
+    - Change default draw_reward to 0.01
