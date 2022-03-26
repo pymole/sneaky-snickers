@@ -155,8 +155,7 @@ fn flood_fill(body: String) -> Json<mcts::heuristics::flood_fill::FloodFill> {
     let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
     let board = Board::from_api(&state);
 
-    let f = mcts::heuristics::flood_fill::flood_fill(&board);
-
+    let f = mcts::heuristics::flood_fill::flood_fill_estimate(&board);
     info!("{:?}", f);
 
     let mut d = Duration::from_secs(0);
@@ -166,9 +165,9 @@ fn flood_fill(body: String) -> Json<mcts::heuristics::flood_fill::FloodFill> {
         d += Instant::now() - start;
     }
 
-    info!("{:?}", d.as_micros() as f32 / 100000.0);
+    // info!("{:?}", d.as_micros() as f32 / 100000.0);
 
-    Json(f)
+    Json(mcts::heuristics::flood_fill::flood_fill(&board))
 }
 
 #[post("/end", data = "<body>")]
