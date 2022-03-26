@@ -34,3 +34,6 @@ Only changes in agent playing ability are mentioned here.
 - `v3.2.1` — unrestricted MCTS_ROLLOUT_CUTOFF
 - `v3.3` — New flood fill reward heuiristic
 - `v3.3.1` — unrestricted MCTS_ROLLOUT_CUTOFF
+- `v3.4`
+    - Improved heuristic: flood_fill% * length%
+    - Approx. 8x speedup of flood fill procedure
