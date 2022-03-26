@@ -1,18 +1,17 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use arrayvec::ArrayVec;
 use rand::seq::SliceRandom;
 use dashmap::DashMap;
 use spin::mutex::Mutex;
 
 use crate::api::objects::Movement;
-use crate::engine::{Action, EngineSettings, advance_one_step_with_settings, food_spawner, safe_zone_shrinker};
-use crate::game::{Board, Snake, MAX_SNAKE_COUNT};
+use crate::engine::{EngineSettings, advance_one_step_with_settings, food_spawner, safe_zone_shrinker};
+use crate::game::{Board, MAX_SNAKE_COUNT};
+use crate::mcts::heuristics::flood_fill::flood_fill;
 use crate::zobrist::ZobristHasher;
 use crate::mcts::utils::get_masks;
 
@@ -184,7 +183,7 @@ impl ParallelMCTSWorker {
             let masks = get_masks(&board);
             let node_key = board.zobrist_hash.get_value();
         
-            self.expansion(masks, node_key);
+            self.expansion(&board, masks, node_key);
         }
 
         let time_start = Instant::now();
@@ -201,7 +200,7 @@ impl ParallelMCTSWorker {
             let masks = get_masks(&board);
             let node_key = board.zobrist_hash.get_value();
         
-            self.expansion(masks, node_key);
+            self.expansion(&board, masks, node_key);
         }
 
         for _i in 0..iterations_count {
@@ -230,14 +229,14 @@ impl ParallelMCTSWorker {
         let node_key = board.zobrist_hash.get_value();
 
         if !board.is_terminal() {
-            self.expansion(masks, node_key);
+            self.expansion(&board, masks, node_key);
         }
 
         let rewards = self.simulation(&board);
         self.backpropagate(path, rewards);
     }
 
-    fn selection(&self, board: &mut Board) -> Vec<(u64, ArrayVec<(usize, Action), MAX_SNAKE_COUNT>)> {
+    fn selection(&self, board: &mut Board) -> Vec<(u64, [usize; MAX_SNAKE_COUNT])> {
         // let start = Instant::now();
 
         let mut path = Vec::new();
@@ -258,60 +257,64 @@ impl ParallelMCTSWorker {
             }
             let node_ref = node_option.unwrap();
 
-            let joint_action = {
+            
+            let mut joint_action = [0; MAX_SNAKE_COUNT];
+            
+            {
                 let mut node = node_ref.lock();
 
                 node.unobserved_samples += 1.0;
     
                 let node_visits = node.visits;
                 let node_unobserved_samples = node.unobserved_samples;
-    
-                // TODO: This is ugly. Maybe change snake_strategy on simple arguments pass.
-                advance_one_step_with_settings(
-                    board,
-                    &mut engine_settings,
-                    &mut |i, _| {
-                        let agent_index = node.get_agent_index(i);
-                        let agent = &mut node.agents[agent_index];
-    
-                        let best_action = agent.bandit.get_best_movement(&self.config, node_visits, node_unobserved_samples, iteration);
-                        agent.bandit.incomplete_update(best_action);
-                        Action::Move(Movement::from_usize(best_action))
-                    }
-                )
-            };
 
+                for agent_in_game_index in 0..board.snakes.len() {
+                    if !board.snakes[agent_in_game_index].is_alive() {
+                        continue;
+                    }
+
+                    let agent_node_index = node.get_agent_index(agent_in_game_index);
+                    let agent = &mut node.agents[agent_node_index];
+                    let best_action = agent.bandit.get_best_movement(&self.config, node_visits, node_unobserved_samples, iteration);
+                    
+                    agent.bandit.incomplete_update(best_action);
+                    joint_action[agent_in_game_index] = best_action;
+                }
+            }
+            
+            advance_one_step_with_settings(
+                board,
+                &mut engine_settings,
+                joint_action,
+            );
+            
             path.push((node_key, joint_action));
         }
 
         path
     }
 
-    fn expansion(&self, masks: ArrayVec<(usize, [bool; 4]), MAX_SNAKE_COUNT>, node_key: u64) {
+    fn expansion(&self, board: &Board, masks: [[bool; 4]; MAX_SNAKE_COUNT], node_key: u64) {
         // let start = Instant::now();
-        if self.nodes.contains_key(&node_key) {
-            return;
+        let mut agents = Vec::new();
+        for snake_index in 0..board.snakes.len() {
+            if board.snakes[snake_index].is_alive() {
+                agents.push(
+                    Agent {
+                        id: snake_index,
+                        bandit: Strategy::new(masks[snake_index])
+                    }
+                );
+            }
         }
-
-        let agents = masks
-            .into_iter()
-            .map(|(agent_id, mask)| {
-                Agent {
-                    id: agent_id,
-                    bandit: Strategy::new(mask)
-                }
-            })
-            .collect();
         
         let node = Node::new(agents);
-
         self.nodes.insert(node_key, Mutex::new(node));
     }
 
-    fn simulation(&self, board: &Board) -> ArrayVec<f32, MAX_SNAKE_COUNT> {
+    fn simulation(&self, board: &Board) -> [f32; MAX_SNAKE_COUNT] {
         let mut board = board.clone();
         let rollout_cutoff = self.config.rollout_cutoff;
-        let draw_reward = self.config.draw_reward;
 
         let random = &mut rand::thread_rng();
 
@@ -322,10 +325,12 @@ impl ParallelMCTSWorker {
 
         let end_turn = board.turn + rollout_cutoff;
         while board.turn <= end_turn && !board.is_terminal() {
-            let actions: HashMap<_, _> = get_masks(&board)
-                .into_iter()
-                .map(|(snake, movement_masks)| {
-                    let &movement = movement_masks
+            let mut actions = [0; MAX_SNAKE_COUNT];
+            let masks = get_masks(&board);
+
+            for (snake_index, snake) in board.snakes.iter().enumerate() {
+                if snake.is_alive() {
+                    let &movement = masks[snake_index]
                         .iter()
                         .enumerate()
                         .filter(|(_, &mask)| mask)
@@ -333,34 +338,36 @@ impl ParallelMCTSWorker {
                         .collect::<Vec<_>>()
                         .choose(random)
                         .unwrap_or(&0);
-                    (snake, Action::Move(Movement::from_usize(movement)))
-                })
-                .collect();
-
+                    actions[snake_index] = movement;
+                }
+            }
+            
             advance_one_step_with_settings(
                 &mut board,
                 &mut engine_settings,
-                &mut |snake, _| *actions.get(&snake).unwrap()
+                actions,
             );
         }
         
         let alive_count = board.snakes.iter().filter(|snake| snake.is_alive()).count();
-        let len_norm: f32 = board.snakes.iter().map(|snake| snake.body.len() as f32).sum();
+        if alive_count == 0 {
+            return [self.config.draw_reward; MAX_SNAKE_COUNT];
+        }
 
-        let reward = |snake: &Snake|
-            if alive_count == 0 { draw_reward }
-            else {
-                (snake.is_alive() as u32 as f32) / (alive_count as f32)
-                * (snake.body.len() as f32) / len_norm
-            } ;
+        let len_sum: f32 = board.snakes.iter().map(|snake| snake.body.len() as f32).sum();
 
-        let rewards = board.snakes.iter().map(reward).collect();
-
+        let mut rewards = flood_fill(&board);        
+        
+        for i in 0..board.snakes.len() {
+            if board.snakes[i].is_alive() {
+                rewards[i] *= board.snakes[i].body.len() as f32 / len_sum;
+            }
+        }
         // info!("Started at {} turn and rolled out with {} turns and rewards {:?}", start_turn, board.turn - start_turn, rewards);
         rewards
     }
 
-    fn backpropagate(&self, path: Vec<(u64, ArrayVec<(usize, Action), MAX_SNAKE_COUNT>)>, rewards: ArrayVec<f32, MAX_SNAKE_COUNT>) {
+    fn backpropagate(&self, path: Vec<(u64, [usize; MAX_SNAKE_COUNT])>, rewards: [f32; MAX_SNAKE_COUNT]) {
         // let start = Instant::now();
         // info!("{:?}", self.nodes.keys());
         // info!("{:?}", path);
@@ -371,13 +378,10 @@ impl ParallelMCTSWorker {
             node.visits += 1.0;
             node.unobserved_samples -= 1.0;
 
-            for (agent, Action::Move(movement)) in joint_action.into_iter() {
-                let agent_index = node.get_agent_index(agent);
+            for agent in &mut node.agents {
+                let reward = rewards[agent.id];
+                let movement = joint_action[agent.id];
 
-                let reward = rewards[agent];
-                let movement = movement as usize;
-
-                let agent = &mut node.agents[agent_index];
                 agent.bandit.backpropagate(reward, movement);
             }
         }

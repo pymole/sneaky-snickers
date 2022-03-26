@@ -41,15 +41,6 @@ impl Distribution<Movement> for Standard {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum Action {
-    // `DoNothing` allows freezing some snakes in place.
-    // Not implemented, until use case is clear. Right now it is not clear, if health should deplete and how
-    // head-to-head collisions with frozen snake should be resolved.
-    // DoNothing,
-    Move(Movement),
-}
-
 pub struct EngineSettings<'a, 'b> {
     // Can append elements to `board.food`, but must not mutate anything else.
     pub food_spawner: &'a mut dyn FnMut(&mut Board),
@@ -163,24 +154,22 @@ pub mod safe_zone_shrinker {
     }
 }
 
-type SnakeStrategy<'a> = &'a mut dyn FnMut(/*snake_index:*/ usize, &Board) -> Action;
-
 #[allow(dead_code)]
-pub fn advance_one_step(board: &mut Board, snake_strategy: SnakeStrategy) -> ArrayVec<(usize, Action), MAX_SNAKE_COUNT> {
+pub fn advance_one_step(board: &mut Board, actions: [usize; MAX_SNAKE_COUNT]) {
     let mut settings = EngineSettings {
         food_spawner: &mut food_spawner::noop,
         safe_zone_shrinker: &mut safe_zone_shrinker::noop,
     };
 
-    advance_one_step_with_settings(board, &mut settings, snake_strategy)
+    advance_one_step_with_settings(board, &mut settings, actions)
 }
 
 /// Dead snakes are kept in array to preserve indices of all other snakes
 pub fn advance_one_step_with_settings(
     board: &mut Board,
     engine_settings: &mut EngineSettings,
-    snake_strategy: SnakeStrategy
-) -> ArrayVec<(usize, Action), MAX_SNAKE_COUNT> {
+    actions: [usize; MAX_SNAKE_COUNT]
+) {
     board.zobrist_hash.xor_turn(board.turn);
     board.turn += 1;
     board.zobrist_hash.xor_turn(board.turn);
@@ -199,20 +188,14 @@ pub fn advance_one_step_with_settings(
     //     - Last body part (their tail) is removed from the board.
     //     - Health is reduced by 1.
 
-    let actions: ArrayVec<(usize, Action), MAX_SNAKE_COUNT> = alive_snakes
-        .iter()
-        .map(|&i| (i, snake_strategy(i, &board)))
-        .collect();
-
     {
-        for &(i, action) in actions.iter() {
-            let Action::Move(movement) = action;
-
-            let snake = &mut board.snakes[i];
+        for &snake_index in &alive_snakes {
+            let snake = &mut board.snakes[snake_index];
+            let movement = actions[snake_index];
             debug_assert!(snake.body.len() > 0);
             let head_position = snake.body[0];
 
-            let mut new_head_position = head_position + movement.to_direction();
+            let mut new_head_position = head_position + Movement::from_usize(movement).to_direction();
             if new_head_position.x < 0 {
                 new_head_position.x = board.size.x - 1;
             } else
@@ -232,7 +215,7 @@ pub fn advance_one_step_with_settings(
 
             // Move neck (first body part next to head)
             let new_neck_direction = body_direction(head_position, new_head_position);
-            board.zobrist_hash.xor_body_direction(head_position, i, new_neck_direction);
+            board.zobrist_hash.xor_body_direction(head_position, snake_index, new_neck_direction);
 
             // Remove old tail
             let old_tail = snake.body.pop_back().unwrap();
@@ -240,7 +223,7 @@ pub fn advance_one_step_with_settings(
             debug_assert_eq!(board.objects[old_tail], Object::BodyPart);
 
             let old_tail_direction = body_direction(old_tail, new_tail);
-            board.zobrist_hash.xor_body_direction(old_tail, i, old_tail_direction);
+            board.zobrist_hash.xor_body_direction(old_tail, snake_index, old_tail_direction);
 
             // TODO: benchmark alternative: if *snake.body.back().unwrap() != old_tail {
             board.objects[old_tail] = Object::Empty;
@@ -392,8 +375,6 @@ pub fn advance_one_step_with_settings(
             }
         }
     }
-
-    actions
 }
 
 #[cfg(test)]
@@ -410,10 +391,10 @@ mod tests {
         Board::from_api(&state)
     }
 
-    fn test_transition(state_before: &str, state_after: &str, snake_strategy: SnakeStrategy) {
+    fn test_transition(state_before: &str, state_after: &str, actions: [usize; MAX_SNAKE_COUNT]) {
         let mut board_before = create_board(state_before);
         let board_after = create_board(state_after);
-        advance_one_step(&mut board_before, snake_strategy);
+        advance_one_step(&mut board_before, actions);
         assert_eq!(board_before, board_after);
     }
 
@@ -434,24 +415,24 @@ mod tests {
         test_transition(
             data::SINGLE_SHORT_SNAKE_IN_THE_CENTER,
             data::SINGLE_SHORT_SNAKE_IN_THE_CENTER_UP,
-            &mut |_, _| Action::Move(Movement::Up)
+            [Movement::Up as usize; MAX_SNAKE_COUNT]
         );
 
         test_transition(
             data::SINGLE_SHORT_SNAKE_IN_THE_CENTER,
             data::SINGLE_SHORT_SNAKE_IN_THE_CENTER_LEFT,
-            &mut |_, _| Action::Move(Movement::Left)
+            [Movement::Left as usize; MAX_SNAKE_COUNT]
         );
 
         test_transition(
             data::SINGLE_SHORT_SNAKE_IN_THE_CENTER,
             data::SINGLE_SHORT_SNAKE_IN_THE_CENTER_RIGHT,
-            &mut |_, _| Action::Move(Movement::Right)
+            [Movement::Right as usize; MAX_SNAKE_COUNT]
         );
 
         {
             let mut board = create_board(data::SINGLE_SHORT_SNAKE_IN_THE_CENTER);
-            advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Down));
+            advance_one_step(&mut board, [Movement::Down as usize; MAX_SNAKE_COUNT]);
             assert!(!board.snakes[0].is_alive(), "{:?}", &board.snakes[0]);
             assert!(is_empty(&board));
         }
@@ -461,7 +442,7 @@ mod tests {
     fn health_depletes_by_one_on_each_move() {
         let mut board = create_board(data::SINGLE_SHORT_SNAKE_IN_THE_CENTER);
         assert_eq!(board.snakes[0].health, 100);
-        advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Up));
+        advance_one_step(&mut board, [Movement::Up as usize; MAX_SNAKE_COUNT]);
         assert_eq!(board.snakes[0].health, 99);
     }
 
@@ -471,12 +452,12 @@ mod tests {
         assert_eq!(board.foods.len(), 3);
         assert_eq!(board.snakes[0].body.len(), 4);
         let food_point = board.foods[1];
-        advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Up));
+        advance_one_step(&mut board, [Movement::Up as usize; MAX_SNAKE_COUNT]);
         assert_eq!(board.snakes[0].body[0], food_point);
         assert_eq!(board.foods.len(), 2);
         assert_eq!(board.snakes[0].body.len(), 5);
         assert_eq!(board.snakes[0].body[3], board.snakes[0].body[4]);
-        advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Up));
+        advance_one_step(&mut board, [Movement::Up as usize; MAX_SNAKE_COUNT]);
         assert_eq!(board, create_board(data::FOOD_IN_FRONT_UP_UP));
     }
 
@@ -485,7 +466,7 @@ mod tests {
         {
             let mut board = create_board(data::TOP_RIGHT_CORNER);
             assert!(board.snakes[0].is_alive());
-            advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Up));
+            advance_one_step(&mut board, [Movement::Up as usize; MAX_SNAKE_COUNT]);
             assert!(!board.snakes[0].is_alive());
             assert!(is_empty(&board));
         }
@@ -493,7 +474,7 @@ mod tests {
         {
             let mut board = create_board(data::TOP_RIGHT_CORNER);
             assert!(board.snakes[0].is_alive());
-            advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Right));
+            advance_one_step(&mut board, [Movement::Right as usize; MAX_SNAKE_COUNT]);
             assert!(!board.snakes[0].is_alive());
             assert!(is_empty(&board));
         }
@@ -501,7 +482,7 @@ mod tests {
         {
             let mut board = create_board(data::BOTTOM_LEFT_CORNER);
             assert!(board.snakes[0].is_alive());
-            advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Left));
+            advance_one_step(&mut board, [Movement::Left as usize; MAX_SNAKE_COUNT]);
             assert!(!board.snakes[0].is_alive());
             assert!(is_empty(&board));
         }
@@ -509,7 +490,7 @@ mod tests {
         {
             let mut board = create_board(data::BOTTOM_LEFT_CORNER);
             assert!(board.snakes[0].is_alive());
-            advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Down));
+            advance_one_step(&mut board, [Movement::Down as usize; MAX_SNAKE_COUNT]);
             assert!(!board.snakes[0].is_alive());
             assert!(is_empty(&board));
         }
@@ -519,7 +500,7 @@ mod tests {
     fn snake_dies_from_self_collision() {
         let mut board = create_board(data::STEP_ON_TAIL);
         assert!(board.snakes[0].is_alive());
-        advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Left));
+        advance_one_step(&mut board, [Movement::Left as usize; MAX_SNAKE_COUNT]);
         assert!(!board.snakes[0].is_alive());
         assert!(is_empty(&board));
     }
@@ -529,7 +510,7 @@ mod tests {
         let mut board = create_board(data::BODY_COLLISION);
         assert!(board.snakes[0].is_alive());
         assert!(board.snakes[1].is_alive());
-        advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Right));
+        advance_one_step(&mut board, [Movement::Right as usize; MAX_SNAKE_COUNT]);
         assert!(!board.snakes[0].is_alive());
         assert!(board.snakes[1].is_alive());
     }
@@ -537,37 +518,28 @@ mod tests {
     #[test]
     fn two_snakes_in_head_to_head_collision() {
         let mut board = create_board(data::HEAD_TO_HEAD_BIG_AND_SMALL);
-        advance_one_step(&mut board, &mut |i, _| {
-            match i {
-                0 => Action::Move(Movement::Down),
-                1 => Action::Move(Movement::Right),
-                _ => unreachable!(),
-            }
-        });
+        let mut actions = [0; MAX_SNAKE_COUNT];
+        actions[0] = Movement::Down as usize;
+        actions[1] = Movement::Right as usize;
+        advance_one_step(&mut board, actions);
         assert!(!board.snakes[0].is_alive());
         assert!(board.snakes[1].is_alive());
 
 
         let mut board = create_board(data::FOOD_HEAD_TO_HEAD_EQUAL);
-        advance_one_step(&mut board, &mut |i, _| {
-            match i {
-                0 => Action::Move(Movement::Right),
-                1 => Action::Move(Movement::Left),
-                _ => unreachable!(),
-            }
-        });
+        let mut actions = [0; MAX_SNAKE_COUNT];
+        actions[0] = Movement::Right as usize;
+        actions[1] = Movement::Left as usize;
+        advance_one_step(&mut board, actions);
         assert!(!board.snakes[0].is_alive());
         assert!(!board.snakes[1].is_alive());
 
 
         let mut board = create_board(data::FOOD_HEAD_TO_HEAD_EQUAL_V2);
-        advance_one_step(&mut board, &mut |i, _| {
-            match i {
-                0 => Action::Move(Movement::Down),
-                1 => Action::Move(Movement::Up),
-                _ => unreachable!(),
-            }
-        });
+        let mut actions = [0; MAX_SNAKE_COUNT];
+        actions[0] = Movement::Down as usize;
+        actions[1] = Movement::Up as usize;
+        advance_one_step(&mut board, actions);
         assert!(!board.snakes[0].is_alive());
         assert!(!board.snakes[1].is_alive());
 
@@ -576,13 +548,10 @@ mod tests {
         assert!(board.snakes[0].health == 79);
         assert!(board.snakes[1].is_alive());
         assert!(board.snakes[1].health == 5);
-        advance_one_step(&mut board, &mut |i, _| {
-            match i {
-                0 => Action::Move(Movement::Up),
-                1 => Action::Move(Movement::Right),
-                _ => unreachable!(),
-            }
-        });
+        let mut actions = [0; MAX_SNAKE_COUNT];
+        actions[0] = Movement::Up as usize;
+        actions[1] = Movement::Right as usize;
+        advance_one_step(&mut board, actions);
         assert!(!board.snakes[0].is_alive());
         assert!(board.snakes[1].is_alive());
 
@@ -592,13 +561,10 @@ mod tests {
         assert!(board.snakes[0].health == 1);
         assert!(board.snakes[1].is_alive());
         assert!(board.snakes[1].health == 61);
-        advance_one_step(&mut board, &mut |i, _| {
-            match i {
-                0 => Action::Move(Movement::Down),
-                1 => Action::Move(Movement::Left),
-                _ => unreachable!(),
-            }
-        });
+        let mut actions = [0; MAX_SNAKE_COUNT];
+        actions[0] = Movement::Down as usize;
+        actions[1] = Movement::Left as usize;
+        advance_one_step(&mut board, actions);
         assert!(!board.snakes[0].is_alive());
         assert!(board.snakes[1].is_alive());
     }
@@ -624,35 +590,35 @@ mod tests {
         let mut board_copy = board.clone();
         assert!(board.snakes[0].is_alive());
         // Make a full loop
-        advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Left));
+        advance_one_step(&mut board, [Movement::Left as usize; MAX_SNAKE_COUNT]);
         board_copy.turn += 1;
         board_copy.snakes[0].health -= 1;
         assert_ne!(board, board_copy);
-        advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Up));
+        advance_one_step(&mut board, [Movement::Up as usize; MAX_SNAKE_COUNT]);
         board_copy.turn += 1;
         board_copy.snakes[0].health -= 1;
         assert_ne!(board, board_copy);
-        advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Up));
+        advance_one_step(&mut board, [Movement::Up as usize; MAX_SNAKE_COUNT]);
         board_copy.turn += 1;
         board_copy.snakes[0].health -= 1;
         assert_ne!(board, board_copy);
-        advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Right));
+        advance_one_step(&mut board, [Movement::Right as usize; MAX_SNAKE_COUNT]);
         board_copy.turn += 1;
         board_copy.snakes[0].health -= 1;
         assert_ne!(board, board_copy);
-        advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Right));
+        advance_one_step(&mut board, [Movement::Right as usize; MAX_SNAKE_COUNT]);
         board_copy.turn += 1;
         board_copy.snakes[0].health -= 1;
         assert_ne!(board, board_copy);
-        advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Down));
+        advance_one_step(&mut board, [Movement::Down as usize; MAX_SNAKE_COUNT]);
         board_copy.turn += 1;
         board_copy.snakes[0].health -= 1;
         assert_ne!(board, board_copy);
-        advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Down));
+        advance_one_step(&mut board, [Movement::Down as usize; MAX_SNAKE_COUNT]);
         board_copy.turn += 1;
         board_copy.snakes[0].health -= 1;
         assert_ne!(board, board_copy);
-        advance_one_step(&mut board, &mut |_, _| Action::Move(Movement::Left));
+        advance_one_step(&mut board, [Movement::Left as usize; MAX_SNAKE_COUNT]);
         board_copy.turn += 1;
         board_copy.snakes[0].health -= 1;
         assert_eq!(board, board_copy);

@@ -28,7 +28,7 @@ impl BUUCT {
 }
 
 impl BUUCT {
-    pub fn get_best_movement(&mut self, config: &ParallelMCTSConfig, node_visits: f32, node_unobserved_samples: f32, iteration: usize) -> usize {
+    pub fn get_best_movement(&mut self, _config: &ParallelMCTSConfig, node_visits: f32, node_unobserved_samples: f32, iteration: usize) -> usize {
         let mut max_action = 0;
         let mut max_value = -1.0;
         let N = node_visits;

@@ -160,9 +160,9 @@ fn flood_fill(body: String) -> Json<mcts::heuristics::flood_fill::FloodFill> {
     info!("{:?}", f);
 
     let mut d = Duration::from_secs(0);
-    for i in 0..100000 {
+    for _ in 0..100000 {
         let start = Instant::now();
-        let f = mcts::heuristics::flood_fill::flood_fill(&board);
+        let _f = mcts::heuristics::flood_fill::flood_fill(&board);
         d += Instant::now() - start;
     }
 

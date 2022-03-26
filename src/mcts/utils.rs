@@ -4,30 +4,31 @@ use crate::game::{Board, Object, Point, MAX_SNAKE_COUNT};
 use arrayvec::ArrayVec;
 
 
-pub fn get_masks(board: &Board) -> ArrayVec<(usize, [bool; 4]), MAX_SNAKE_COUNT> {
+pub fn get_masks(board: &Board) -> [[bool; 4]; MAX_SNAKE_COUNT] {
     let tails: ArrayVec<_, MAX_SNAKE_COUNT> = board.snakes
         .iter()
         .filter(|snake| snake.is_alive())
         .map(|snake| *snake.body.back().unwrap())
         .collect();
+    
+    let mut masks = [[false; 4]; MAX_SNAKE_COUNT];
 
     board.snakes
         .iter()
         .enumerate()
         .filter(|(_, snake)| snake.is_alive())
-        .map(|(snake_id, snake)| {
-            let mut movement_mask = [false; 4];
+        .for_each(|(snake_index, snake)| {
             MOVEMENTS
                 .iter()
                 .for_each(|&movement| {
                     let movement_position = get_movement_position(snake.body[0], movement, board.size);
                     if board.objects[movement_position] != Object::BodyPart || tails.contains(&movement_position) {
-                        movement_mask[movement as usize] = true;
+                        masks[snake_index][movement as usize] = true;
                     }
-                });
-            (snake_id, movement_mask)
-        })
-        .collect()
+                });            
+        });
+    
+    masks
 }
 
 pub fn get_movement_position(position: Point, movement: Movement, borders: Point) -> Point {

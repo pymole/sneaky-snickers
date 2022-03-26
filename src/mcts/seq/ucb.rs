@@ -27,17 +27,17 @@ impl UCB {
 }
 
 impl MultiArmedBandit<SequentialMCTSConfig> for UCB {
-    fn get_best_movement(&mut self, _mcts_config: &SequentialMCTSConfig, node_visits: u32) -> usize {
+    fn get_best_movement(&mut self, _mcts_config: &SequentialMCTSConfig, node_visits: f32) -> usize {
         let mut max_ucb_action = 0;
         let mut max_ucb = -1.0;
-        let n = node_visits as f32;
+        let N_ln = node_visits.ln();
 
         for action in (0..4).filter(|&m| self.mask[m]) {
             let n_i = self.visits[action];
 
             let ucb = if n_i > 0.0 {
-                let variance_ucb = (self.variance[action] + (2.0 * n.ln() / n_i).sqrt()).min(0.25);
-                self.q[action] + (variance_ucb * n.ln() / n_i).sqrt()
+                let variance_ucb = (self.variance[action] + (2.0 * N_ln / n_i).sqrt()).min(0.25);
+                self.q[action] + (variance_ucb * N_ln / n_i).sqrt()
             } else {
                 return action;
             };
@@ -51,7 +51,7 @@ impl MultiArmedBandit<SequentialMCTSConfig> for UCB {
         max_ucb_action
     }
 
-    fn get_final_movement(&self, _mcts_config: &SequentialMCTSConfig, _node_visits: u32) -> Movement {
+    fn get_final_movement(&self, _mcts_config: &SequentialMCTSConfig, _node_visits: f32) -> Movement {
         let (best_movement, _) = self.visits
             .iter()
             .enumerate()
@@ -72,7 +72,7 @@ impl MultiArmedBandit<SequentialMCTSConfig> for UCB {
         self.variance[movement] = avg_squared_reward - q * q;
     }
 
-    fn print_stats(&self, _mcts_config: &SequentialMCTSConfig, node_visits: u32) {
+    fn print_stats(&self, _mcts_config: &SequentialMCTSConfig, node_visits: f32) {
         let n = node_visits as f32;
 
         info!("UCB");

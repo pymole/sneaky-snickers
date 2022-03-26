@@ -24,7 +24,7 @@ impl MCTSConfig for ParallelMCTSConfig {
         const NORMALIZED_DRAW_REWARD : f32 = (DRAW_POINTS - LOSS_POINTS) / (WIN_POINTS - LOSS_POINTS);
 
         let config = ParallelMCTSConfig {
-            table_capacity:         parse_env("MCTS_TABLE_CAPACITY").unwrap_or(200000),
+            table_capacity:         parse_env("MCTS_TABLE_CAPACITY").unwrap_or(400000),
             iterations:             parse_env("MCTS_ITERATIONS"),
             search_time:            Some(Duration::from_millis(parse_env("MCTS_SEARCH_TIME").unwrap_or(300))),
             rollout_cutoff:         parse_env("MCTS_ROLLOUT_CUTOFF").unwrap_or(0),
@@ -33,8 +33,6 @@ impl MCTSConfig for ParallelMCTSConfig {
             workers:                parse_env("MCTS_WORKERS").unwrap_or(num_cpus()),
             max_select_depth:       parse_env("MCTS_SELECT_DEPTH").unwrap_or(50),
         };
-
-        assert!(config.rollout_cutoff >= 1);
 
         config
     }

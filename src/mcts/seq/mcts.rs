@@ -7,8 +7,8 @@ use std::hash::BuildHasherDefault;
 use std::time::{Duration, Instant};
 
 use crate::api::objects::Movement;
-use crate::engine::{Action, EngineSettings, advance_one_step_with_settings, food_spawner, safe_zone_shrinker};
-use crate::game::{Board, Snake, MAX_SNAKE_COUNT};
+use crate::engine::{EngineSettings, advance_one_step_with_settings, food_spawner, safe_zone_shrinker};
+use crate::game::{Board, MAX_SNAKE_COUNT};
 use crate::zobrist::ZobristHasher;
 use crate::mcts::utils::get_masks;
 use crate::mcts::bandit::MultiArmedBandit;
@@ -27,7 +27,7 @@ cfg_if::cfg_if! {
 }
 
 struct Node {
-    visits: u32,
+    visits: f32,
     // Alive snakes
     agents: Vec<Agent>,
 }
@@ -40,7 +40,7 @@ struct Agent {
 impl Node {
     fn new(agents: Vec<Agent>) -> Node {
         Node {
-            visits: 0,
+            visits: 0.0,
             agents: agents,
         }
     }
@@ -99,14 +99,17 @@ impl SequentialMCTS {
     fn rollout(&mut self, board: &Board) {
         let mut board = board.clone();
         let path = self.selection(&mut board);
-        let rewards = self.simulation(board.clone());
+
+        let masks = get_masks(&board);
+        
+        let rewards = self.simulation(&board);
         self.backpropagate(path, rewards);
         if !board.is_terminal() {
-            self.expansion(&board);
+            self.expansion(&board, masks);
         }
     }
 
-    fn selection(&self, board: &mut Board) -> Vec<(RefMut<Node>, ArrayVec<(usize, Action), MAX_SNAKE_COUNT>)> {
+    fn selection(&self, board: &mut Board) -> Vec<(RefMut<Node>, [usize; MAX_SNAKE_COUNT])> {
         // let start = Instant::now();
 
         let mut path = Vec::new();
@@ -116,64 +119,82 @@ impl SequentialMCTS {
             safe_zone_shrinker: &mut safe_zone_shrinker::standard,
         };
 
-        let nodes = &self.nodes;
+        while path.len() < self.config.max_select_depth {            
+            let node_key = board.zobrist_hash.get_value();
+            let node_option = self.nodes.get(&node_key);
 
-        while let Some(node_cell) = nodes.get(&board.zobrist_hash.get_value()) {
-            let mut node = node_cell.borrow_mut();
-            let n = node.visits;
+            if node_option.is_none() {
+                break
+            }
+            let node_cell = node_option.unwrap();
 
-            // TODO: This is ugly. Maybe change snake_strategy on simple arguments pass.
-            let joint_action = advance_one_step_with_settings(
+            let mut node = node_cell.borrow_mut(); 
+            let n = node.visits;           
+            let mut joint_action = [0; MAX_SNAKE_COUNT];
+            
+            for agent_in_game_index in 0..board.snakes.len() {
+                if !board.snakes[agent_in_game_index].is_alive() {
+                    continue;
+                }
+
+                let agent_node_index = node.get_agent_index(agent_in_game_index);
+                let agent = &mut node.agents[agent_node_index];
+                let best_action = agent.bandit.get_best_movement(&self.config, n);
+                
+                joint_action[agent_in_game_index] = best_action;
+            }
+
+            advance_one_step_with_settings(
                 board,
                 &mut engine_settings,
-                &mut |i, _| {
-                    let agent_index = node.get_agent_index(i);
-                    let agent = &mut node.agents[agent_index];
-
-                    let best_action = agent.bandit.get_best_movement(&self.config, n);
-                    Action::Move(Movement::from_usize(best_action))
-                }
+                joint_action,
             );
-
+            
             path.push((node, joint_action));
         }
 
         path
     }
 
-    fn expansion(&mut self, board: &Board) {
-        let masks = get_masks(board);
-        let agents = masks
-            .into_iter()
-            .map(|(agent_id, mask)| {
-                Agent {
-                    id: agent_id,
-                    bandit: Strategy::new(mask)
-                }
-            })
-            .collect();
+    fn expansion(&mut self, board: &Board, masks: [[bool; 4]; MAX_SNAKE_COUNT]) {
+        let mut agents = Vec::new();
+        for snake_index in 0..board.snakes.len() {
+            if board.snakes[snake_index].is_alive() {
+                agents.push(
+                    Agent {
+                        id: snake_index,
+                        bandit: Strategy::new(masks[snake_index])
+                    }
+                );
+            }
+        }
 
         let node = Node::new(agents);
         self.nodes.insert(board.zobrist_hash.get_value(), RefCell::new(node));
     }
 
-    fn backpropagate(&self, path: Vec<(RefMut<Node>, ArrayVec<(usize, Action), MAX_SNAKE_COUNT>)>, rewards: Vec<f32>) {
+    fn backpropagate(&self, path: Vec<(RefMut<Node>, [usize; MAX_SNAKE_COUNT])>, rewards: [f32; MAX_SNAKE_COUNT]) {
+        // let start = Instant::now();
+        // info!("{:?}", self.nodes.keys());
+        // info!("{:?}", path);
         for (mut node, joint_action) in path {
-            node.visits += 1;
+            // info!("{}", node_key);
+            node.visits += 1.0;
 
-            for (agent, Action::Move(movement)) in joint_action.into_iter() {
-                let agent_index = node.get_agent_index(agent);
+            for (agent_node_index, agent) in node.agents.iter_mut().enumerate() {
+                let reward = rewards[agent.id];
+                let movement = joint_action[agent.id];
 
-                let reward = rewards[agent];
-                let movement = movement as usize;
-
-                let agent = &mut node.agents[agent_index];
                 agent.bandit.backpropagate(reward, movement);
             }
         }
     }
 
-    fn simulation(&self, mut board: Board) -> Vec<f32> {
+    fn simulation(&self, board: &Board) -> [f32; MAX_SNAKE_COUNT] {
+        let mut board = board.clone();
+        let rollout_cutoff = self.config.rollout_cutoff;
+        let draw_reward = self.config.draw_reward;
+
         let random = &mut rand::thread_rng();
 
         let mut engine_settings = EngineSettings {
@@ -181,12 +202,14 @@ impl SequentialMCTS {
             safe_zone_shrinker: &mut safe_zone_shrinker::standard,
         };
 
-        let end_turn = board.turn + self.config.rollout_cutoff;
+        let end_turn = board.turn + rollout_cutoff;
         while board.turn <= end_turn && !board.is_terminal() {
-            let actions: HashMap<_, _> = get_masks(&board)
-                .into_iter()
-                .map(|(snake, movement_masks)| {
-                    let &movement = movement_masks
+            let mut actions = [0; MAX_SNAKE_COUNT];
+            let masks = get_masks(&board);
+
+            for (snake_index, snake) in board.snakes.iter().enumerate() {
+                if snake.is_alive() {
+                    let &movement = masks[snake_index]
                         .iter()
                         .enumerate()
                         .filter(|(_, &mask)| mask)
@@ -194,33 +217,31 @@ impl SequentialMCTS {
                         .collect::<Vec<_>>()
                         .choose(random)
                         .unwrap_or(&0);
-                    (snake, Action::Move(Movement::from_usize(movement)))
-                })
-                .collect();
-
+                    actions[snake_index] = movement;
+                }
+            }
+            
             advance_one_step_with_settings(
                 &mut board,
                 &mut engine_settings,
-                &mut |snake, _| *actions.get(&snake).unwrap()
+                actions,
             );
         }
-
+        
         let alive_count = board.snakes.iter().filter(|snake| snake.is_alive()).count();
         if alive_count == 0 {
-            return vec![self.config.draw_reward; board.snakes.len()];
+            return [self.config.draw_reward; MAX_SNAKE_COUNT];
         }
 
         let len_sum: f32 = board.snakes.iter().map(|snake| snake.body.len() as f32).sum();
 
-        let rewards = flood_fill(&board);        
-        let mut rewards = Vec::from(&rewards[0..board.snakes.len()]);
-
+        let mut rewards = flood_fill(&board);
+        
         for i in 0..board.snakes.len() {
             if board.snakes[i].is_alive() {
                 rewards[i] *= board.snakes[i].body.len() as f32 / len_sum;
             }
         }
-
         // info!("Started at {} turn and rolled out with {} turns and rewards {:?}", start_turn, board.turn - start_turn, rewards);
         rewards
     }
