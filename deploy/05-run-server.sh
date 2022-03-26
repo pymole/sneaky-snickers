@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-export ROCKET_ADDRESS=0.0.0
+export ROCKET_ADDRESS=0.0.0.0
 export ROCKET_PORT=8000
 
 export MCTS_SEARCH_TIME=200

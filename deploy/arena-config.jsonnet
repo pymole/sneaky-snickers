@@ -44,7 +44,7 @@ local DefaultSetting = Settings.search_with_time;
         Bots.binary("normal1", DefaultSetting, exe="target/normal/release/sneaky-snickers"),
         Bots.binary("normal2", DefaultSetting, exe="target/normal/release/sneaky-snickers"),
         Bots.binary("normal3", DefaultSetting, exe="target/normal/release/sneaky-snickers"),
-        Bots.binary("withprofiler", DefaultSetting),
+        Bots.binary("withprofiler", DefaultSetting, exe="target/withprofiler/release/sneaky-snickers"),
     ],
 
     ports: {
@@ -61,7 +61,7 @@ local DefaultSetting = Settings.search_with_time;
         winrates_file: "./winrates.json",
 
         // Number of games to run.
-        ladder_games: 10,
+        ladder_games: 1,
 
         // All games start with the same number of players. Precondition: number_of_players <= len(bots).
         number_of_players: 4,
