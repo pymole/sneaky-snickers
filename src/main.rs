@@ -5,6 +5,7 @@ mod engine;
 mod vec2d;
 mod mcts;
 mod zobrist;
+mod game_log;
 
 #[cfg(test)]
 mod test_data;
@@ -30,6 +31,7 @@ use dashmap::DashMap;
 use log::info;
 
 use game::Board;
+use game_log::GameLog;
 use engine::Movement;
 
 use crate::mcts::config::MCTSConfig as _;
@@ -45,6 +47,7 @@ cfg_if::cfg_if! {
 
 struct GameSession {
     mcts: Option<MCTS>,
+    game_log: Option<GameLog>,
 }
 
 struct Storage {
@@ -94,8 +97,15 @@ fn start(body: String, storage: &State<Storage>) -> Status {
         None
     };
 
+    let game_log = if env::var("GAME_LOG").is_ok() {
+        Some(GameLog::new(&state))
+    } else {
+        None
+    };
+
     let game_session = GameSession {
         mcts: mcts,
+        game_log: game_log,
     };
 
     if let Some(mut game_session_mutex) = storage.game_sessions.insert(state.game.id, Mutex::new(game_session)) {
@@ -118,7 +128,13 @@ fn movement_options() -> Status {
 
 fn try_move_using_existing_game_session(storage: &State<Storage>, state: &api::objects::State) -> Option<Movement> {
     if let Some(game_session_mutex) = storage.game_sessions.get(&state.game.id) {
-        if let Some(mcts) = game_session_mutex.lock().unwrap().mcts.as_mut() {
+        let mut game_session = game_session_mutex.lock().unwrap();
+        
+        if let Some(game_log) = game_session.game_log.as_mut() {
+            game_log.add_state(state);
+        }
+
+        if let Some(mcts) = game_session.mcts.as_mut() {
             let board = Board::from_api(&state);
             return Some(get_best_movement(mcts, &board, our_snake_index(&state)));
         }
@@ -177,6 +193,12 @@ fn end(storage: &State<Storage>, body: String) -> Status {
     let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
     if let Some((_, mut game_session_mutex)) = storage.game_sessions.remove(&state.game.id) {
         let game_session = game_session_mutex.get_mut().unwrap();
+
+        if let Some(game_log) = game_session.game_log.as_mut() {
+            game_log.add_state(&state);
+            info!("GAME LOG - {}", game_log.to_string());
+        }
+
         if let Some(mcts) = game_session.mcts.as_ref() {
             mcts.shutdown();
         }
