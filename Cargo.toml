@@ -20,7 +20,8 @@ cfg-if = "0.1"
 num_cpus = "1.13.1"
 crossbeam-channel = "0.5.2"
 spin = "0.9.2"
-bitvec = "1.0.1"
+bitvec = { version = "1.0.1", features = ["serde"] }
+mongodb = { version = "2.3.1", default-features = false, features = ["sync"] }
 
 [features]
 default = ["ucb", "seq"]

@@ -27,8 +27,9 @@ use rocket::serde::json::Json;
 use rocket::serde::json::serde_json;
 use rocket::State;
 use dashmap::DashMap;
+use mongodb::sync::Client;
 
-use log::info;
+use log::{info, error};
 
 use game::Board;
 use game_log::GameLog;
@@ -52,6 +53,7 @@ struct GameSession {
 
 struct Storage {
     game_sessions: DashMap<String, Mutex<GameSession>>,
+    client: Option<Client>,
 }
 
 
@@ -196,7 +198,14 @@ fn end(storage: &State<Storage>, body: String) -> Status {
 
         if let Some(game_log) = game_session.game_log.as_mut() {
             game_log.add_state(&state);
-            info!("GAME LOG - {}", game_log.to_string());
+            if let Some(client) = storage.client.as_ref() {
+                let db = client.default_database().expect("Default database must be provided");
+                let games = db.collection::<GameLog>("games");
+                let insert_res = games.insert_one(game_log, None);
+                if let Err(err) = insert_res {
+                    error!("Failed to insert game log: {}", err);
+                }
+            }
         }
 
         if let Some(mcts) = game_session.mcts.as_ref() {
@@ -210,7 +219,13 @@ fn end(storage: &State<Storage>, body: String) -> Status {
 #[launch]
 fn rocket() -> _ {
     log4rs::init_file("log4rs.yaml", Default::default()).unwrap();
-
+    
+    let client = if let Ok(uri) = env::var("MONGO_URI") {
+        Some(Client::with_uri_str(uri).unwrap())
+    } else {
+        None
+    };
+    
     rocket::build()
         .attach(AdHoc::on_response("Cors", |_, response| Box::pin(async move {
             response.set_header(Header::new("Access-Control-Allow-Origin", "*"));
@@ -218,6 +233,9 @@ fn rocket() -> _ {
             response.set_header(Header::new("Access-Control-Allow-Headers", "*"));
             response.set_header(Header::new("Access-Control-Allow-Credentials", "true"));
         })))
-        .manage(Storage {game_sessions: DashMap::new()})
+        .manage(Storage {
+            game_sessions: DashMap::new(),
+            client
+        })
         .mount("/", routes![index, start, movement, movement_options, end, flood_fill, ff_options])
 }
