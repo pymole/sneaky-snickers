@@ -1,3 +1,4 @@
+use log::info;
 use rand::seq::SliceRandom;
 use arrayvec::ArrayVec;
 
@@ -101,7 +102,7 @@ impl SequentialMCTS {
         let path = self.selection(&mut board);
 
         let masks = get_masks(&board);
-        
+
         let rewards = self.simulation(&board);
         self.backpropagate(path, rewards);
         if !board.is_terminal() {
@@ -119,7 +120,7 @@ impl SequentialMCTS {
             safe_zone_shrinker: &mut safe_zone_shrinker::standard,
         };
 
-        while path.len() < self.config.max_select_depth {            
+        while path.len() < self.config.max_select_depth {
             let node_key = board.zobrist_hash.get_value();
             let node_option = self.nodes.get(&node_key);
 
@@ -128,10 +129,10 @@ impl SequentialMCTS {
             }
             let node_cell = node_option.unwrap();
 
-            let mut node = node_cell.borrow_mut(); 
-            let n = node.visits;           
+            let mut node = node_cell.borrow_mut();
+            let n = node.visits;
             let mut joint_action = [0; MAX_SNAKE_COUNT];
-            
+
             for agent_in_game_index in 0..board.snakes.len() {
                 if !board.snakes[agent_in_game_index].is_alive() {
                     continue;
@@ -140,7 +141,7 @@ impl SequentialMCTS {
                 let agent_node_index = node.get_agent_index(agent_in_game_index);
                 let agent = &mut node.agents[agent_node_index];
                 let best_action = agent.bandit.get_best_movement(&self.config, n);
-                
+
                 joint_action[agent_in_game_index] = best_action;
             }
 
@@ -149,7 +150,7 @@ impl SequentialMCTS {
                 &mut engine_settings,
                 joint_action,
             );
-            
+
             path.push((node, joint_action));
         }
 
@@ -220,14 +221,14 @@ impl SequentialMCTS {
                     actions[snake_index] = movement;
                 }
             }
-            
+
             advance_one_step_with_settings(
                 &mut board,
                 &mut engine_settings,
                 actions,
             );
         }
-        
+
         let alive_count = board.snakes.iter().filter(|snake| snake.is_alive()).count();
         if alive_count == 0 {
             return [self.config.draw_reward; MAX_SNAKE_COUNT];
@@ -236,7 +237,7 @@ impl SequentialMCTS {
         let len_sum: f32 = board.snakes.iter().map(|snake| snake.body.len() as f32).sum();
 
         let mut rewards = flood_fill(&board);
-        
+
         for i in 0..board.snakes.len() {
             if board.snakes[i].is_alive() {
                 rewards[i] *= board.snakes[i].body.len() as f32 / len_sum;

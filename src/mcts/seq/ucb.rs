@@ -3,6 +3,9 @@ use crate::engine::Movement;
 
 use super::config::SequentialMCTSConfig;
 
+use log::info;
+
+
 #[derive(Clone, Debug)]
 pub struct UCB {
     rewards: [f32; 4],

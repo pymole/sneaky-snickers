@@ -1,24 +1,10 @@
-// #![feature(proc_macro_hygiene, decl_macro, total_cmp)]
-mod api;
-mod game;
-mod engine;
-mod vec2d;
-mod mcts;
-mod zobrist;
-mod game_log;
-
-#[cfg(test)]
-mod test_data;
-
-#[macro_use]
-extern crate rocket;
-
 use std::env;
 
 use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
 
+use rocket::{get, post, options, launch};
 use rocket::fairing::AdHoc;
 use rocket::http::Header;
 use rocket::http::Status;
@@ -29,20 +15,21 @@ use rocket::State;
 use dashmap::DashMap;
 use mongodb::sync::Client;
 
-use log::{info, error};
+use log::{info, warn, error};
 
+use sneaky_snickers::{api, mcts, game, game_log, engine};
 use game::Board;
 use game_log::GameLog;
 use engine::Movement;
 
-use crate::mcts::config::MCTSConfig as _;
+use mcts::config::MCTSConfig as _;
 cfg_if::cfg_if! {
     if #[cfg(feature = "par")] {
-        use crate::mcts::parallel::ParallelMCTS as MCTS;
-        use crate::mcts::parallel::ParallelMCTSConfig as MCTSConfig;
+        use mcts::parallel::ParallelMCTS as MCTS;
+        use mcts::parallel::ParallelMCTSConfig as MCTSConfig;
     } else {
-        use crate::mcts::seq::SequentialMCTS as MCTS;
-        use crate::mcts::seq::SequentialMCTSConfig as MCTSConfig;
+        use mcts::seq::SequentialMCTS as MCTS;
+        use mcts::seq::SequentialMCTSConfig as MCTSConfig;
     }
 }
 
@@ -131,7 +118,7 @@ fn movement_options() -> Status {
 fn try_move_using_existing_game_session(storage: &State<Storage>, state: &api::objects::State) -> Option<Movement> {
     if let Some(game_session_mutex) = storage.game_sessions.get(&state.game.id) {
         let mut game_session = game_session_mutex.lock().unwrap();
-        
+
         if let Some(game_log) = game_session.game_log.as_mut() {
             game_log.add_state(state);
         }
@@ -219,13 +206,13 @@ fn end(storage: &State<Storage>, body: String) -> Status {
 #[launch]
 fn rocket() -> _ {
     log4rs::init_file("log4rs.yaml", Default::default()).unwrap();
-    
+
     let client = if let Ok(uri) = env::var("MONGO_URI") {
         Some(Client::with_uri_str(uri).unwrap())
     } else {
         None
     };
-    
+
     rocket::build()
         .attach(AdHoc::on_response("Cors", |_, response| Box::pin(async move {
             response.set_header(Header::new("Access-Control-Allow-Origin", "*"));
