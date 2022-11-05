@@ -33,14 +33,14 @@ impl MultiArmedBandit<SequentialMCTSConfig> for UCB {
     fn get_best_movement(&mut self, _mcts_config: &SequentialMCTSConfig, node_visits: f32) -> usize {
         let mut max_ucb_action = 0;
         let mut max_ucb = -1.0;
-        let N_ln = node_visits.ln();
+        let n_ln = node_visits.ln();
 
         for action in (0..4).filter(|&m| self.mask[m]) {
             let n_i = self.visits[action];
 
             let ucb = if n_i > 0.0 {
-                let variance_ucb = (self.variance[action] + (2.0 * N_ln / n_i).sqrt()).min(0.25);
-                self.q[action] + (variance_ucb * N_ln / n_i).sqrt()
+                let variance_ucb = (self.variance[action] + (2.0 * n_ln / n_i).sqrt()).min(0.25);
+                self.q[action] + (variance_ucb * n_ln / n_i).sqrt()
             } else {
                 return action;
             };

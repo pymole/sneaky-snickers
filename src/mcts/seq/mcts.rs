@@ -1,6 +1,5 @@
 use log::info;
 use rand::seq::SliceRandom;
-use arrayvec::ArrayVec;
 
 use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
@@ -182,7 +181,7 @@ impl SequentialMCTS {
             // info!("{}", node_key);
             node.visits += 1.0;
 
-            for (agent_node_index, agent) in node.agents.iter_mut().enumerate() {
+            for (_agent_node_index, agent) in node.agents.iter_mut().enumerate() {
                 let reward = rewards[agent.id];
                 let movement = joint_action[agent.id];
 
@@ -194,7 +193,6 @@ impl SequentialMCTS {
     fn simulation(&self, board: &Board) -> [f32; MAX_SNAKE_COUNT] {
         let mut board = board.clone();
         let rollout_cutoff = self.config.rollout_cutoff;
-        let draw_reward = self.config.draw_reward;
 
         let random = &mut rand::thread_rng();
 

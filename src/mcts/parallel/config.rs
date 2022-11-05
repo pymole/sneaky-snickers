@@ -18,11 +18,6 @@ pub struct ParallelMCTSConfig {
 
 impl MCTSConfig for ParallelMCTSConfig {
     fn from_env() -> ParallelMCTSConfig {
-        const WIN_POINTS : f32 = 15.0;
-        const DRAW_POINTS : f32 = 0.0;
-        const LOSS_POINTS : f32 = -3.0;
-        const NORMALIZED_DRAW_REWARD : f32 = (DRAW_POINTS - LOSS_POINTS) / (WIN_POINTS - LOSS_POINTS);
-
         let config = ParallelMCTSConfig {
             table_capacity:         parse_env("MCTS_TABLE_CAPACITY").unwrap_or(400000),
             iterations:             parse_env("MCTS_ITERATIONS"),
