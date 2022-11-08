@@ -92,10 +92,7 @@ fn start(body: String, storage: &State<Storage>) -> Status {
         None
     };
 
-    let game_session = GameSession {
-        mcts: mcts,
-        game_log: game_log,
-    };
+    let game_session = GameSession {mcts, game_log};
 
     if let Some(mut game_session_mutex) = storage.game_sessions.insert(state.game.id, Mutex::new(game_session)) {
         warn!("Game with given id already exists! Replacing...");
@@ -119,8 +116,11 @@ fn try_move_using_existing_game_session(storage: &State<Storage>, state: &api::o
     if let Some(game_session_mutex) = storage.game_sessions.get(&state.game.id) {
         let mut game_session = game_session_mutex.lock().unwrap();
 
-        if let Some(game_log) = game_session.game_log.as_mut() {
-            game_log.add_state(state);
+        // Skip first turn because board is the same as in /start.
+        if state.turn > 0 {
+            if let Some(game_log) = game_session.game_log.as_mut() {
+                game_log.add_state(state);
+            }
         }
 
         if let Some(mcts) = game_session.mcts.as_mut() {
