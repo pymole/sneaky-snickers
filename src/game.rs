@@ -10,14 +10,12 @@ use crate::vec2d::Vec2D;
 use crate::zobrist::{ZobristHash, body_direction};
 
 pub const MAX_SNAKE_COUNT: usize = 4;
-pub const WIDTH: usize = 11;
-pub const HEIGHT: usize = 11;
-#[allow(dead_code)]
-pub const SIZE: usize = WIDTH * HEIGHT;
+pub const WIDTH: i32 = 11;
+pub const HEIGHT: i32 = 11;
+pub const SIZE: usize = (WIDTH * HEIGHT) as usize;
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Board {
-    pub size: Point,
     pub foods: Vec<Point>,
     pub snakes: ArrayVec<Snake, MAX_SNAKE_COUNT>,
     pub turn: i32,
@@ -71,10 +69,6 @@ impl Board {
         Self::initial_zobrist_hash(&mut zobrist_hash, state_api);
 
         Board {
-            size: Point {
-                x: board_api.width,
-                y: board_api.height,
-            },
             foods: board_api.food.clone(), // TODO: reserve capacity
             snakes: board_api.snakes.iter().map(Snake::from_api).collect(),
             turn: state_api.turn as i32,
@@ -86,7 +80,7 @@ impl Board {
     }
 
     pub fn contains(&self, p: Point) -> bool {
-        Rectangle { p0: Point::ZERO, p1: self.size }.contains(p)
+        (p.x < WIDTH) & (p.y < HEIGHT) & (p.x >= 0) & (p.y >= 0)
     }
 
     pub fn is_terminal(&self) -> bool {

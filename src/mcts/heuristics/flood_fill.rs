@@ -35,7 +35,7 @@ pub fn flood_fill(board: &Board) -> FloodFill {
     // let mut seized_points: [Vec<Point>; MAX_SNAKE_COUNT] = Default::default();
     let mut seized_points = [0f32; MAX_SNAKE_COUNT];
 
-    let mut contenders_at_point: [[ContendersInfo; HEIGHT]; WIDTH] = Default::default();
+    let mut contenders_at_point: [[ContendersInfo; HEIGHT as usize]; WIDTH as usize] = Default::default();
 
     for (i, snake) in board.snakes.iter().enumerate() {
         if !snake.is_alive() {
@@ -58,7 +58,7 @@ pub fn flood_fill(board: &Board) -> FloodFill {
     loop {
         for (snake_index, flood_front) in flood_fronts.iter_mut().enumerate() {
             while let Some(point) = flood_front.pop() {
-                for movement_position in movement_positions(point, board.size) {
+                for movement_position in movement_positions(point) {
                     let contenders_info = &mut contenders_at_point[movement_position.x as usize][movement_position.y as usize];
 
                     if contenders_info.visited {

@@ -6,7 +6,7 @@ use crate::game::{
     Board,
     MAX_SNAKE_COUNT,
     Object,
-    Point,
+    Point, WIDTH, HEIGHT,
 };
 
 pub use crate::api::objects::Movement;
@@ -197,15 +197,15 @@ pub fn advance_one_step_with_settings(
 
             let mut new_head_position = head_position + Movement::from_usize(movement).to_direction();
             if new_head_position.x < 0 {
-                new_head_position.x = board.size.x - 1;
+                new_head_position.x = WIDTH - 1;
             } else
             if new_head_position.y < 0 {
-                new_head_position.y = board.size.y - 1;
+                new_head_position.y = HEIGHT - 1;
             } else
-            if new_head_position.x == board.size.x {
+            if new_head_position.x == WIDTH {
                 new_head_position.x = 0;
             } else
-            if new_head_position.y == board.size.y {
+            if new_head_position.y == HEIGHT {
                 new_head_position.y = 0;
             }
 
@@ -399,8 +399,8 @@ mod tests {
     }
 
     fn is_empty(board: &Board) -> bool {
-        for x in 0..board.size.x {
-            for y in 0..board.size.y {
+        for x in 0..WIDTH {
+            for y in 0..HEIGHT {
                 if board.objects[(x, y)] != Object::Empty {
                     return false;
                 }
