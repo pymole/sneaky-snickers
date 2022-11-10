@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use num_cpus::get as num_cpus;
 
-use crate::mcts::config::{MCTSConfig, parse_env};
+use crate::mcts::config::{Config, parse_env};
 
 #[derive(Clone, Copy, Debug)]
 pub struct ParallelMCTSConfig {
@@ -16,7 +16,7 @@ pub struct ParallelMCTSConfig {
     pub max_select_depth: usize,
 }
 
-impl MCTSConfig for ParallelMCTSConfig {
+impl Config for ParallelMCTSConfig {
     fn from_env() -> ParallelMCTSConfig {
         let config = ParallelMCTSConfig {
             table_capacity:         parse_env("MCTS_TABLE_CAPACITY").unwrap_or(400000),
@@ -30,5 +30,13 @@ impl MCTSConfig for ParallelMCTSConfig {
         };
 
         config
+    }
+
+    fn get_search_iterations(&self) -> Option<usize> {
+        self.iterations
+    }
+
+    fn get_search_time(&self) -> Option<rocket::time::Duration> {
+        self.search_time
     }
 }

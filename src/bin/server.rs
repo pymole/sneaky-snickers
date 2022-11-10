@@ -15,14 +15,16 @@ use rocket::State;
 use dashmap::DashMap;
 use mongodb::sync::Client;
 
-use log::{info, warn, error};
+use log::{info, warn};
 
-use sneaky_snickers::{api, mcts, game, game_log, engine};
+use sneaky_snickers::game_log::save_game_log;
+use sneaky_snickers::mcts::search::Search;
+use sneaky_snickers::mcts::utils::get_best_movement;
+use sneaky_snickers::{api, mcts, game, game_log};
 use game::Board;
 use game_log::GameLog;
-use engine::Movement;
 
-use mcts::config::MCTSConfig as _;
+use mcts::config::Config as _;
 cfg_if::cfg_if! {
     if #[cfg(feature = "par")] {
         use mcts::parallel::ParallelMCTS as MCTS;
@@ -41,26 +43,6 @@ struct GameSession {
 struct Storage {
     game_sessions: DashMap<String, Mutex<GameSession>>,
     client: Option<Client>,
-}
-
-
-fn get_best_movement(mcts: &mut MCTS, board: &Board, agent: usize) -> Movement {
-    if let Some(search_time) = mcts.config.search_time {
-        mcts.search_with_time(board, search_time);
-    } else if let Some(iterations) = mcts.config.iterations {
-        mcts.search(board, iterations);
-    } else {
-        panic!("Provide MCTS_SEARCH_TIME or MCTS_ITERATIONS");
-    }
-
-    mcts.get_final_movement(board, agent)
-}
-
-fn our_snake_index(state: &api::objects::State) -> usize {
-    state.board.snakes
-        .iter()
-        .position(|snake| snake.id == state.you.id)
-        .unwrap()
 }
 
 #[get("/")]
@@ -87,7 +69,7 @@ fn start(body: String, storage: &State<Storage>) -> Status {
     };
 
     let game_log = if env::var("GAME_LOG").is_ok() {
-        Some(GameLog::new(&state))
+        Some(GameLog::new_from_state(&state))
     } else {
         None
     };
@@ -112,39 +94,43 @@ fn movement_options() -> Status {
     Status::Ok
 }
 
-fn try_move_using_existing_game_session(storage: &State<Storage>, state: &api::objects::State) -> Option<Movement> {
-    if let Some(game_session_mutex) = storage.game_sessions.get(&state.game.id) {
-        let mut game_session = game_session_mutex.lock().unwrap();
-
-        // Skip first turn because board is the same as in /start.
-        if state.turn > 0 {
-            if let Some(game_log) = game_session.game_log.as_mut() {
-                game_log.add_state(state);
-            }
-        }
-
-        if let Some(mcts) = game_session.mcts.as_mut() {
-            let board = Board::from_api(&state);
-            return Some(get_best_movement(mcts, &board, our_snake_index(&state)));
-        }
-    }
-
-    None
+fn get_our_snake_index(state: &api::objects::State) -> usize {
+    let snake_index = state.board.snakes
+        .iter()
+        .filter(|snake| snake.health > 0)
+        .position(|snake| snake.id == state.you.id)
+        .unwrap();
+    
+    snake_index
 }
 
 #[post("/move", data = "<body>")]
 fn movement(storage: &State<Storage>, body: String) -> Json<api::responses::Move> {
     info!("MOVE - {}", body);
     let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
+    let board = Board::from_api(&state);
+    let our_snake_index = get_our_snake_index(&state);
 
-    let movement = try_move_using_existing_game_session(storage, &state).unwrap_or_else(|| {
-        let board = Board::from_api(&state);
-        let mut mcts = MCTS::new(MCTSConfig::from_env());
-        let movement = get_best_movement(&mut mcts, &board, our_snake_index(&state));
-        mcts.shutdown();
-        movement
-    });
+    if let Some(game_session_mutex) = storage.game_sessions.get(&state.game.id) {
+        let mut game_session = game_session_mutex.lock().unwrap();
 
+        // Skip first turn because board is the same as in /start.
+        if state.turn > 0 {
+            if let Some(game_log) = game_session.game_log.as_mut() {
+                game_log.add_turn_from_board(&board);
+            }
+        }
+
+        if let Some(mcts) = game_session.mcts.as_mut() {
+            let movement = get_best_movement(mcts, &board, our_snake_index);
+            return Json(api::responses::Move::new(movement));
+        }
+    }
+
+    let mut mcts = MCTS::new(MCTSConfig::from_env());
+    let movement = get_best_movement(&mut mcts, &board, our_snake_index);
+    mcts.shutdown();
+    
     Json(api::responses::Move::new(movement))
 }
 
@@ -184,14 +170,9 @@ fn end(storage: &State<Storage>, body: String) -> Status {
         let game_session = game_session_mutex.get_mut().unwrap();
 
         if let Some(game_log) = game_session.game_log.as_mut() {
-            game_log.add_state(&state);
+            game_log.add_turn_from_state(&state);
             if let Some(client) = storage.client.as_ref() {
-                let db = client.default_database().expect("Default database must be provided");
-                let games = db.collection::<GameLog>("games");
-                let insert_res = games.insert_one(game_log, None);
-                if let Err(err) = insert_res {
-                    error!("Failed to insert game log: {}", err);
-                }
+                save_game_log(client, game_log);
             }
         }
 

@@ -205,7 +205,7 @@ pub const TOP_RIGHT_CORNER: &str = include_str!("test_data/top_right_corner.json
 pub const HEAD_TO_HEAD_BIG_AND_SMALL: &str = include_str!("test_data/head_to_head_big_and_small.json");
 
 /*
- turn=200
+ turn=0
  A: health=100
  B: health=100
  . . . . . . . . . . .

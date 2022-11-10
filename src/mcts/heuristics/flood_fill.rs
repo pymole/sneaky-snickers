@@ -29,6 +29,7 @@ impl Default for ContendersInfo {
 }
 
 pub fn flood_fill(board: &Board) -> FloodFill {
+    // Like other rewards returns in initial index order
     let mut sizes = [0; MAX_SNAKE_COUNT];
 
     let mut flood_fronts: [Vec<Point>; MAX_SNAKE_COUNT] = Default::default();
@@ -38,25 +39,20 @@ pub fn flood_fill(board: &Board) -> FloodFill {
     let mut contenders_at_point: [[ContendersInfo; HEIGHT as usize]; WIDTH as usize] = Default::default();
 
     for (i, snake) in board.snakes.iter().enumerate() {
-        if !snake.is_alive() {
-            continue;
-        }
-
         for (empty_at, body_part) in snake.body.iter().rev().enumerate() {
             contenders_at_point[body_part.x as usize][body_part.y as usize].body_part_empty_at = empty_at + 1;
         }
         
         flood_fronts[i].reserve_exact(SIZE);
-
         sizes[i] = snake.body.len();
-        flood_fronts[i].push(snake.body[0]);
+        flood_fronts[i].push(snake.head());
     }
 
     let mut turn = 1;
     let mut current_points = Vec::new();
 
     loop {
-        for (snake_index, flood_front) in flood_fronts.iter_mut().enumerate() {
+        for (i, flood_front) in flood_fronts.iter_mut().enumerate() {
             while let Some(point) = flood_front.pop() {
                 for movement_position in movement_positions(point) {
                     let contenders_info = &mut contenders_at_point[movement_position.x as usize][movement_position.y as usize];
@@ -75,12 +71,12 @@ pub fn flood_fill(board: &Board) -> FloodFill {
                         current_points.push(movement_position);
                     }
                     
-                    let size = sizes[snake_index];
+                    let size = sizes[i];
                     if contenders_info.largest_size < size {
                         contenders_info.largest_size = size;
-                        contenders_info.winner_index = snake_index;
+                        contenders_info.winner_index = i;
                         contenders_info.several_largest = false;
-                    } else if contenders_info.largest_size == size && contenders_info.winner_index != snake_index {
+                    } else if contenders_info.largest_size == size && contenders_info.winner_index != i {
                         contenders_info.several_largest = true;
                     }
                 }

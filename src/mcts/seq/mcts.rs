@@ -4,11 +4,13 @@ use rand::seq::SliceRandom;
 use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
+use std::mem::{MaybeUninit, self};
 use std::time::{Duration, Instant};
 
 use crate::api::objects::Movement;
 use crate::engine::{EngineSettings, advance_one_step_with_settings, food_spawner, safe_zone_shrinker};
 use crate::game::{Board, MAX_SNAKE_COUNT};
+use crate::mcts::search::Search;
 use crate::zobrist::ZobristHasher;
 use crate::mcts::utils::get_masks;
 use crate::mcts::bandit::MultiArmedBandit;
@@ -29,51 +31,25 @@ cfg_if::cfg_if! {
 struct Node {
     visits: f32,
     // Alive snakes
-    agents: Vec<Agent>,
-}
-
-struct Agent {
-    id: usize,
-    bandit: Strategy,
+    agents: [Strategy; MAX_SNAKE_COUNT],
 }
 
 impl Node {
-    fn new(agents: Vec<Agent>) -> Node {
+    fn new(agents: [Strategy; MAX_SNAKE_COUNT]) -> Node {
         Node {
             visits: 0.0,
             agents: agents,
         }
     }
-
-    fn get_agent_index(&self, agent_id: usize) -> usize {
-        self.agents.iter().position(|a| a.id == agent_id).expect("There is no agent")
-    }
 }
 
 pub struct SequentialMCTS {
-    pub config: SequentialMCTSConfig,
+    config: SequentialMCTSConfig,
     nodes: HashMap<u64, RefCell<Node>, BuildHasherDefault<ZobristHasher>>,
 }
 
-
-impl SequentialMCTS {
-    pub fn new(config: SequentialMCTSConfig) -> SequentialMCTS {
-        SequentialMCTS {
-            nodes: HashMap::with_capacity_and_hasher(config.table_capacity, BuildHasherDefault::<ZobristHasher>::default()),
-            config,
-        }
-    }
-
-    fn print_stats(&self, board: &Board) {
-        let node = self.nodes.get(&board.zobrist_hash.get_value()).unwrap().borrow();
-
-        for agent in node.agents.iter() {
-            info!("Snake {}", agent.id);
-            agent.bandit.print_stats(&self.config, node.visits);
-        }
-    }
-
-    pub fn search(&mut self, board: &Board, iterations_count: u32) {
+impl Search<SequentialMCTSConfig> for SequentialMCTS {
+    fn search(&mut self, board: &Board, iterations_count: usize) {
         for _i in 0..iterations_count {
             // info!("iteration {}", i);
             self.rollout(board);
@@ -81,7 +57,7 @@ impl SequentialMCTS {
         self.print_stats(board);
     }
 
-    pub fn search_with_time(&mut self, board: &Board, target_duration: Duration) {
+    fn search_with_time(&mut self, board: &Board, target_duration: Duration) {
         let time_start = Instant::now();
         let time_end = time_start + target_duration;
 
@@ -94,6 +70,36 @@ impl SequentialMCTS {
         let actual_duration = Instant::now() - time_start;
         self.print_stats(board);
         info!("Searched {} iterations in {} ms (target={} ms)", i, actual_duration.as_millis(), target_duration.as_millis());
+    }
+
+    fn get_final_movement(&self, board: &Board, agent_index: usize) -> Movement {
+        let node = self.nodes[&board.zobrist_hash.get_value()].borrow();
+        let bandit = &node.agents[agent_index];
+        bandit.get_final_movement(&self.config, node.visits)
+    }
+
+    fn get_config(&self) -> &SequentialMCTSConfig {
+        &self.config
+    }
+
+    fn shutdown(&self) {}
+}
+
+impl SequentialMCTS {
+    pub fn new(config: SequentialMCTSConfig) -> SequentialMCTS {
+        SequentialMCTS {
+            nodes: HashMap::with_capacity_and_hasher(config.table_capacity, BuildHasherDefault::<ZobristHasher>::default()),
+            config,
+        }
+    }
+
+    fn print_stats(&self, board: &Board) {
+        let node = self.nodes.get(&board.zobrist_hash.get_value()).unwrap().borrow();
+
+        for (i, bandit) in node.agents.iter().enumerate() {
+            info!("Snake {}", i);
+            bandit.print_stats(&self.config, node.visits);
+        }
     }
 
     fn rollout(&mut self, board: &Board) {
@@ -132,16 +138,11 @@ impl SequentialMCTS {
             let n = node.visits;
             let mut joint_action = [0; MAX_SNAKE_COUNT];
 
-            for agent_in_game_index in 0..board.snakes.len() {
-                if !board.snakes[agent_in_game_index].is_alive() {
-                    continue;
-                }
+            for agent_index in 0..board.snakes.len() {
+                let bandit = &mut node.agents[agent_index];
+                let best_action = bandit.get_best_movement(&self.config, n);
 
-                let agent_node_index = node.get_agent_index(agent_in_game_index);
-                let agent = &mut node.agents[agent_node_index];
-                let best_action = agent.bandit.get_best_movement(&self.config, n);
-
-                joint_action[agent_in_game_index] = best_action;
+                joint_action[agent_index] = best_action;
             }
 
             advance_one_step_with_settings(
@@ -157,17 +158,13 @@ impl SequentialMCTS {
     }
 
     fn expansion(&mut self, board: &Board, masks: [[bool; 4]; MAX_SNAKE_COUNT]) {
-        let mut agents = Vec::new();
-        for snake_index in 0..board.snakes.len() {
-            if board.snakes[snake_index].is_alive() {
-                agents.push(
-                    Agent {
-                        id: snake_index,
-                        bandit: Strategy::new(masks[snake_index])
-                    }
-                );
+        let agents: [Strategy; MAX_SNAKE_COUNT] = {
+            let mut agents: [MaybeUninit<Strategy>; MAX_SNAKE_COUNT] = unsafe { MaybeUninit::uninit().assume_init() };
+            for i in 0..board.snakes.len() {
+                agents[i] = MaybeUninit::new(Strategy::new(masks[i]));
             }
-        }
+            unsafe { mem::transmute(agents) }
+        };
 
         let node = Node::new(agents);
         self.nodes.insert(board.zobrist_hash.get_value(), RefCell::new(node));
@@ -181,11 +178,11 @@ impl SequentialMCTS {
             // info!("{}", node_key);
             node.visits += 1.0;
 
-            for (_agent_node_index, agent) in node.agents.iter_mut().enumerate() {
-                let reward = rewards[agent.id];
-                let movement = joint_action[agent.id];
+            for (agent_index, bandit) in node.agents.iter_mut().enumerate() {
+                let reward = rewards[agent_index];
+                let movement = joint_action[agent_index];
 
-                agent.bandit.backpropagate(reward, movement);
+                bandit.backpropagate(reward, movement);
             }
         }
     }
@@ -206,18 +203,16 @@ impl SequentialMCTS {
             let mut actions = [0; MAX_SNAKE_COUNT];
             let masks = get_masks(&board);
 
-            for (snake_index, snake) in board.snakes.iter().enumerate() {
-                if snake.is_alive() {
-                    let &movement = masks[snake_index]
-                        .iter()
-                        .enumerate()
-                        .filter(|(_, &mask)| mask)
-                        .map(|(movement, _)| movement)
-                        .collect::<Vec<_>>()
-                        .choose(random)
-                        .unwrap_or(&0);
-                    actions[snake_index] = movement;
-                }
+            for snake_index in 0..board.snakes.len() {
+                let &movement = masks[snake_index]
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, &mask)| mask)
+                    .map(|(movement, _)| movement)
+                    .collect::<Vec<_>>()
+                    .choose(random)
+                    .unwrap_or(&0);
+                actions[snake_index] = movement;
             }
 
             advance_one_step_with_settings(
@@ -227,8 +222,7 @@ impl SequentialMCTS {
             );
         }
 
-        let alive_count = board.snakes.iter().filter(|snake| snake.is_alive()).count();
-        if alive_count == 0 {
+        if board.snakes.iter().all(|snake| !snake.is_alive()) {
             return [self.config.draw_reward; MAX_SNAKE_COUNT];
         }
 
@@ -237,21 +231,9 @@ impl SequentialMCTS {
         let mut rewards = flood_fill(&board);
 
         for i in 0..board.snakes.len() {
-            if board.snakes[i].is_alive() {
-                rewards[i] *= board.snakes[i].body.len() as f32 / len_sum;
-            }
+            rewards[i] *= board.snakes[i].body.len() as f32 / len_sum;
         }
         // info!("Started at {} turn and rolled out with {} turns and rewards {:?}", start_turn, board.turn - start_turn, rewards);
         rewards
     }
-
-    pub fn get_final_movement(&self, board: &Board, agent: usize) -> Movement {
-        let node = self.nodes[&board.zobrist_hash.get_value()].borrow();
-        let agent_index = node.get_agent_index(agent);
-        let agent = &node.agents[agent_index];
-
-        agent.bandit.get_final_movement(&self.config, node.visits)
-    }
-
-    pub fn shutdown(&self) {}
 }

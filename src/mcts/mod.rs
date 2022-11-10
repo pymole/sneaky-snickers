@@ -8,5 +8,6 @@ cfg_if::cfg_if! {
 
 pub mod config;
 pub mod heuristics;
-mod utils;
+pub mod search;
+pub mod utils;
 mod bandit;

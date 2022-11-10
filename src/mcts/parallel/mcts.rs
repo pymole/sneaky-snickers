@@ -23,17 +23,12 @@ type Strategy = BUUCT;
 pub struct Node {
     pub visits: f32,
     // Alive snakes
-    pub agents: Vec<Agent>,
+    pub agents: Vec<Strategy>,
     pub unobserved_samples: f32,
 }
 
-pub struct Agent {
-    id: usize,
-    bandit: Strategy,
-}
-
 impl Node {
-    fn new(agents: Vec<Agent>) -> Node {
+    fn new(agents: Vec<Strategy>) -> Node {
         Node {
             agents,
             visits: 0.0,
@@ -56,6 +51,66 @@ pub struct ParallelMCTS {
     // selection_time: Duration,
     // expansion_time: Duration,
     // backpropagate_time: Duration,
+}
+
+impl Search<ParallelMCTSConfig> for ParallelMCTS {
+    fn search(&mut self, board: &Board, iterations_count: u32) {
+        let mut join_handles = Vec::with_capacity(self.config.workers);
+        let iterations_per_worker = iterations_count / self.config.workers as u32;
+        
+        for i in 0..self.config.workers {
+            let mut worker = self.create_worker(i);
+            let board_clone = board.clone();
+
+            let join_handle = thread::spawn(move || {
+                worker.search(board_clone, iterations_per_worker);
+                worker.iterations
+            });
+            join_handles.push(join_handle);
+        }
+
+        let mut iterations = 0;
+        join_handles.into_iter().for_each(|join_handle| {
+            iterations += join_handle.join().unwrap();
+        });
+
+        self.print_stats(board);
+    }
+
+    fn search_with_time(&mut self, board: &Board, target_duration: Duration) {
+        let time_start = Instant::now();
+        
+        let mut join_handles = Vec::with_capacity(self.config.workers);
+        for i in 0..self.config.workers {
+            let mut worker = self.create_worker(i);
+            let board_clone = board.clone();
+
+            let join_handle = thread::spawn(move || {
+                worker.search_with_time(board_clone, target_duration);
+                worker.iterations
+            });
+            join_handles.push(join_handle);
+        }
+
+        let mut iterations = 0;
+        join_handles.into_iter().for_each(|join_handle| {
+            iterations += join_handle.join().unwrap();
+        });
+
+        let actual_duration = Instant::now() - time_start;
+        self.print_stats(board);
+        info!("Searched {} iterations in {} ms (target={} ms)", iterations, actual_duration.as_millis(), target_duration.as_millis());
+    }
+
+    fn get_final_movement(&self, board: &Board, agent_index: usize) -> Movement {
+        let node_ref = self.nodes.get(&board.zobrist_hash.get_value()).unwrap();
+        let node = node_ref.lock();
+        let agent = &node.agents[agent_index];
+        
+        agent.bandit.get_final_movement(&self.config, node.visits)
+    }
+
+    fn shutdown(&self) {}
 }
 
 impl ParallelMCTS {
@@ -89,54 +144,7 @@ impl ParallelMCTS {
         }
     }
 
-    pub fn search(&mut self, board: &Board, iterations_count: u32) {
-        let mut join_handles = Vec::with_capacity(self.config.workers);
-        let iterations_per_worker = iterations_count / self.config.workers as u32;
-        
-        for i in 0..self.config.workers {
-            let mut worker = self.create_worker(i);
-            let board_clone = board.clone();
-
-            let join_handle = thread::spawn(move || {
-                worker.search(board_clone, iterations_per_worker);
-                worker.iterations
-            });
-            join_handles.push(join_handle);
-        }
-
-        let mut iterations = 0;
-        join_handles.into_iter().for_each(|join_handle| {
-            iterations += join_handle.join().unwrap();
-        });
-
-        self.print_stats(board);
-    }
-
-    pub fn search_with_time(&mut self, board: &Board, target_duration: Duration) {
-        let time_start = Instant::now();
-        
-        let mut join_handles = Vec::with_capacity(self.config.workers);
-        for i in 0..self.config.workers {
-            let mut worker = self.create_worker(i);
-            let board_clone = board.clone();
-
-            let join_handle = thread::spawn(move || {
-                worker.search_with_time(board_clone, target_duration);
-                worker.iterations
-            });
-            join_handles.push(join_handle);
-        }
-
-        let mut iterations = 0;
-        join_handles.into_iter().for_each(|join_handle| {
-            iterations += join_handle.join().unwrap();
-        });
-
-        let actual_duration = Instant::now() - time_start;
-        self.print_stats(board);
-        info!("Searched {} iterations in {} ms (target={} ms)", iterations, actual_duration.as_millis(), target_duration.as_millis());
-    }
-
+    
     fn create_worker(&self, id: usize) -> ParallelMCTSWorker {
         ParallelMCTSWorker::new(
             id,
@@ -145,17 +153,6 @@ impl ParallelMCTS {
             self.max_depth_reached.clone(),
         )
     }
-
-    pub fn get_final_movement(&self, board: &Board, agent: usize) -> Movement {
-        let node_ref = self.nodes.get(&board.zobrist_hash.get_value()).unwrap();
-        let node = node_ref.lock();
-        let agent_index = node.get_agent_index(agent);
-        let agent = &node.agents[agent_index];
-        
-        agent.bandit.get_final_movement(&self.config, node.visits)
-    }
-
-    pub fn shutdown(&self) {}
 }
 
 struct ParallelMCTSWorker {
@@ -268,11 +265,7 @@ impl ParallelMCTSWorker {
                 let node_visits = node.visits;
                 let node_unobserved_samples = node.unobserved_samples;
 
-                for agent_in_game_index in 0..board.snakes.len() {
-                    if !board.snakes[agent_in_game_index].is_alive() {
-                        continue;
-                    }
-
+                for agent_in_game_index in board.iter_alive_snakes() {
                     let agent_node_index = node.get_agent_index(agent_in_game_index);
                     let agent = &mut node.agents[agent_node_index];
                     let best_action = agent.bandit.get_best_movement(&self.config, node_visits, node_unobserved_samples, iteration);
@@ -297,15 +290,13 @@ impl ParallelMCTSWorker {
     fn expansion(&self, board: &Board, masks: [[bool; 4]; MAX_SNAKE_COUNT], node_key: u64) {
         // let start = Instant::now();
         let mut agents = Vec::new();
-        for snake_index in 0..board.snakes.len() {
-            if board.snakes[snake_index].is_alive() {
-                agents.push(
-                    Agent {
-                        id: snake_index,
-                        bandit: Strategy::new(masks[snake_index])
-                    }
-                );
-            }
+        for snake_index in board.iter_alive_snakes() {
+            agents.push(
+                Agent {
+                    id: snake_index,
+                    bandit: Strategy::new(masks[snake_index])
+                }
+            );
         }
         
         let node = Node::new(agents);
@@ -328,18 +319,16 @@ impl ParallelMCTSWorker {
             let mut actions = [0; MAX_SNAKE_COUNT];
             let masks = get_masks(&board);
 
-            for (snake_index, snake) in board.snakes.iter().enumerate() {
-                if snake.is_alive() {
-                    let &movement = masks[snake_index]
-                        .iter()
-                        .enumerate()
-                        .filter(|(_, &mask)| mask)
-                        .map(|(movement, _)| movement)
-                        .collect::<Vec<_>>()
-                        .choose(random)
-                        .unwrap_or(&0);
-                    actions[snake_index] = movement;
-                }
+            for snake_index in board.iter_alive_snakes() {
+                let &movement = masks[snake_index]
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, &mask)| mask)
+                    .map(|(movement, _)| movement)
+                    .collect::<Vec<_>>()
+                    .choose(random)
+                    .unwrap_or(&0);
+                actions[snake_index] = movement;
             }
             
             advance_one_step_with_settings(
@@ -349,7 +338,7 @@ impl ParallelMCTSWorker {
             );
         }
         
-        let alive_count = board.snakes.iter().filter(|snake| snake.is_alive()).count();
+        let alive_count = board.iter_alive_snakes().count();
         if alive_count == 0 {
             return [self.config.draw_reward; MAX_SNAKE_COUNT];
         }
@@ -358,10 +347,8 @@ impl ParallelMCTSWorker {
 
         let mut rewards = flood_fill(&board);        
         
-        for i in 0..board.snakes.len() {
-            if board.snakes[i].is_alive() {
-                rewards[i] *= board.snakes[i].body.len() as f32 / len_sum;
-            }
+        for i in board.iter_alive_snakes() {
+            rewards[i] *= board.snakes[i].body.len() as f32 / len_sum;
         }
         // info!("Started at {} turn and rolled out with {} turns and rewards {:?}", start_turn, board.turn - start_turn, rewards);
         rewards

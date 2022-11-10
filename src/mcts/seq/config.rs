@@ -1,10 +1,10 @@
 use std::time::Duration;
-use crate::mcts::config::{MCTSConfig, parse_env};
+use crate::mcts::config::{Config, parse_env};
 
 #[derive(Clone, Copy, Debug)]
 pub struct SequentialMCTSConfig {
     pub table_capacity: usize,
-    pub iterations: Option<u32>,
+    pub iterations: Option<usize>,
     pub search_time: Option<Duration>,
     pub rollout_cutoff: i32,
     pub rollout_beta: f32,
@@ -12,7 +12,7 @@ pub struct SequentialMCTSConfig {
     pub max_select_depth: usize,
 }
 
-impl MCTSConfig for SequentialMCTSConfig {
+impl Config for SequentialMCTSConfig {
     fn from_env() -> SequentialMCTSConfig {
         let config = SequentialMCTSConfig {
             table_capacity: parse_env("MCTS_TABLE_CAPACITY").unwrap_or(200000),
@@ -25,5 +25,13 @@ impl MCTSConfig for SequentialMCTSConfig {
         };
 
         config
+    }
+
+    fn get_search_iterations(&self) -> Option<usize> {
+        self.iterations
+    }
+
+    fn get_search_time(&self) -> Option<Duration> {
+        self.search_time
     }
 }
