@@ -288,41 +288,20 @@ mod tests {
         advance_one_step_with_settings(&mut board, &mut settings, [Movement::Right as usize, Movement::Up as usize]);
         game_log.add_turn_from_board(&board);
         boards.push(board.clone());
-        // advance_one_step_with_settings(&mut board, &mut settings, [Movement::Up as usize, Movement::Up as usize]);
-        // game_log.add_turn_from_board(&board);
-        // boards.push(board.clone());
-        // advance_one_step_with_settings(&mut board, &mut settings, [Movement::Up as usize, Movement::Up as usize]);
-        // game_log.add_turn_from_board(&board);
-        // boards.push(board.clone());
-        // advance_one_step_with_settings(&mut board, &mut settings, [Movement::Up as usize, Movement::Up as usize]);
-        // game_log.add_turn_from_board(&board);
-        // boards.push(board.clone());
-        // advance_one_step_with_settings(&mut board, &mut settings, [Movement::Up as usize, Movement::Left as usize]);
-        // game_log.add_turn_from_board(&board);
-        // boards.push(board.clone());
-
-        println!("{}", board.turn);
-        println!("{}", board.is_terminal);
-
-        println!("{}", game_log.actions.clone().to_string());
-        println!("{}", game_log.food.clone().to_string());
+        advance_one_step_with_settings(&mut board, &mut settings, [Movement::Up as usize, Movement::Up as usize]);
+        game_log.add_turn_from_board(&board);
+        boards.push(board.clone());
+        advance_one_step_with_settings(&mut board, &mut settings, [Movement::Up as usize, Movement::Up as usize]);
+        game_log.add_turn_from_board(&board);
+        boards.push(board.clone());
+        advance_one_step_with_settings(&mut board, &mut settings, [Movement::Up as usize, Movement::Up as usize]);
+        game_log.add_turn_from_board(&board);
+        boards.push(board.clone());
+        advance_one_step_with_settings(&mut board, &mut settings, [Movement::Up as usize, Movement::Left as usize]);
+        game_log.add_turn_from_board(&board);
+        boards.push(board.clone());
 
         let rewinded_boards = rewind(&game_log);
-        
-        assert_eq!(boards[0].snakes, rewinded_boards[0].snakes);
-        assert_eq!(boards[0].foods, rewinded_boards[0].foods);
-        assert_eq!(boards[0].hazard, rewinded_boards[0].hazard);
-        assert_eq!(boards[0].hazard_start, rewinded_boards[0].hazard_start);
-        assert_eq!(boards[0].is_terminal, rewinded_boards[0].is_terminal);
-
-        assert_eq!(boards[1].turn, rewinded_boards[1].turn);
-        assert_eq!(boards[1].snakes, rewinded_boards[1].snakes);
-        assert_eq!(boards[1].foods, rewinded_boards[1].foods);
-        assert_eq!(boards[1].hazard, rewinded_boards[1].hazard);
-        assert_eq!(boards[1].hazard_start, rewinded_boards[1].hazard_start);
-        assert_eq!(boards[1].is_terminal, rewinded_boards[1].is_terminal);
-        assert_eq!(boards[1].objects, rewinded_boards[1].objects);
-        assert_eq!(boards[1].zobrist_hash.get_value(), rewinded_boards[1].zobrist_hash.get_value());        
 
         assert_eq!(boards, rewinded_boards);
     }
