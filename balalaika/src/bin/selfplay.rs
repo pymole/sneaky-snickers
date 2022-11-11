@@ -1,14 +1,13 @@
 use std::{collections::VecDeque, env};
 
 use mongodb::sync::Client;
-use sneaky_snickers::engine::food_spawner;
-use sneaky_snickers::game::MAX_SNAKE_COUNT;
-use sneaky_snickers::game_log::{GameLog, save_game_log};
-use sneaky_snickers::mcts::config::Config;
-use sneaky_snickers::mcts::search::Search;
-use sneaky_snickers::mcts::utils::search;
-use sneaky_snickers::{mcts};
-use sneaky_snickers::{game::{Board, Snake, random_point_inside_borders}, engine::advance_one_step};
+use balalaika::engine::{food_spawner, EngineSettings, safe_zone_shrinker, advance_one_step_with_settings};
+use balalaika::game::{MAX_SNAKE_COUNT, Board, Snake, random_point_inside_borders};
+use balalaika::game_log::{save_game_log, GameLogBuilder, rewind};
+use mcts::config::Config;
+use mcts::search::Search;
+use mcts::utils::search;
+use balalaika::mcts;
 
 cfg_if::cfg_if! {
     if #[cfg(feature = "par")] {
@@ -26,6 +25,11 @@ fn main() {
     let client = Client::with_uri_str(uri).unwrap();
 
     let mcts_config = MCTSConfig::from_env();
+
+    let mut engine_settings = EngineSettings {
+        food_spawner: &mut food_spawner::create_standard,
+        safe_zone_shrinker: &mut safe_zone_shrinker::standard,
+    };
 
     loop {
         // Generate board
@@ -60,16 +64,15 @@ fn main() {
             snakes,
         );
 
-        let food_count = 3;
-        for _ in 0..food_count {
-            food_spawner::create_standard(&mut board);
-        }
+        food_spawner::create_standard(&mut board);
 
-        let mut game_log = GameLog::new(
+        let mut game_log_builder = GameLogBuilder::new(
             board.snakes.clone(),
             &hazards,
             &board.foods,
         );
+        game_log_builder.add_tag("selfplay-v1.0.0".to_string());
+        game_log_builder.set_hazard_start(board.hazard_start);
 
         // Play game
         println!("Starting new game");
@@ -83,11 +86,13 @@ fn main() {
                 let action = mcts.get_final_movement(&board, snake_index);
                 actions[snake_index] = action as usize;
             }
-            advance_one_step(&mut board, actions);
-            game_log.add_turn_from_board(&board);
+            advance_one_step_with_settings(&mut board, &mut engine_settings, actions);
+            game_log_builder.add_turn_from_board(&board);
         }
 
         // Upload game
+        let game_log = game_log_builder.finalize();
+        rewind(&game_log);
         save_game_log(&client, &game_log);
         println!("Saved game");
     }

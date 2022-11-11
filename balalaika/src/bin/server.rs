@@ -17,18 +17,18 @@ use mongodb::sync::Client;
 
 use log::{info, warn};
 
-use sneaky_snickers::game_log::save_game_log;
-use sneaky_snickers::mcts::search::Search;
-use sneaky_snickers::mcts::utils::get_best_movement;
-use sneaky_snickers::{api, mcts, game, game_log};
-use game::Board;
-use game_log::GameLog;
+use balalaika::game_log::save_game_log;
+use balalaika::mcts::search::Search;
+use balalaika::mcts::utils::get_best_movement;
+use balalaika::{api, mcts};
+use balalaika::game::Board;
+use balalaika::game_log::GameLogBuilder;
 
 use mcts::config::Config as _;
 cfg_if::cfg_if! {
     if #[cfg(feature = "par")] {
-        use mcts::parallel::ParallelMCTS as MCTS;
-        use mcts::parallel::ParallelMCTSConfig as MCTSConfig;
+        use balalaika::mcts::parallel::ParallelMCTS as MCTS;
+        use balalaika::mcts::parallel::ParallelMCTSConfig as MCTSConfig;
     } else {
         use mcts::seq::SequentialMCTS as MCTS;
         use mcts::seq::SequentialMCTSConfig as MCTSConfig;
@@ -37,7 +37,7 @@ cfg_if::cfg_if! {
 
 struct GameSession {
     mcts: Option<MCTS>,
-    game_log: Option<GameLog>,
+    game_log_builder: Option<GameLogBuilder>,
 }
 
 struct Storage {
@@ -68,13 +68,13 @@ fn start(body: String, storage: &State<Storage>) -> Status {
         None
     };
 
-    let game_log = if env::var("GAME_LOG").is_ok() {
-        Some(GameLog::new_from_state(&state))
+    let game_log_builder = if env::var("GAME_LOG").is_ok() {
+        Some(GameLogBuilder::new_from_state(&state))
     } else {
         None
     };
 
-    let game_session = GameSession {mcts, game_log};
+    let game_session = GameSession {mcts, game_log_builder};
 
     if let Some(mut game_session_mutex) = storage.game_sessions.insert(state.game.id, Mutex::new(game_session)) {
         warn!("Game with given id already exists! Replacing...");
@@ -116,8 +116,8 @@ fn movement(storage: &State<Storage>, body: String) -> Json<api::responses::Move
 
         // Skip first turn because board is the same as in /start.
         if state.turn > 0 {
-            if let Some(game_log) = game_session.game_log.as_mut() {
-                game_log.add_turn_from_board(&board);
+            if let Some(game_log_builder) = game_session.game_log_builder.as_mut() {
+                game_log_builder.add_turn_from_board(&board);
             }
         }
 
@@ -169,10 +169,11 @@ fn end(storage: &State<Storage>, body: String) -> Status {
     if let Some((_, mut game_session_mutex)) = storage.game_sessions.remove(&state.game.id) {
         let game_session = game_session_mutex.get_mut().unwrap();
 
-        if let Some(game_log) = game_session.game_log.as_mut() {
-            game_log.add_turn_from_state(&state);
+        if let Some(game_log_builder) = game_session.game_log_builder.as_mut() {
+            game_log_builder.add_turn_from_state(&state);
             if let Some(client) = storage.client.as_ref() {
-                save_game_log(client, game_log);
+                let game_log = game_log_builder.finalize();
+                save_game_log(client, &game_log);
             }
         }
 

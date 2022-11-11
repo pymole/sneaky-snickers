@@ -11,3 +11,6 @@ pub mod features;
 pub mod test_data;
 #[cfg(test)]
 pub mod test_utils;
+
+#[cfg(feature = "python")]
+pub mod python_module;
