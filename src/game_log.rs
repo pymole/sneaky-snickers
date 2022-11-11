@@ -245,15 +245,14 @@ pub fn rewind(game_log: &GameLog) -> Vec<Board> {
 
 #[cfg(test)]
 mod tests {
-    use rocket::serde::json::serde_json;
-
     use super::{GameLog, rewind};
-    use crate::{test_data as data, game::{Board, Point}, api::{self, objects::Movement}, engine::{advance_one_step_with_settings, EngineSettings, safe_zone_shrinker}};
-    
-    fn create_board(api_str: &str) -> Board {
-        let state = serde_json::from_str::<api::objects::State>(api_str).unwrap();
-        Board::from_api(&state)
-    }
+    use crate::test_utils::create_board;
+    use crate::{
+        test_data as data,
+        game::{Board, Point},
+        api::objects::Movement,
+        engine::{advance_one_step_with_settings, EngineSettings, safe_zone_shrinker}
+    };
     
     #[test]
     fn test_rewind() {
