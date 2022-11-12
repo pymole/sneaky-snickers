@@ -6,6 +6,7 @@ pub mod mcts;
 pub mod zobrist;
 pub mod game_log;
 pub mod features;
+pub mod board_generator;
 
 #[cfg(test)]
 pub mod test_data;

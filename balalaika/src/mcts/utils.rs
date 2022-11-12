@@ -1,10 +1,11 @@
+use arrayvec::ArrayVec;
+use rand::{seq::SliceRandom, Rng};
+
 use crate::api::objects::Movement;
 use crate::engine::MOVEMENTS;
-use crate::game::{Board, Object, Point, MAX_SNAKE_COUNT, HEIGHT, WIDTH};
-use arrayvec::ArrayVec;
-
 use super::config::Config;
 use super::search::Search;
+use crate::game::{Board, Point, MAX_SNAKE_COUNT, HEIGHT, WIDTH};
 
 
 pub fn get_masks(board: &Board) -> [[bool; 4]; MAX_SNAKE_COUNT] {
@@ -20,7 +21,6 @@ pub fn get_masks(board: &Board) -> [[bool; 4]; MAX_SNAKE_COUNT] {
         }
     }
     
-    // TODO: use maybeuninit
     let mut masks = [[false; 4]; MAX_SNAKE_COUNT];
 
     board.snakes.iter()
@@ -30,7 +30,7 @@ pub fn get_masks(board: &Board) -> [[bool; 4]; MAX_SNAKE_COUNT] {
                 .iter()
                 .for_each(|&movement| {
                     let movement_position = get_movement_position(snake.head(), movement);
-                    if board.objects[movement_position] != Object::BodyPart || tails.contains(&movement_position) {
+                    if !board.objects.is_body(movement_position) || tails.contains(&movement_position) {
                         masks[snake_index][movement as usize] = true;
                     }
                 });
@@ -59,6 +59,25 @@ pub fn movement_positions(position: Point) -> [Point; 4] {
     positions
 }
 
+pub fn get_random_actions_from_masks(random: &mut impl Rng, masks: [[bool; 4]; MAX_SNAKE_COUNT]) -> [usize; MAX_SNAKE_COUNT] {
+    let mut actions = [0; MAX_SNAKE_COUNT];
+
+    for i in 0..MAX_SNAKE_COUNT {
+        let available_actions = masks[i]
+            .into_iter()
+            .enumerate()
+            .filter(|(_, mask)| *mask)
+            .map(|(movement, _)| movement)
+            .collect::<Vec<_>>();
+        
+        if let Some(&action) = available_actions.choose(random) {
+            actions[i] = action;
+        }
+    }
+
+    actions
+}
+
 pub fn search<C: Config, S: Search<C>>(searcher: &mut S, board: &Board) {
     let config = searcher.get_config();
     if let Some(search_time) = config.get_search_time() {
@@ -78,29 +97,29 @@ pub fn get_best_movement<C: Config, S: Search<C>>(searcher: &mut S, board: &Boar
 
 #[cfg(test)]
 mod tests {
-    use crate::{game::{Board, Snake, Point, Object}, mcts::utils::get_masks};
+    use crate::{game::{Board, Snake, Point}, mcts::utils::get_masks};
 
     #[test]
     fn test_get_masks() {
         let board = Board::new(
             0,
-            Vec::new(),
+            Some(vec![Point {x: 0, y: 0}]),
             None,
             Some(&Vec::new()),
             [
                 Snake {
                     health: 100,
-                    body: [Point {x: 5, y: 4}, Point {x: 4, y: 4}, Point {x: 4, y: 4}].into()
+                    body: [Point {x: 0, y: 6}, Point {x: 0, y: 6}, Point {x: 0, y: 6}].into()
                 },
                 Snake {
                     health: 100,
-                    body: [Point {x: 9, y: 9}, Point {x: 9, y: 9}, Point {x: 9, y: 9}].into()
+                    body: [Point {x: 1, y: 6}, Point {x: 1, y: 6}, Point {x: 1, y: 6}].into()
                 },
             ],
         );
 
         let masks = get_masks(&board);
-        assert_eq!(board.objects[(4, 4)], Object::BodyPart);
-        assert_eq!(masks[0], [true, true, true, false]);
+        assert_eq!(masks[0], [true, false, true, true]);
+        assert_eq!(masks[1], [true, true, true, false]);
     }
 }

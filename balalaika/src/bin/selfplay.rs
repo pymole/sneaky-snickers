@@ -1,8 +1,9 @@
-use std::{collections::VecDeque, env};
+use std::env;
 
+use balalaika::board_generator::generate_board;
 use mongodb::sync::Client;
 use balalaika::engine::{food_spawner, EngineSettings, safe_zone_shrinker, advance_one_step_with_settings};
-use balalaika::game::{MAX_SNAKE_COUNT, Board, Snake, random_point_inside_borders};
+use balalaika::game::MAX_SNAKE_COUNT;
 use balalaika::game_log::{save_game_log, GameLogBuilder, rewind};
 use mcts::config::Config;
 use mcts::search::Search;
@@ -32,43 +33,10 @@ fn main() {
     };
 
     loop {
-        // Generate board
-        let head1 = random_point_inside_borders();
-        let head2 = loop {
-            let p = random_point_inside_borders();
-            if p != head1 {
-                break p
-            }
-        };
-
-        let snakes = [
-            Snake {
-                health: 100,
-                body: VecDeque::from([head1, head1, head1]),
-            },
-            Snake {
-                health: 100,
-                body: VecDeque::from([head2, head2, head2]),
-            },
-        ];
-
-        let foods = vec![];
-        let hazard_start = random_point_inside_borders();
-        let hazards = vec![];
-
-        let mut board = Board::new(
-            0,
-            foods,
-            Some(hazard_start),
-            None,
-            snakes,
-        );
-
-        food_spawner::create_standard(&mut board);
-
+        let mut board = generate_board();
         let mut game_log_builder = GameLogBuilder::new(
             board.snakes.clone(),
-            &hazards,
+            &Vec::new(),
             &board.foods,
         );
         game_log_builder.add_tag("selfplay-v1.0.0".to_string());

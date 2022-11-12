@@ -1,8 +1,11 @@
 use std::collections::HashSet;
 use std::mem::{self, MaybeUninit};
-use log::error;
+use mongodb::bson::{doc, Bson};
+use mongodb::error::Error;
+use mongodb::results::InsertOneResult;
 
 use crate::api::objects::State;
+use crate::engine::food_spawner::{dirty_store_empties_on_heads_if_there_is_no, dirty_restore_empties};
 use crate::engine::{EngineSettings, safe_zone_shrinker, advance_one_step_with_settings};
 use crate::game::{Point, Board, Snake, MAX_SNAKE_COUNT, WIDTH, HEIGHT};
 use crate::zobrist::{body_direction, BodyDirections};
@@ -164,8 +167,6 @@ impl GameLogBuilder {
 
                 heads[i] = MaybeUninit::new(new_head);
 
-                println!("{:?}", direction as usize);
-
                 let len = self.actions.len();
                 unsafe { self.actions.set_len(len + 2) };
                 
@@ -225,22 +226,37 @@ impl GameLogBuilder {
     }
 }
 
-pub fn save_game_log(client: &Client, game_log: &GameLog) {
+pub fn save_game_log(client: &Client, game_log: &GameLog) -> Result<InsertOneResult, Error> {
     let db = client.default_database().expect("Default database must be provided");
     let games = db.collection::<GameLog>("games");
     let insert_res = games.insert_one(game_log, None);
-    if let Err(err) = insert_res {
-        error!("Failed to insert game log: {}", err);
-    }
+
+    insert_res
+
+    // TODO: Return result, handle error outside
+    // if let Err(err) = insert_res {
+    //     error!("Failed to insert game log: {}", err);
+    // }
 }
 
-pub fn rewind(game_log: &GameLog) -> Vec<Board> {
+pub fn load_game_log(client: &Client, id: Bson) -> Result<Option<GameLog>, Error> {
+    let db = client.default_database().expect("Default database must be provided");
+    let games = db.collection::<GameLog>("games");
+    let game_log = games.find_one(doc! {"_id": id }, None);
+
+    game_log
+}
+
+
+pub fn rewind(game_log: &GameLog) -> (Vec<[usize; MAX_SNAKE_COUNT]>, Vec<Board>) {
     println!("REWIND");
+    assert!(!game_log.initial_board.food.is_empty());
+
     let mut boards = Vec::new();
 
     let mut board = Board::new(
         0,
-        game_log.initial_board.food.clone(),
+        Some(game_log.initial_board.food.clone()),
         game_log.initial_board.hazard_start,
         None,
         game_log.initial_board.snakes.clone(),
@@ -251,9 +267,15 @@ pub fn rewind(game_log: &GameLog) -> Vec<Board> {
     let foods = game_log.get_foods();
     
     let mut log_food_spawner = |board: &mut Board| {
+        // WARN: Dirties used to save ordering in board.objects. See details in implemetation
+        // of the food_spawner::spawn_one.
+        let restore_empties = dirty_store_empties_on_heads_if_there_is_no(board);
+
         if let Some(food) = foods[board.turn as usize - 1] {
             board.put_food(food);
         }
+
+        dirty_restore_empties(board, restore_empties);
     };
 
     let mut settings = EngineSettings {
@@ -261,27 +283,36 @@ pub fn rewind(game_log: &GameLog) -> Vec<Board> {
         safe_zone_shrinker: &mut safe_zone_shrinker::noop,
     };
 
+    let mut game_actions = Vec::new();
     let mut actions_bits = game_log.actions.as_bits::<Msb0>().chunks_exact(2);
 
     for _ in 0..game_log.turns {
         let mut actions = [0; MAX_SNAKE_COUNT];
         for i in 0..board.snakes.len() {
-            let d = actions_bits.next().expect("Corrupted actions").load_be();
-            println!("{:?}", d);
-            actions[i] = d
+            actions[i] = actions_bits.next().expect("Corrupted actions").load_be();
         }
+
+        game_actions.push(actions);
 
         advance_one_step_with_settings(&mut board, &mut settings, actions);
         boards.push(board.clone());
     }
 
-    boards
+    (game_actions, boards)
 }
 
 
 #[cfg(test)]
 mod tests {
-    use super::{GameLogBuilder, rewind};
+    use mongodb::sync::Client;
+    use rand::thread_rng;
+    use pretty_assertions::{assert_eq};
+
+    use super::{GameLogBuilder, rewind, GameLog};
+    use crate::board_generator::generate_board;
+    use crate::engine::food_spawner;
+    use crate::game_log::{save_game_log, load_game_log};
+    use crate::mcts::utils::{get_masks, get_random_actions_from_masks};
     use crate::test_utils::create_board;
     use crate::{
         test_data as data,
@@ -338,8 +369,79 @@ mod tests {
 
         let game_log = game_log_builder.finalize();
 
-        let rewinded_boards = rewind(&game_log);
+        let (_, rewinded_boards) = rewind(&game_log);
 
         assert_eq!(boards, rewinded_boards);
+    }
+
+    #[test]
+    fn test_rewind_random_play_integrational() {
+        // NOTE: Run MongoDB with docker compose up!
+
+        let client = Client::with_uri_str("mongodb://battlesnake:battlesnake@localhost:27017/battlesnake?authSource=admin").unwrap();
+        let db = client.default_database().expect("Provide default database");
+        db.collection::<GameLog>("rewind_test").drop(None);
+        db.create_collection("rewind_test", None).expect("Collection rewind_test isn't created");
+
+        let mut random = thread_rng();
+        for _ in 0..1000 {
+            println!("OK");
+            let mut board = generate_board();
+            let mut game_log_builder = GameLogBuilder::new(
+                board.snakes.clone(),
+                &Vec::new(),
+                &board.foods,
+            );
+            game_log_builder.set_hazard_start(board.hazard_start);
+
+            let mut engine_settings = EngineSettings {
+                food_spawner: &mut food_spawner::create_standard,
+                safe_zone_shrinker: &mut safe_zone_shrinker::noop,
+            };
+
+            let mut actual_actions =  Vec::new();
+            let mut actual_boards =  Vec::new();
+   
+            actual_boards.push(board.clone());
+
+            while !board.is_terminal() {
+                let masks = get_masks(&board);
+                let actions = get_random_actions_from_masks(&mut random, masks);
+                actual_actions.push(actions);
+                advance_one_step_with_settings(&mut board, &mut engine_settings, actions);
+                game_log_builder.add_turn_from_board(&board);
+                actual_boards.push(board.clone());
+            }
+
+            let game_log = game_log_builder.finalize();
+
+            let insert_res = save_game_log(&client, &game_log);
+
+            let load_res = load_game_log(
+                &client,
+                insert_res.expect("Failed to write game").inserted_id
+            );
+            let game_log = load_res.expect("Failed to load").unwrap();
+
+            let (actions, boards) = rewind(&game_log);
+            assert_eq!(actions.len(), boards.len() - 1, "Actions and boards count don't match");
+
+            assert_eq!(actual_actions.len(), actions.len(), "Different actions count");
+            for i in 0..actual_actions.len() {
+                assert_eq!(actual_actions[i], actions[i], "Different action on turn {}", i);
+            }
+
+            assert_eq!(actual_boards.len(), boards.len(), "Different positions count");
+            for i in 0..actual_boards.len() {
+                assert_eq!(actual_boards[i].hazard, boards[i].hazard, "{}", board);
+                assert_eq!(actual_boards[i].snakes, boards[i].snakes, "{}", board);
+                assert_eq!(actual_boards[i].objects.empties, boards[i].objects.empties, "{}", board);
+                assert_eq!(actual_boards[i].objects.map, boards[i].objects.map, "{}", board);
+                assert_eq!(actual_boards[i].zobrist_hash, boards[i].zobrist_hash, "{}", board);
+                assert_eq!(actual_boards[i], boards[i], "{}", board);
+            }
+        }
+
+        db.collection::<GameLog>("rewind_test").drop(None).expect("Error on rewind_test collection delete");
     }
 }

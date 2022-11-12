@@ -7,8 +7,7 @@ use crate::zobrist::body_direction;
 use crate::game::{
     Board,
     MAX_SNAKE_COUNT,
-    Object,
-    Point, WIDTH, HEIGHT,
+    Point, WIDTH, HEIGHT, SIZE, Object, FOOD, BODY,
 };
 
 pub use crate::api::objects::Movement;
@@ -55,34 +54,42 @@ pub mod food_spawner {
     use super::*;
     use rand;
 
-    fn spawn_one(rng: &mut impl rand::Rng, board: &mut Board) {
-        let empty_objects_count = board.objects.data.iter().filter(|&&object| object == Object::Empty).count();
-
-        if empty_objects_count == 0 {
-            return;
-        }
-
-        let needle = rng.gen_range(0..empty_objects_count);
-
-        let mut i = 0;
-        for x in 0..board.objects.len1 {
-            for y in 0..board.objects.len2 {
-                if board.objects[(x, y)] == Object::Empty {
-                    if i == needle {
-                        let pos = Point { x: x as i32, y: y as i32 };
-                        board.put_food(pos);
-                        return;
-                    }
-
-                    i += 1;
-                }
+    pub fn dirty_store_empties_on_heads_if_there_is_no(board: &mut Board) -> [bool; MAX_SNAKE_COUNT] {
+        // It's used in GameLog to save board.objects ordering.
+        let mut restore_empty = [false; MAX_SNAKE_COUNT];
+        for (i, snake) in board.snakes.iter().enumerate() {
+            let head = snake.head();
+            if board.objects.is_empty(head) {
+                board.objects.set_body_on_empty(head);
+                restore_empty[i] = true;
             }
         }
+        restore_empty
+    }
 
-        unreachable!();
+    pub fn dirty_restore_empties(board: &mut Board, restore_empties: [bool; MAX_SNAKE_COUNT]) {
+        for (i, snake) in board.snakes.iter().enumerate() {
+            if restore_empties[i] {
+                board.objects.set_empty_on_body(snake.head());
+            }
+        }
+    }
+
+    fn spawn_one(rng: &mut impl rand::Rng, board: &mut Board) {
+        // WARN: Dirty hack with heads. Set heads, generate food and restore empties again.
+        // TODO: Check if there is no need to restore empties. "Make hack legal"
+        
+        let restore_empties = dirty_store_empties_on_heads_if_there_is_no(board);
+
+        if let Some(empty_pos) = board.objects.get_empty_position(rng) {
+            board.put_food(empty_pos);
+        }
+
+        dirty_restore_empties(board, restore_empties);
     }
 
     pub fn create_standard(board: &mut Board) {
+        // For engine use only! It changes board.objects internal state
         let random = &mut rand::thread_rng();
         if board.foods.len() < 1 || random.gen_ratio(20, 100) {
             spawn_one(random, board);
@@ -170,7 +177,7 @@ pub fn advance_one_step_with_settings(
     engine_settings: &mut EngineSettings,
     actions: [usize; MAX_SNAKE_COUNT]
 ) {
-    assert!(!board.is_terminal());
+    debug_assert!(!board.is_terminal());
 
     board.zobrist_hash.xor_turn(board.turn);
     board.turn += 1;
@@ -190,9 +197,9 @@ pub fn advance_one_step_with_settings(
         for (snake_i, snake) in board.snakes.iter_mut().enumerate() {
             let movement = actions[snake_i];
             debug_assert!(snake.body.len() > 0);
-            let head_position = snake.head();
+            let old_head_position = snake.head();
 
-            let mut new_head_position = head_position + Movement::from_usize(movement).to_direction();
+            let mut new_head_position = old_head_position + Movement::from_usize(movement).to_direction();
             if new_head_position.x < 0 {
                 new_head_position.x = WIDTH - 1;
             } else
@@ -211,21 +218,26 @@ pub fn advance_one_step_with_settings(
             snake.body.push_front(new_head_position);
 
             // Move neck (first body part next to head)
-            let new_neck_direction = body_direction(head_position, new_head_position);
-            board.zobrist_hash.xor_body_direction(head_position, snake_i, new_neck_direction);
+            let new_neck_direction = body_direction(old_head_position, new_head_position);
+            board.zobrist_hash.xor_body_direction(old_head_position, snake_i, new_neck_direction);
 
             // Remove old tail
             let old_tail = snake.body.pop_back().unwrap();
             let new_tail = snake.body[snake.body.len() - 1];
-            debug_assert_eq!(board.objects[old_tail], Object::BodyPart);
+            debug_assert!(board.objects.is_body(old_tail));
 
+            // TODO: Make zobrist hashing like this:
+            // 0 [Still         ]                   - 3 body parts on the same spot
+            // 1 [Still + Right ]                   - Head is out, body on the same spot
+            // 2 [Right         ][Right         ]   - All body parts on unique spot
+            
             let old_tail_direction = body_direction(old_tail, new_tail);
             board.zobrist_hash.xor_body_direction(old_tail, snake_i, old_tail_direction);
 
-            // TODO: benchmark alternative: if *snake.body.back().unwrap() != old_tail {
-            board.objects[old_tail] = Object::Empty;
-            board.objects[new_tail] = Object::BodyPart;
-
+            if old_tail != new_tail {
+                board.objects.set_empty_on_body(old_tail);
+            }
+            
             // The head will be set in a separate loop.
         }
     }
@@ -235,7 +247,8 @@ pub fn advance_one_step_with_settings(
         
         for (i, snake) in board.snakes.iter().enumerate() {
             debug_assert!(board.contains(snake.head()));
-            objects_under_head[i] = MaybeUninit::new(board.objects[snake.head()]);
+            let object_under_head = board.objects.get(snake.head());
+            objects_under_head[i] = MaybeUninit::new(object_under_head);
         }
         unsafe { mem::transmute(objects_under_head) }
     };
@@ -249,7 +262,7 @@ pub fn advance_one_step_with_settings(
     {
         let mut eaten_food = ArrayVec::<_, MAX_SNAKE_COUNT>::new();
         for i in 0..board.snakes.len() {
-            if objects_under_head[i] != Object::Food {
+            if objects_under_head[i] != FOOD {
                 continue;
             }
 
@@ -260,14 +273,15 @@ pub fn advance_one_step_with_settings(
 
             let tail = *snake.body.back().unwrap();
             snake.body.push_back(tail);
-            debug_assert_eq!(board.objects[tail], Object::BodyPart);
+            debug_assert!(board.objects.is_body(tail));
             eaten_food.push(head);
             snake_ate_food[i] = true;
         }
         for &food in eaten_food.iter() {
             if let Some(food_position) = board.foods.iter().position(|&x| x == food) {
                 board.foods.swap_remove(food_position);
-                board.objects[food] = Object::Empty;
+                // TODO: Проверить, что никто этот эмпти потом не будет изменять под другим типом
+                board.objects.set_empty_on_food(food);
                 board.zobrist_hash.xor_food(food);
             }
         }
@@ -292,7 +306,7 @@ pub fn advance_one_step_with_settings(
             let object_under_head = objects_under_head[i];
 
             // Collided with themselves or another battlesnake.
-            if object_under_head == Object::BodyPart {
+            if object_under_head == BODY {
                 died_snakes.push(i);
                 continue;
             }
@@ -335,6 +349,14 @@ pub fn advance_one_step_with_settings(
         (engine_settings.safe_zone_shrinker)(board);
     }
 
+    println!("{:?} {}", board, board);
+
+    debug_assert!(
+        board.snakes
+            .iter()
+            .all(|snake| board.foods.iter().all(|food| !snake.body.contains(&food)))
+    );
+
     // Remove dead snakes from board.objects
     {
         for i in 0..board.snakes.len() {
@@ -342,14 +364,19 @@ pub fn advance_one_step_with_settings(
             if !snake.is_alive() {
                 board.is_terminal = true;
 
-                if objects_under_head[i] != Object::BodyPart {
-                    board.objects[snake.head()] = Object::Empty;
+                // TODO: I don't understand why we have to put this empty.
+                //  No food - it was eaten
+                // NOTE: This assert is to check TODO above.
+                if objects_under_head[i] != BODY {
+                    debug_assert!(board.objects.is_empty(snake.head()));
+                    // board.objects[snake.head()] = Object::Empty;
                 }
-
+                
                 for j in 1..snake.body.len() {
                     let body_part = snake.body[j];
                     let body_part_direction = body_direction( body_part, snake.body[j - 1]);
-                    board.objects[body_part] = Object::Empty;
+                    
+                    board.objects.set_empty_on_body(body_part);
                     board.zobrist_hash.xor_body_direction(body_part, i, body_part_direction);
                 }
             }
@@ -358,10 +385,33 @@ pub fn advance_one_step_with_settings(
         // Restore alive heads, which were removed in previous loop in case of a head-to-head collision.
         for i in 0..board.snakes.len() {
             if board.snakes[i].is_alive() {
-                board.objects[board.snakes[i].head()] = Object::BodyPart;
+                board.objects.set_body_on_empty(board.snakes[i].head());
             }
         }
     }
+
+    debug_assert_eq!(
+        board.objects.empties_count(),
+        SIZE as usize - board.foods.len() - board.snakes
+            .iter()
+            .filter(|snake| snake.is_alive())
+            .map(|snake| {
+                let mut body_occupied = snake.body.len();
+                for i in 1..snake.body.len() {
+                    if snake.body[i - 1] == snake.body[i] {
+                        body_occupied = i;
+                        break;
+                    }
+                }
+                body_occupied
+            })
+            .sum::<usize>(),
+        "{}\n{:?}\n{:?}\n{:?}",
+        board,
+        board.snakes,
+        board.foods,
+        board.is_terminal,
+    );
 }
 
 #[cfg(test)]

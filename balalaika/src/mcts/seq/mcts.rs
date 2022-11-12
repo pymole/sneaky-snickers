@@ -1,5 +1,4 @@
 use log::info;
-use rand::seq::SliceRandom;
 
 use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
@@ -12,7 +11,7 @@ use crate::engine::{EngineSettings, advance_one_step_with_settings, food_spawner
 use crate::game::{Board, MAX_SNAKE_COUNT};
 use crate::mcts::search::Search;
 use crate::zobrist::ZobristHasher;
-use crate::mcts::utils::get_masks;
+use crate::mcts::utils::{get_masks, get_random_actions_from_masks};
 use crate::mcts::bandit::MultiArmedBandit;
 use crate::mcts::heuristics::flood_fill::flood_fill;
 
@@ -200,20 +199,7 @@ impl SequentialMCTS {
 
         let end_turn = board.turn + rollout_cutoff;
         while board.turn <= end_turn && !board.is_terminal() {
-            let mut actions = [0; MAX_SNAKE_COUNT];
-            let masks = get_masks(&board);
-
-            for snake_index in 0..board.snakes.len() {
-                let &movement = masks[snake_index]
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, &mask)| mask)
-                    .map(|(movement, _)| movement)
-                    .collect::<Vec<_>>()
-                    .choose(random)
-                    .unwrap_or(&0);
-                actions[snake_index] = movement;
-            }
+            let actions = get_random_actions_from_masks(random, get_masks(&board));
 
             advance_one_step_with_settings(
                 &mut board,

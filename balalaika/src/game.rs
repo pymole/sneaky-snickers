@@ -1,12 +1,16 @@
 use std::collections::VecDeque;
+use std::fmt::{Debug, self};
 use std::mem::{MaybeUninit, self};
 use std::ops::{Add, AddAssign};
 use std::hash::{Hash, Hasher};
+use arrayvec::ArrayVec;
+use rand::seq::SliceRandom;
 use rand::thread_rng;
 use rand::Rng;
 use serde::{Serialize, Deserialize};
 
 use crate::api;
+use crate::api::objects::Movement;
 use crate::vec2d::Vec2D;
 use crate::zobrist::{ZobristHash, body_direction};
 
@@ -17,22 +21,15 @@ pub const SIZE: usize = (WIDTH * HEIGHT) as usize;
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Board {
-    // WARNING: Optimized for 2 player
+    // WARNING: Optimized for 2 players
     pub foods: Vec<Point>,
     pub snakes: [Snake; MAX_SNAKE_COUNT],
     pub turn: i32,
     pub hazard: Vec2D<bool>,
     pub hazard_start: Point,
-    pub objects: Vec2D<Object>,
+    pub objects: Objects,
     pub zobrist_hash: ZobristHash,
     pub is_terminal: bool,
-}
-
-#[derive(PartialEq, Eq, Debug, Copy, Clone, Hash)]
-pub enum Object {
-    BodyPart,
-    Food,
-    Empty,
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Hash, Serialize, Deserialize)]
@@ -51,15 +48,13 @@ pub struct Rectangle {
 }
 
 impl Board {
-    pub fn from_api(state_api: &api::objects::State) -> Board {
-        debug_assert!(state_api.board.snakes.len() == 2);
-        
+    pub fn from_api(state_api: &api::objects::State) -> Board {        
         let board_api = &state_api.board;
         debug_assert!(board_api.width == WIDTH && board_api.height == HEIGHT);
 
         Board::new(
             state_api.turn as i32,
-            state_api.board.food.clone(),
+            Some(state_api.board.food.clone()),
             None,
             Some(&state_api.board.hazards),
             Self::snake_api_to_snake_game(&state_api.board.snakes),
@@ -68,17 +63,38 @@ impl Board {
 
     pub fn new(
         turn: i32,
-        foods: Vec<Point>,
+        foods: Option<Vec<Point>>,
         hazard_start: Option<Point>,
         hazards: Option<&Vec<Point>>,
         snakes: [Snake; MAX_SNAKE_COUNT],
     ) -> Board {
-        debug_assert!(MAX_SNAKE_COUNT == 2);
+        debug_assert_eq!(MAX_SNAKE_COUNT, 2);
+
+        // There always must be food.
+        let mut foods = if let Some(foods) = foods {
+            foods
+        } else {
+            Vec::new()
+        };
+        if foods.is_empty() {
+            loop {
+                let food = random_point_inside_borders();
+                if snakes.iter().all(|snake| !snake.body.contains(&food)) {
+                    foods.push(food);
+                    break;
+                }
+            }
+        }
+
+        debug_assert!(snakes.iter().all(|snake| foods.iter().all(|food| !snake.body.contains(&food))));
 
         let zobrist_hash = Self::initial_zobrist_hash(
             turn,
             &snakes,
+            &foods,
         );
+
+        println!("zobrist_hash {} {:?} {:?}", zobrist_hash.get_value(), snakes, foods);
 
         let hazard_start_;
         let hazards_;
@@ -121,33 +137,32 @@ impl Board {
     }
 
     pub fn put_food(&mut self, pos: Point) {
-        self.objects[pos] = Object::Food;
-        self.zobrist_hash.xor_food(pos);
+        self.objects.set_food_on_empty(pos);
         self.foods.push(pos);
+        self.zobrist_hash.xor_food(pos);
     }
 
-    fn calculate_objects(snakes: &[Snake; MAX_SNAKE_COUNT], foods: &Vec<Point>) -> Vec2D<Object> {
-        let mut objects = Vec2D::init_same(
-            WIDTH as usize,
-            HEIGHT as usize,
-            Object::Empty,
-        );
+    fn calculate_objects(snakes: &[Snake; MAX_SNAKE_COUNT], foods: &Vec<Point>) -> Objects {
+        let mut objects = Objects::new();
 
         for snake in snakes {
             for body_part in snake.body.iter().copied() {
-                match objects[body_part] {
-                    Object::Empty => objects[body_part] = Object::BodyPart,
-                    Object::BodyPart => {} // A snake can intersect with itself in the begining and after eating a food.
-                    _ => unreachable!(),
+                if !objects.is_body(body_part) {
+                    objects.init_body(body_part);
                 }
             }
         }
 
         for food in foods.iter().copied() {
-            match objects[food] {
-                Object::Empty => objects[food] = Object::Food,
-                Object::BodyPart { .. } => unreachable!("Can't have food and snake body in the same square."),
-                Object::Food => unreachable!("Can't have two food pieces in the same square."),
+            objects.init_food(food);
+        }
+
+        for x in 0..WIDTH {
+            for y in 0..HEIGHT {
+                let pos = Point {x, y};
+                if objects.is_default(pos) {
+                    objects.init_empty(pos);
+                }
             }
         }
 
@@ -167,6 +182,7 @@ impl Board {
     fn initial_zobrist_hash(
         turn: i32,
         snakes: &[Snake; MAX_SNAKE_COUNT],
+        foods: &Vec<Point>,
     ) -> ZobristHash {
         let mut zobrist_hash = ZobristHash::new();
 
@@ -177,7 +193,15 @@ impl Board {
                 let cur = snake.body[i];
                 let direction = body_direction(cur, prev);
                 zobrist_hash.xor_body_direction(cur, snake_index, direction);
+                // TODO: Prevent unxor of Still on first turn
+                // if direction == BodyDirections::Still {
+                //     break
+                // }
             }
+        }
+
+        for food in foods.iter().copied() {
+            zobrist_hash.xor_food(food);
         }
 
         zobrist_hash
@@ -194,6 +218,140 @@ impl Board {
     }
 }
 
+impl Hash for Board {
+    fn hash<H>(&self, state: &mut H) where H: Hasher {
+        state.write_u64(self.zobrist_hash.get_value());
+    }
+}
+
+
+pub type Object = u8;
+pub const FOOD: u8 = u8::MAX;
+pub const BODY: u8 = u8::MAX - 1;
+pub const DEFAULT: u8 = u8::MAX - 2;
+// EMPTY is dynamic and indexes to Objects.empties from 0 to 120.
+
+pub fn is_empty(obj: Object) -> bool {
+    obj < DEFAULT
+}
+
+#[derive(PartialEq, Clone, Eq, Debug)]
+pub struct Objects {
+    pub map: [[Object; HEIGHT as usize]; WIDTH as usize],
+    pub empties: ArrayVec<Point, SIZE>,
+    // TODO: foods from 121 to 241
+}
+
+impl Objects {
+    fn new() -> Objects {
+        Objects {
+            map: [[DEFAULT; HEIGHT as usize]; WIDTH as usize],
+            empties: ArrayVec::new(),
+        }
+    }
+
+    pub fn get(&self, pos: Point) -> Object {
+        self.map[pos.x as usize][pos.y as usize]
+    }
+
+    pub fn empties_count(&self) -> usize {
+        self.empties.len()
+    }
+
+    // Food
+
+    pub fn set_food_on_empty(&mut self, pos: Point) {
+        self._remove_empty(pos);
+        self.map[pos.x as usize][pos.y as usize] = FOOD;
+    }
+
+    pub fn set_food_on_body(&mut self, pos: Point) {
+        debug_assert!(self.is_body(pos));
+        self.map[pos.x as usize][pos.y as usize] = FOOD;
+    }
+
+    pub fn init_food(&mut self, pos: Point) {
+        debug_assert!(self.is_default(pos));
+        self.map[pos.x as usize][pos.y as usize] = FOOD;
+    }
+
+    pub fn is_food(&self, pos: Point) -> bool {
+        self.get(pos) == FOOD
+    }
+
+    // Body
+
+    pub fn set_body_on_empty(&mut self, pos: Point) {
+        self._remove_empty(pos);
+        self.map[pos.x as usize][pos.y as usize] = BODY;
+    }
+
+    pub fn set_body_on_food(&mut self, pos: Point) {
+        debug_assert!(self.is_food(pos));
+        self.map[pos.x as usize][pos.y as usize] = BODY;
+    }
+
+    pub fn init_body(&mut self, pos: Point) {
+        debug_assert!(self.is_default(pos));
+        self.map[pos.x as usize][pos.y as usize] = BODY;
+    }
+
+    pub fn is_body(&self, pos: Point) -> bool {
+        self.get(pos) == BODY
+    }
+
+    // Empty
+
+    pub fn set_empty_on_body(&mut self, pos: Point) {
+        debug_assert!(self.is_body(pos), "There is {} not BODY", self.get(pos));
+        self._set_empty(pos);
+    }
+
+    pub fn set_empty_on_food(&mut self, pos: Point) {
+        debug_assert!(self.is_food(pos));
+        self._set_empty(pos);
+    }
+
+    pub fn init_empty(&mut self, pos: Point) {
+        debug_assert!(self.is_default(pos));
+        self._set_empty(pos);
+    }
+
+    pub fn is_empty(&self, pos: Point) -> bool {
+        is_empty(self.get(pos))
+    }
+
+    fn _set_empty(&mut self, pos: Point) {
+        let empty = self.empties.len() as u8;
+        self.empties.push(pos);
+        self.map[pos.x as usize][pos.y as usize] = empty;
+    }
+
+    fn _remove_empty(&mut self, pos: Point) {
+        debug_assert!(self.is_empty(pos), "{:?} is not empty, it's {}", pos, self.get(pos));
+        let i = self.map[pos.x as usize][pos.y as usize] as usize;
+        self.empties.swap_remove(i);
+        
+        if i != self.empties.len() {
+            // Now when where is new empty on this position
+            // we must change map pointer
+            let last_empty_pos = self.empties[i];
+            self.map[last_empty_pos.x as usize][last_empty_pos.y as usize] = i as u8;
+        }
+    }
+
+    pub fn get_empty_position(&self, rng: &mut impl rand::Rng) -> Option<Point> {
+        self.empties.choose(rng).copied()
+    }
+
+    // Default
+
+    pub fn is_default(&self, pos: Point) -> bool {
+        self.map[pos.x as usize][pos.y as usize] == DEFAULT
+    }
+
+}
+
 pub fn random_point_inside_borders() -> Point {
     let mut rnd = thread_rng();
     Point {
@@ -202,15 +360,47 @@ pub fn random_point_inside_borders() -> Point {
     }
 }
 
-impl Hash for Board {
-    fn hash<H>(&self, state: &mut H) where H: Hasher {
-        state.write_u64(self.zobrist_hash.get_value());
-    }
-}
+const SNAKE_HEAD_CHARS: [char; MAX_SNAKE_COUNT] = ['A', 'B'];
+const FOOD_CHAR: char = '*';
 
-impl Default for Object {
-    fn default() -> Object {
-        Object::Empty
+impl fmt::Display for Board {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut view = [['.'; HEIGHT as usize]; WIDTH as usize];
+
+        for (i, snake) in self.snakes.iter().enumerate() {
+            // TODO: Draw terminal stage (all snakes)
+            if !snake.is_alive() {
+                continue;
+            }
+
+            for j in 1..snake.body.len() {
+                let back = snake.body[j];
+                let front = snake.body[j - 1];
+                if back == front {
+                    break
+                }
+                let d = body_direction(back, front);
+                view[back.x as usize][back.y as usize] = Movement::from_usize(d as usize).symbol();
+            }
+
+            let head = snake.head();
+            view[head.x as usize][head.y as usize] = SNAKE_HEAD_CHARS[i];
+        }
+
+        for food in &self.foods {
+            view[food.x as usize][food.y as usize] = FOOD_CHAR;
+        }
+
+        let mut s = String::new();
+
+        for y in (0..HEIGHT as usize).rev() {
+            for x in 0..WIDTH as usize {
+                s += view[x][y].to_string().as_str();
+            }
+            s += "\n";
+        }
+        
+        write!(f, "\n{}", s)
     }
 }
 
