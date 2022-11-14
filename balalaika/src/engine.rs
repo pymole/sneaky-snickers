@@ -278,8 +278,8 @@ pub fn advance_one_step_with_settings(
             snake_ate_food[i] = true;
         }
         for &food in eaten_food.iter() {
-            if let Some(food_position) = board.foods.iter().position(|&x| x == food) {
-                board.foods.swap_remove(food_position);
+            if let Some(food_i) = board.foods.iter().position(|&x| x == food) {
+                board.foods.swap_remove(food_i);
                 // TODO: Проверить, что никто этот эмпти потом не будет изменять под другим типом
                 board.objects.set_empty_on_food(food);
                 board.zobrist_hash.xor_food(food);
@@ -349,7 +349,10 @@ pub fn advance_one_step_with_settings(
         (engine_settings.safe_zone_shrinker)(board);
     }
 
-    println!("{:?} {}", board, board);
+    // if cfg!(debug_assertions) {
+        // println!("{:?} {}", board, board);
+        // println!("{}", board);
+    // }
 
     debug_assert!(
         board.snakes
@@ -371,13 +374,27 @@ pub fn advance_one_step_with_settings(
                     debug_assert!(board.objects.is_empty(snake.head()));
                     // board.objects[snake.head()] = Object::Empty;
                 }
+
+                let mut front = snake.head();
                 
-                for j in 1..snake.body.len() {
-                    let body_part = snake.body[j];
-                    let body_part_direction = body_direction( body_part, snake.body[j - 1]);
+                for j in 1..snake.body.len() - 1 {
+                    let back = snake.body[j];
+                    let body_part_direction = body_direction( back, front);
                     
-                    board.objects.set_empty_on_body(body_part);
-                    board.zobrist_hash.xor_body_direction(body_part, i, body_part_direction);
+                    board.objects.set_empty_on_body(back);
+                    board.zobrist_hash.xor_body_direction(back, i, body_part_direction);
+
+                    front = back;
+                }
+
+                // TODO: Check hashing behaviour. Hash must be consistent in
+                //  multiple bodies on the cell problem.
+                // Don't remove tail cell twice when on tail other part (when ate food or on first turn).
+                let back = snake.body[snake.body.len() - 1];
+                if back != front {
+                    let body_part_direction = body_direction( back, front);                    
+                    board.objects.set_empty_on_body(back);
+                    board.zobrist_hash.xor_body_direction(back, i, body_part_direction);
                 }
             }
         }
@@ -388,6 +405,21 @@ pub fn advance_one_step_with_settings(
                 board.objects.set_body_on_empty(board.snakes[i].head());
             }
         }
+    }
+
+    if cfg!(debug_assertions) {
+        let mut empties_on_map = 0;
+        for x in 0..WIDTH {
+            for y in 0..HEIGHT {
+                let pos = Point {x, y};
+                if board.objects.is_empty(pos) {
+                    empties_on_map += 1;
+                    let i = board.objects.get(pos);
+                    assert_eq!(board.objects.empties[i as usize], pos, "empties[{}] is not {:?}", i, pos);
+                }
+            }
+        }
+        assert_eq!(empties_on_map, board.objects.empties.len());
     }
 
     debug_assert_eq!(
@@ -406,11 +438,8 @@ pub fn advance_one_step_with_settings(
                 body_occupied
             })
             .sum::<usize>(),
-        "{}\n{:?}\n{:?}\n{:?}",
+        "{}",
         board,
-        board.snakes,
-        board.foods,
-        board.is_terminal,
     );
 }
 
