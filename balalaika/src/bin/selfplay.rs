@@ -4,7 +4,7 @@ use balalaika::board_generator::generate_board;
 use mongodb::sync::Client;
 use balalaika::engine::{food_spawner, EngineSettings, safe_zone_shrinker, advance_one_step_with_settings};
 use balalaika::game::MAX_SNAKE_COUNT;
-use balalaika::game_log::{save_game_log, GameLogBuilder, rewind};
+use balalaika::game_log::{save_game_log, GameLogBuilder};
 use mcts::config::Config;
 use mcts::search::Search;
 use mcts::utils::search;
@@ -56,11 +56,11 @@ fn main() {
             }
             advance_one_step_with_settings(&mut board, &mut engine_settings, actions);
             game_log_builder.add_turn_from_board(&board);
+            println!("{}", board);
         }
 
         // Upload game
         let game_log = game_log_builder.finalize();
-        rewind(&game_log);
         save_game_log(&client, &game_log);
         println!("Saved game");
     }
