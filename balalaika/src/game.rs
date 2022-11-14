@@ -8,6 +8,7 @@ use rand::seq::SliceRandom;
 use rand::thread_rng;
 use rand::Rng;
 use serde::{Serialize, Deserialize};
+use colored::*;
 
 use crate::api;
 use crate::api::objects::Movement;
@@ -93,8 +94,6 @@ impl Board {
             &snakes,
             &foods,
         );
-
-        println!("zobrist_hash {} {:?} {:?}", zobrist_hash.get_value(), snakes, foods);
 
         let hazard_start_;
         let hazards_;
@@ -303,7 +302,7 @@ impl Objects {
     // Empty
 
     pub fn set_empty_on_body(&mut self, pos: Point) {
-        debug_assert!(self.is_body(pos), "There is {} not BODY", self.get(pos));
+        debug_assert!(self.is_body(pos), "At {:?} there is {} not BODY", pos, self.get(pos));
         self._set_empty(pos);
     }
 
@@ -360,19 +359,20 @@ pub fn random_point_inside_borders() -> Point {
     }
 }
 
-const SNAKE_HEAD_CHARS: [char; MAX_SNAKE_COUNT] = ['A', 'B'];
-const FOOD_CHAR: char = '*';
+const SNAKE_COLORS: [(u8, u8, u8); MAX_SNAKE_COUNT] = [
+    (252, 90, 50),
+    (50, 90, 252),
+];
+const HAZARD_COLOR: (u8, u8, u8) = (64, 64, 64);
+const FOOD_CHAR: &str = "*";
+const DEAD_SNAKE_CHAR: &str = "X";
 
 impl fmt::Display for Board {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut view = [['.'; HEIGHT as usize]; WIDTH as usize];
+        let mut view: [[ColoredString; HEIGHT as usize]; WIDTH as usize] = Default::default();
 
         for (i, snake) in self.snakes.iter().enumerate() {
-            // TODO: Draw terminal stage (all snakes)
-            if !snake.is_alive() {
-                continue;
-            }
-
+            let color = SNAKE_COLORS[i];
             for j in 1..snake.body.len() {
                 let back = snake.body[j];
                 let front = snake.body[j - 1];
@@ -380,15 +380,37 @@ impl fmt::Display for Board {
                     break
                 }
                 let d = body_direction(back, front);
-                view[back.x as usize][back.y as usize] = Movement::from_usize(d as usize).symbol();
+                let fill = Movement::from_usize(d as usize).symbol().to_string().bold().truecolor(color.0, color.1, color.2);
+                view[back.x as usize][back.y as usize] = fill;
             }
-
+            
             let head = snake.head();
-            view[head.x as usize][head.y as usize] = SNAKE_HEAD_CHARS[i];
+            let fill = if snake.is_alive() {
+                i.to_string().truecolor(color.0, color.1, color.2)
+            } else {
+                DEAD_SNAKE_CHAR.truecolor(color.0, color.1, color.2)
+            };
+            
+            view[head.x as usize][head.y as usize] = fill;
         }
 
         for food in &self.foods {
-            view[food.x as usize][food.y as usize] = FOOD_CHAR;
+            view[food.x as usize][food.y as usize] = FOOD_CHAR.bright_green();
+        }
+
+        for x in 0..WIDTH {
+            for y in 0..HEIGHT {
+                let mut fill = view[x as usize][y as usize].clone();
+                if fill.is_empty() {
+                    fill = ColoredString::from(".");
+                }
+
+                if self.hazard[(x, y)] {
+                    fill = fill.on_truecolor(HAZARD_COLOR.0, HAZARD_COLOR.1, HAZARD_COLOR.2)
+                };
+                
+                view[x as usize][y as usize] = fill;
+            }
         }
 
         let mut s = String::new();
