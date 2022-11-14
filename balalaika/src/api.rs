@@ -72,17 +72,20 @@ pub mod objects {
                 _ => panic!("Out of range movement value"),
             }
         }
+
+        pub fn symbol(&self) -> char {
+            match self {
+                Movement::Up => '↑',
+                Movement::Right => '→',
+                Movement::Down => '↓',
+                Movement::Left => '←',
+            }
+        }
     }
 
     impl fmt::Display for Movement {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            let symbol = match self {
-                Movement::Up => "↑",
-                Movement::Right => "→",
-                Movement::Down => "↓",
-                Movement::Left => "←",
-            };
-            write!(f, "{}", symbol)
+            write!(f, "{}", self.symbol())
         }
     }
 }

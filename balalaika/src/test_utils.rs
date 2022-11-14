@@ -4,12 +4,10 @@ use crate::{
     game::{
         Board,
         MAX_SNAKE_COUNT,
-        Object,
-        WIDTH,
-        HEIGHT
+        SIZE,
     },
     api,
-    engine::advance_one_step
+    engine::advance_one_step,
 };
 
 
@@ -26,13 +24,5 @@ pub fn test_transition(state_before: &str, state_after: &str, actions: [usize; M
 }
 
 pub fn is_empty(board: &Board) -> bool {
-    for x in 0..WIDTH {
-        for y in 0..HEIGHT {
-            if board.objects[(x, y)] != Object::Empty {
-                return false;
-            }
-        }
-    }
-
-    return true;
+    board.objects.empties_count() == SIZE
 }
