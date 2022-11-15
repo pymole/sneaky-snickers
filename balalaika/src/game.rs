@@ -20,7 +20,7 @@ pub const WIDTH: i32 = 11;
 pub const HEIGHT: i32 = 11;
 pub const SIZE: usize = (WIDTH * HEIGHT) as usize;
 
-#[derive(PartialEq, Eq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
 pub struct Board {
     // WARNING: Optimized for 2 players
     pub foods: Vec<Point>,
@@ -234,7 +234,7 @@ pub fn is_empty(obj: Object) -> bool {
     obj < DEFAULT
 }
 
-#[derive(PartialEq, Clone, Eq, Debug)]
+#[derive(PartialEq, Clone, Eq, Debug, Serialize, Deserialize)]
 pub struct Objects {
     pub map: [[Object; HEIGHT as usize]; WIDTH as usize],
     pub empties: ArrayVec<Point, SIZE>,
@@ -370,9 +370,15 @@ const DEAD_SNAKE_CHAR: &str = "X";
 impl fmt::Display for Board {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut view: [[ColoredString; HEIGHT as usize]; WIDTH as usize] = Default::default();
+        let mut output = String::new();
 
         for (i, snake) in self.snakes.iter().enumerate() {
             let color = SNAKE_COLORS[i];
+
+            let health_count = (WIDTH as f32 * snake.health as f32 / 100.0) as usize;
+            output += &"-".repeat(health_count).truecolor(color.0, color.1, color.2);
+            output += " \n";
+
             for j in 1..snake.body.len() {
                 let back = snake.body[j];
                 let front = snake.body[j - 1];
@@ -413,16 +419,16 @@ impl fmt::Display for Board {
             }
         }
 
-        let mut s = String::new();
+        output += "\n";
 
         for y in (0..HEIGHT as usize).rev() {
             for x in 0..WIDTH as usize {
-                s += view[x][y].to_string().as_str();
+                output += view[x][y].to_string().as_str();
             }
-            s += "\n";
+            output += "\n";
         }
         
-        write!(f, "\n{}", s)
+        write!(f, "\n{}", output)
     }
 }
 

@@ -91,7 +91,9 @@ pub fn get_position(board: &Board) -> Position {
     (bool_grids, float_parameters)
 }
 
-pub fn get_rewards(board: &Board) -> ([f32; MAX_SNAKE_COUNT], bool) {
+pub type Rewards = ([f32; MAX_SNAKE_COUNT], bool);
+
+pub fn get_rewards(board: &Board) -> Rewards {
     debug_assert!(board.is_terminal());
     let mut rewards = [0.0; MAX_SNAKE_COUNT];
     let mut draw = true;

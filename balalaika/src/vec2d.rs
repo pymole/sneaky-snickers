@@ -1,8 +1,10 @@
 use std::ops::{Index, IndexMut};
 
+use serde::{Serialize, Deserialize};
+
 use crate::game::Point;
 
-#[derive(PartialEq, Eq, Debug, Clone, Hash)]
+#[derive(PartialEq, Eq, Debug, Clone, Hash, Serialize, Deserialize)]
 pub struct Vec2D<T> {
     pub len1: usize,
     pub len2: usize,

@@ -1,5 +1,7 @@
 use std::hash::Hasher;
 
+use serde::{Serialize, Deserialize};
+
 use crate::game::Point;
 
 type ValueInt = u64;
@@ -21,7 +23,7 @@ pub enum BodyDirections {
     Still = 4,
 }
 
-#[derive(PartialEq, Debug, Clone, Copy, Eq)]
+#[derive(PartialEq, Debug, Clone, Copy, Eq, Serialize, Deserialize)]
 pub struct ZobristHash {
     value: ValueInt,
 }
