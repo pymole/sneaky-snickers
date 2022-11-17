@@ -450,6 +450,10 @@ impl Snake {
     pub fn head(&self) -> Point {
         self.body[0]
     }
+
+    pub fn tail(&self) -> Point {
+        self.body[self.body.len() - 1]
+    }
 }
 
 impl Point {

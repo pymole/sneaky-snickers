@@ -64,6 +64,15 @@ fn draw_board(
     println!("{}", board);
 }
 
+#[pyfunction]
+fn get_nnue_features(
+    board: &PyDict,
+) -> PyResult<[bool; features::TOTAL_FEATURES_SIZE]> {
+    let board: Board = depythonize(board).unwrap();
+    let nnue_features = features::get_nnue_features(&board);
+    Ok(nnue_features)
+}
+
 #[pymodule]
 fn balalaika(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(rewind, m)?)?;
@@ -71,5 +80,6 @@ fn balalaika(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(get_position, m)?)?;
     m.add_function(wrap_pyfunction!(flood_fill, m)?)?;
     m.add_function(wrap_pyfunction!(draw_board, m)?)?;
+    m.add_function(wrap_pyfunction!(get_nnue_features, m)?)?;
     Ok(())
 }
