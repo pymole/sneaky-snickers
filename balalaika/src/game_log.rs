@@ -249,7 +249,7 @@ pub fn load_game_log(client: &Client, id: Bson) -> Result<Option<GameLog>, Error
 
 
 pub fn rewind(game_log: &GameLog) -> (Vec<[usize; MAX_SNAKE_COUNT]>, Vec<Board>) {
-    println!("REWIND");
+    // println!("REWIND");
     assert!(!game_log.initial_board.food.is_empty());
 
     let mut boards = Vec::new();

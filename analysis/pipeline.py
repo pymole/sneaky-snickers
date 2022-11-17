@@ -8,7 +8,7 @@ from database import client
 import settings
 
 
-def load_random_game_logs(n):
+def load_random_game_logs(n: int):
     db = client.get_default_database()
     collection = db.get_collection(settings.GAMES_COLLECTION_NAME)
     game_logs = list(collection.aggregate([{
