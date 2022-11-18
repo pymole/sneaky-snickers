@@ -3,8 +3,6 @@ use crate::engine::Movement;
 
 use super::config::SequentialMCTSConfig;
 
-use log::info;
-
 
 #[derive(Clone, Debug)]
 pub struct UCB {
@@ -78,7 +76,7 @@ impl MultiArmedBandit<SequentialMCTSConfig> for UCB {
     fn print_stats(&self, _mcts_config: &SequentialMCTSConfig, node_visits: f32) {
         let n = node_visits as f32;
 
-        info!("UCB");
+        println!("UCB");
         // let selecte_move = get_best_movement_from_movement_visits(ucb_instance.visits);
         for action in 0..4 {
             let n_i = self.visits[action];
@@ -93,7 +91,7 @@ impl MultiArmedBandit<SequentialMCTSConfig> for UCB {
 
                 // let (selected_move, _) = self.get_best_movement(mcts_config, node_visits);
 
-                info!(
+                println!(
                     "[{}] - {:.4}  {:.4}   {}",
                     Movement::from_usize(action),
                     avg_reward,
@@ -101,7 +99,7 @@ impl MultiArmedBandit<SequentialMCTSConfig> for UCB {
                     n_i,
                 );
             } else {
-                info!(" {}", Movement::from_usize(action));
+                println!(" {}", Movement::from_usize(action));
             }
         }
     }

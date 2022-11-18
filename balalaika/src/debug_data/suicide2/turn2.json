@@ -1,0 +1,287 @@
+{
+    "you": {
+        "latency": "5.466",
+        "id": "6319ae99-1105-4638-8c7d-b8fcccb37d4b",
+        "health": 97,
+        "length": 11,
+        "shout": "",
+        "head": {
+            "y": 1,
+            "x": 8
+        },
+        "customizations": {
+            "color": "#dd3333",
+            "tail": "round-bum",
+            "head": "bendr"
+        },
+        "body": [
+            {
+                "y": 1,
+                "x": 8
+            },
+            {
+                "y": 2,
+                "x": 8
+            },
+            {
+                "y": 2,
+                "x": 7
+            },
+            {
+                "y": 1,
+                "x": 7
+            },
+            {
+                "y": 1,
+                "x": 6
+            },
+            {
+                "y": 0,
+                "x": 6
+            },
+            {
+                "y": 0,
+                "x": 7
+            },
+            {
+                "y": 0,
+                "x": 8
+            },
+            {
+                "y": 0,
+                "x": 9
+            },
+            {
+                "y": 1,
+                "x": 9
+            },
+            {
+                "y": 1,
+                "x": 10
+            }
+        ],
+        "name": "Balalayka",
+        "squad": ""
+    },
+    "turn": 160,
+    "board": {
+        "snakes": [
+            {
+                "latency": "5.466",
+                "id": "6319ae99-1105-4638-8c7d-b8fcccb37d4b",
+                "health": 97,
+                "length": 11,
+                "shout": "",
+                "head": {
+                    "y": 1,
+                    "x": 8
+                },
+                "customizations": {
+                    "color": "#dd3333",
+                    "tail": "round-bum",
+                    "head": "bendr"
+                },
+                "body": [
+                    {
+                        "y": 1,
+                        "x": 8
+                    },
+                    {
+                        "y": 2,
+                        "x": 8
+                    },
+                    {
+                        "y": 2,
+                        "x": 7
+                    },
+                    {
+                        "y": 1,
+                        "x": 7
+                    },
+                    {
+                        "y": 1,
+                        "x": 6
+                    },
+                    {
+                        "y": 0,
+                        "x": 6
+                    },
+                    {
+                        "y": 0,
+                        "x": 7
+                    },
+                    {
+                        "y": 0,
+                        "x": 8
+                    },
+                    {
+                        "y": 0,
+                        "x": 9
+                    },
+                    {
+                        "y": 1,
+                        "x": 9
+                    },
+                    {
+                        "y": 1,
+                        "x": 10
+                    }
+                ],
+                "name": "Balalayka",
+                "squad": ""
+            },
+            {
+                "latency": "0",
+                "id": "f439a042-4054-42d5-baec-7249d5bab428",
+                "health": 89,
+                "length": 22,
+                "shout": "",
+                "head": {
+                    "y": 7,
+                    "x": 8
+                },
+                "customizations": {
+                    "color": "#ffffff",
+                    "tail": "alligator",
+                    "head": "alligator"
+                },
+                "body": [
+                    {
+                        "y": 7,
+                        "x": 8
+                    },
+                    {
+                        "y": 7,
+                        "x": 9
+                    },
+                    {
+                        "y": 7,
+                        "x": 10
+                    },
+                    {
+                        "y": 7,
+                        "x": 0
+                    },
+                    {
+                        "y": 7,
+                        "x": 1
+                    },
+                    {
+                        "y": 7,
+                        "x": 2
+                    },
+                    {
+                        "y": 8,
+                        "x": 2
+                    },
+                    {
+                        "y": 9,
+                        "x": 2
+                    },
+                    {
+                        "y": 10,
+                        "x": 2
+                    },
+                    {
+                        "y": 0,
+                        "x": 2
+                    },
+                    {
+                        "y": 1,
+                        "x": 2
+                    },
+                    {
+                        "y": 2,
+                        "x": 2
+                    },
+                    {
+                        "y": 3,
+                        "x": 2
+                    },
+                    {
+                        "y": 4,
+                        "x": 2
+                    },
+                    {
+                        "y": 5,
+                        "x": 2
+                    },
+                    {
+                        "y": 6,
+                        "x": 2
+                    },
+                    {
+                        "y": 6,
+                        "x": 3
+                    },
+                    {
+                        "y": 6,
+                        "x": 4
+                    },
+                    {
+                        "y": 6,
+                        "x": 5
+                    },
+                    {
+                        "y": 6,
+                        "x": 6
+                    },
+                    {
+                        "y": 6,
+                        "x": 7
+                    },
+                    {
+                        "y": 6,
+                        "x": 8
+                    }
+                ],
+                "name": "Human",
+                "squad": ""
+            }
+        ],
+        "width": 11,
+        "hazards": [],
+        "height": 11,
+        "food": [
+            {
+                "y": 2,
+                "x": 0
+            },
+            {
+                "y": 4,
+                "x": 5
+            },
+            {
+                "y": 0,
+                "x": 4
+            },
+            {
+                "y": 9,
+                "x": 0
+            }
+        ]
+    },
+    "game": {
+        "source": "custom",
+        "ruleset": {
+            "version": "Mojave/3.5.2",
+            "name": "wrapped",
+            "settings": {
+                "hazardDamagePerTurn": 14,
+                "royale": {
+                    "shrinkEveryNTurns": 25
+                },
+                "squad": {
+                    "sharedHealth": true,
+                    "sharedLength": true,
+                    "allowBodyCollisions": true,
+                    "sharedElimination": true
+                },
+                "minimumFood": 1,
+                "foodSpawnChance": 15
+            }
+        },
+        "timeout": 500,
+        "id": "e6dae6ba-7cbd-46e5-a428-c56c41e95300"
+    }
+}

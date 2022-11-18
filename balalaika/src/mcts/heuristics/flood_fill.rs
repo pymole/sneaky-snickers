@@ -39,6 +39,9 @@ pub fn flood_fill(board: &Board) -> FloodFill {
     let mut contenders_at_point: [[ContendersInfo; HEIGHT as usize]; WIDTH as usize] = Default::default();
 
     for (i, snake) in board.snakes.iter().enumerate() {
+        if !snake.is_alive() {
+            continue;
+        }
         for (empty_at, body_part) in snake.body.iter().rev().enumerate() {
             contenders_at_point[body_part.x as usize][body_part.y as usize].body_part_empty_at = empty_at + 1;
         }
