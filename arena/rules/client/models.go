@@ -5,7 +5,7 @@ import "github.com/BattlesnakeOfficial/rules"
 // The top-level message sent in /start, /move, and /end requests
 type SnakeRequest struct {
 	Game  Game  `json:"game"`
-	Turn  int32 `json:"turn"`
+	Turn  int   `json:"turn"`
 	Board Board `json:"board"`
 	You   Snake `json:"you"`
 }
@@ -14,14 +14,15 @@ type SnakeRequest struct {
 type Game struct {
 	ID      string  `json:"id"`
 	Ruleset Ruleset `json:"ruleset"`
-	Timeout int32   `json:"timeout"`
+	Map     string  `json:"map"`
+	Timeout int     `json:"timeout"`
 	Source  string  `json:"source"`
 }
 
 // Board provides information about the game board
 type Board struct {
-	Height  int32   `json:"height"`
-	Width   int32   `json:"width"`
+	Height  int     `json:"height"`
+	Width   int     `json:"width"`
 	Snakes  []Snake `json:"snakes"`
 	Food    []Coord `json:"food"`
 	Hazards []Coord `json:"hazards"`
@@ -32,10 +33,10 @@ type Snake struct {
 	ID             string         `json:"id"`
 	Name           string         `json:"name"`
 	Latency        string         `json:"latency"`
-	Health         int32          `json:"health"`
+	Health         int            `json:"health"`
 	Body           []Coord        `json:"body"`
 	Head           Coord          `json:"head"`
-	Length         int32          `json:"length"`
+	Length         int            `json:"length"`
 	Shout          string         `json:"shout"`
 	Squad          string         `json:"squad"`
 	Customizations Customizations `json:"customizations"`
@@ -53,18 +54,23 @@ type Ruleset struct {
 	Settings RulesetSettings `json:"settings"`
 }
 
+// RulesetSettings contains a static collection of a few settings that are exposed through the API.
 type RulesetSettings struct {
-	FoodSpawnChance     int32          `json:"foodSpawnChance"`
-	MinimumFood         int32          `json:"minimumFood"`
-	HazardDamagePerTurn int32          `json:"hazardDamagePerTurn"`
+	FoodSpawnChance     int            `json:"foodSpawnChance"`
+	MinimumFood         int            `json:"minimumFood"`
+	HazardDamagePerTurn int            `json:"hazardDamagePerTurn"`
+	HazardMap           string         `json:"hazardMap"`       // Deprecated, replaced by Game.Map
+	HazardMapAuthor     string         `json:"hazardMapAuthor"` // Deprecated, no planned replacement
 	RoyaleSettings      RoyaleSettings `json:"royale"`
-	SquadSettings       SquadSettings  `json:"squad"`
+	SquadSettings       SquadSettings  `json:"squad"` // Deprecated, provided with default fields for API compatibility
 }
 
+// RoyaleSettings contains settings that are specific to the "royale" game mode
 type RoyaleSettings struct {
-	ShrinkEveryNTurns int32 `json:"shrinkEveryNTurns"`
+	ShrinkEveryNTurns int `json:"shrinkEveryNTurns"`
 }
 
+// SquadSettings contains settings that are specific to the "squad" game mode
 type SquadSettings struct {
 	AllowBodyCollisions bool `json:"allowBodyCollisions"`
 	SharedElimination   bool `json:"sharedElimination"`
@@ -72,10 +78,23 @@ type SquadSettings struct {
 	SharedLength        bool `json:"sharedLength"`
 }
 
+// Converts a rules.Settings (which can contain arbitrary settings) into the static RulesetSettings used in the client API.
+func ConvertRulesetSettings(settings rules.Settings) RulesetSettings {
+	return RulesetSettings{
+		FoodSpawnChance:     settings.Int(rules.ParamFoodSpawnChance, 0),
+		MinimumFood:         settings.Int(rules.ParamMinimumFood, 0),
+		HazardDamagePerTurn: settings.Int(rules.ParamHazardDamagePerTurn, 0),
+		RoyaleSettings: RoyaleSettings{
+			ShrinkEveryNTurns: settings.Int(rules.ParamShrinkEveryNTurns, 0),
+		},
+		SquadSettings: SquadSettings{},
+	}
+}
+
 // Coord represents a point on the board
 type Coord struct {
-	X int32 `json:"x"`
-	Y int32 `json:"y"`
+	X int `json:"x"`
+	Y int `json:"y"`
 }
 
 // The expected format of the response body from a /move request

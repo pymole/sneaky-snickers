@@ -1,54 +1,48 @@
 package rules
 
-type ConstrictorRuleset struct {
-	StandardRuleset
+var constrictorRulesetStages = []string{
+	StageGameOverStandard,
+	StageMovementStandard,
+	StageStarvationStandard,
+	StageHazardDamageStandard,
+	StageFeedSnakesStandard,
+	StageEliminationStandard,
+	StageSpawnFoodNoFood,
+	StageModifySnakesAlwaysGrow,
 }
 
-func (r *ConstrictorRuleset) Name() string { return "constrictor" }
-
-func (r *ConstrictorRuleset) ModifyInitialBoardState(initialBoardState *BoardState) (*BoardState, error) {
-	initialBoardState, err := r.StandardRuleset.ModifyInitialBoardState(initialBoardState)
-	if err != nil {
-		return nil, err
-	}
-	newBoardState := initialBoardState.Clone()
-	err = r.applyConstrictorRules(newBoardState)
-	if err != nil {
-		return nil, err
-	}
-
-	return newBoardState, nil
+var wrappedConstrictorRulesetStages = []string{
+	StageGameOverStandard,
+	StageMovementWrapBoundaries,
+	StageStarvationStandard,
+	StageHazardDamageStandard,
+	StageFeedSnakesStandard,
+	StageEliminationStandard,
+	StageSpawnFoodNoFood,
+	StageModifySnakesAlwaysGrow,
 }
 
-func (r *ConstrictorRuleset) CreateNextBoardState(prevState *BoardState, moves []SnakeMove) (*BoardState, error) {
-
-	nextState, err := r.StandardRuleset.CreateNextBoardState(prevState, moves)
-	if err != nil {
-		return nil, err
-	}
-
-	err = r.applyConstrictorRules(nextState)
-	if err != nil {
-		return nil, err
-	}
-
-	return nextState, nil
-}
-
-func (r *ConstrictorRuleset) applyConstrictorRules(b *BoardState) error {
+func RemoveFoodConstrictor(b *BoardState, settings Settings, moves []SnakeMove) (bool, error) {
 	// Remove all food from the board
 	b.Food = []Point{}
 
+	return false, nil
+}
+
+func GrowSnakesConstrictor(b *BoardState, settings Settings, moves []SnakeMove) (bool, error) {
 	// Set all snakes to max health and ensure they grow next turn
 	for i := 0; i < len(b.Snakes); i++ {
+		if len(b.Snakes[i].Body) <= 0 {
+			return false, ErrorZeroLengthSnake
+		}
 		b.Snakes[i].Health = SnakeMaxHealth
 
 		tail := b.Snakes[i].Body[len(b.Snakes[i].Body)-1]
 		subTail := b.Snakes[i].Body[len(b.Snakes[i].Body)-2]
 		if tail != subTail {
-			r.growSnake(&b.Snakes[i])
+			growSnake(&b.Snakes[i])
 		}
 	}
 
-	return nil
+	return false, nil
 }

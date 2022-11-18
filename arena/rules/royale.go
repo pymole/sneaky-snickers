@@ -2,55 +2,42 @@ package rules
 
 import (
 	"errors"
-	"math/rand"
 )
 
-type RoyaleRuleset struct {
-	StandardRuleset
-
-	Seed int64
-
-	ShrinkEveryNTurns int32
+var royaleRulesetStages = []string{
+	StageGameOverStandard,
+	StageMovementStandard,
+	StageStarvationStandard,
+	StageHazardDamageStandard,
+	StageFeedSnakesStandard,
+	StageEliminationStandard,
+	StageSpawnHazardsShrinkMap,
 }
 
-func (r *RoyaleRuleset) Name() string { return "royale" }
-
-func (r *RoyaleRuleset) CreateNextBoardState(prevState *BoardState, moves []SnakeMove) (*BoardState, error) {
-	if r.StandardRuleset.HazardDamagePerTurn < 1 {
-		return nil, errors.New("royale damage per turn must be greater than zero")
+func PopulateHazardsRoyale(b *BoardState, settings Settings, moves []SnakeMove) (bool, error) {
+	if IsInitialization(b, settings, moves) {
+		return false, nil
 	}
-
-	nextBoardState, err := r.StandardRuleset.CreateNextBoardState(prevState, moves)
-	if err != nil {
-		return nil, err
-	}
-
-	// Royale's only job is now to populate the hazards for next turn - StandardRuleset takes care of applying hazard damage.
-	err = r.populateHazards(nextBoardState, prevState.Turn+1)
-	if err != nil {
-		return nil, err
-	}
-
-	return nextBoardState, nil
-}
-
-func (r *RoyaleRuleset) populateHazards(b *BoardState, turn int32) error {
 	b.Hazards = []Point{}
 
-	if r.ShrinkEveryNTurns < 1 {
-		return errors.New("royale game can't shrink more frequently than every turn")
+	// Royale uses the current turn to generate hazards, not the previous turn that's in the board state
+	turn := b.Turn + 1
+
+	shrinkEveryNTurns := settings.Int(ParamShrinkEveryNTurns, 0)
+	if shrinkEveryNTurns < 1 {
+		return false, errors.New("royale game can't shrink more frequently than every turn")
 	}
 
-	if turn < r.ShrinkEveryNTurns {
-		return nil
+	if turn < shrinkEveryNTurns {
+		return false, nil
 	}
 
-	randGenerator := rand.New(rand.NewSource(r.Seed))
+	randGenerator := settings.GetRand(0)
 
-	numShrinks := turn / r.ShrinkEveryNTurns
-	minX, maxX := int32(0), b.Width-1
-	minY, maxY := int32(0), b.Height-1
-	for i := int32(0); i < numShrinks; i++ {
+	numShrinks := turn / shrinkEveryNTurns
+	minX, maxX := 0, b.Width-1
+	minY, maxY := 0, b.Height-1
+	for i := 0; i < numShrinks; i++ {
 		switch randGenerator.Intn(4) {
 		case 0:
 			minX += 1
@@ -63,13 +50,13 @@ func (r *RoyaleRuleset) populateHazards(b *BoardState, turn int32) error {
 		}
 	}
 
-	for x := int32(0); x < b.Width; x++ {
-		for y := int32(0); y < b.Height; y++ {
+	for x := 0; x < b.Width; x++ {
+		for y := 0; y < b.Height; y++ {
 			if x < minX || x > maxX || y < minY || y > maxY {
-				b.Hazards = append(b.Hazards, Point{x, y})
+				b.Hazards = append(b.Hazards, Point{X: x, Y: y})
 			}
 		}
 	}
 
-	return nil
+	return false, nil
 }
