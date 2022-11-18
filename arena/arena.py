@@ -3,6 +3,7 @@
 from argparse import ArgumentParser
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from tabnanny import verbose
 from threading import Lock
 from typing import Any, DefaultDict, NamedTuple
 import _jsonnet
@@ -140,7 +141,7 @@ class BotFromCommit(BotI):
         self._bot_binary = BotBinary({
             'name': bot_config['name'],
             'type': 'binary',
-            'work_dir': self._build_dir,
+            'work_dir': self._build_dir / 'balalaika',
             'exe': bot_config['run']['exe'],
             'env': bot_config['run']['env'],
             'mute': bot_config['run']['mute'],
@@ -221,8 +222,8 @@ class Player(NamedTuple):
 
 class Rules:
     RESULT_PATTERN : re.Pattern = re.compile(
-        r'\[DONE\]: Game completed after (\d+) turns. (.*) is the winner.|'
-        r'\[DONE\]: Game completed after (\d+) turns. It was a draw.'
+        r' Game completed after (\d+) turns. (.*) was the winner.|'
+        r' Game completed after (\d+) turns. It was a draw.'
     )
 
     def __init__(self, rules_config):
@@ -245,7 +246,9 @@ class Rules:
             'play',
             '--width', '11',
             '--height', '11',
-            '--gametype', 'wrapped+spiral'
+            '--gametype', 'wrapped',
+            '--map', 'royale',
+            # '--browser'
         ]
 
         game_names = [f'{i}_{player.name}' for i, player in enumerate(players)]

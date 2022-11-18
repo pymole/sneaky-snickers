@@ -15,10 +15,10 @@ local Bots = {
             dir: "./build_dir/" + commit,
             // Should be tag or hash. Branch names are not properly implemented yet.
             commit: commit,
-            flags: ["--release"]
+            flags: ["--release", "--manifest-path", "./balalaika/Cargo.toml"]
         },
         run: {
-            exe: "target/release/sneaky-snickers", // Relative to build.dir
+            exe: "./target/release/server", // Relative to build.dir
             env: env,
             mute: mute,
         },
@@ -49,7 +49,9 @@ local DefaultSetting = Settings.search_with_time;
         // Bots.from_commit("v3.3.1#cutoff=0", "v3.3.1", DefaultSetting { MCTS_ROLLOUT_CUTOFF: "0" }),
         // Bots.from_commit("v3.4#cutoff=0", "v3.4", DefaultSetting { MCTS_ROLLOUT_CUTOFF: "0" }),
 
-        Bots.binary("master", DefaultSetting),
+        // Bots.binary("master", DefaultSetting),
+        Bots.from_commit("master1", "76439af9183391fd612b92b84c18fcc76ee22700", DefaultSetting),
+        Bots.from_commit("master2", "76439af9183391fd612b92b84c18fcc76ee22700", DefaultSetting),
 
         // Bots.unmanaged("current"),
     ],
@@ -68,14 +70,14 @@ local DefaultSetting = Settings.search_with_time;
         winrates_file: "./winrates.json",
 
         // Number of games to run.
-        ladder_games: 100,
+        ladder_games: 1,
 
         // All games start with the same number of players. Precondition: number_of_players <= len(bots).
         number_of_players: 2,
 
         // How many games are run in parallel.
         // For maximum efficiency usually you want (number_of_players⋅parallel) ≈ cpu_count.
-        parallel: 3,
+        parallel: 1,
 
         // Regulates sampling of players.
         // beta=0 — uniform.
