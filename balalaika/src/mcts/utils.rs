@@ -105,7 +105,6 @@ mod tests {
             0,
             Some(vec![Point {x: 0, y: 0}]),
             None,
-            Some(&Vec::new()),
             [
                 Snake {
                     health: 100,

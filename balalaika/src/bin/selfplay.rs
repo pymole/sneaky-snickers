@@ -36,11 +36,10 @@ fn main() {
         let mut board = generate_board();
         let mut game_log_builder = GameLogBuilder::new(
             board.snakes.clone(),
-            &Vec::new(),
+            board.safe_zone,
             &board.foods,
         );
-        game_log_builder.add_tag("selfplay-v1.0.0".to_string());
-        game_log_builder.set_hazard_start(board.hazard_start);
+        game_log_builder.add_tag("selfplay-v1.1.0".to_string());
 
         // Play game
         println!("Starting new game");
@@ -64,5 +63,4 @@ fn main() {
         save_game_log(&client, &game_log);
         println!("Saved game");
     }
-
 }

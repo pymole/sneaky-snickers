@@ -26,12 +26,6 @@ def load_all_game_logs():
     return game_logs
 
 
-def get_positions(game_log):
-    _actions, positions, (rewards, _is_draw) = balalaika.get_positions(game_log)
-    # [n, 11, 11, 11]
-    return positions, rewards
-
-
 def swap_places(bool_grids, float_parameters, rewards):
     """
     Swap players' positions. Order of heads, bodies and rewards is the same:

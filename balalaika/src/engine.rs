@@ -104,56 +104,22 @@ pub mod food_spawner {
 pub mod safe_zone_shrinker {
     use super::*;
 
+    pub fn shrink(board: &mut Board, side: Movement) {
+        match side {
+            Movement::Left => board.safe_zone.p0.x += 1,
+            Movement::Down => board.safe_zone.p0.y += 1,
+            Movement::Up => board.safe_zone.p1.y -= 1,
+            Movement::Right => board.safe_zone.p1.x -= 1,
+        }
+    }
+
     // TODO: pub fn standard
     pub fn standard(board: &mut Board) {
-        if board.turn == 3 {
-            // NOTE: To fill guessed hazard
-            board.hazard[board.hazard_start] = true;
+        if board.turn == 0 || board.turn % 20 != 0 || board.safe_zone.empty(){
             return;
         }
-        if board.turn % 3 != 0 {
-            return;
-        }
-
-        let mut hazard_index = board.turn / 3 - 2;
-        let mut round = 8;
-        let mut eighth = 1;
-        while round < hazard_index {
-            hazard_index -= round;
-            eighth += 1;
-            round += 8;
-        }
-
-        let quater_index;
-        if hazard_index < eighth {
-            quater_index = 0;
-            hazard_index += eighth
-        } else
-        if hazard_index >= eighth * 7 {
-            quater_index = 0;
-            hazard_index -= eighth * 7;
-        } else {
-            let quater = eighth * 2;
-            quater_index = hazard_index / quater;
-            hazard_index %= quater;
-        }
-
-        let new_hazard_shift = match quater_index {
-            // Up right
-            0 => Point {x: hazard_index - eighth, y: eighth},
-            // Right down
-            1 => Point {x: eighth, y: eighth - hazard_index},
-            // Down left
-            2 => Point {x: eighth - hazard_index, y: -eighth},
-            // Left up
-            3 => Point {x: -eighth, y: hazard_index - eighth},
-            _ => unreachable!(),
-        };
-
-        let new_hazard_position = board.hazard_start + new_hazard_shift;
-        if board.contains(new_hazard_position) {
-            board.hazard[new_hazard_position] = true;
-        }
+        let side: Movement = rand::random();
+        shrink(board, side);
     }
 
     #[allow(dead_code)]
@@ -171,7 +137,7 @@ pub fn advance_one_step(board: &mut Board, actions: [usize; MAX_SNAKE_COUNT]) {
     advance_one_step_with_settings(board, &mut settings, actions)
 }
 
-/// Optimized for 2 snakes.
+
 pub fn advance_one_step_with_settings(
     board: &mut Board,
     engine_settings: &mut EngineSettings,
@@ -184,7 +150,7 @@ pub fn advance_one_step_with_settings(
     board.zobrist_hash.xor_turn(board.turn);
 
     debug_assert!(
-        board.snakes.iter().all(|snake| snake.body.len() > 0)
+        board.snakes.iter().all(|snake| snake.body.len() > 2)
     );
 
     // From https://docs.battlesnake.com/references/rules
@@ -339,9 +305,8 @@ pub fn advance_one_step_with_settings(
     {
         for i in 0..board.snakes.len() {
             if !snake_ate_food[i] {
-                let snake = &mut board.snakes[i];
-                if board.hazard[snake.head()] {
-                    snake.health -= 14;
+                if board.is_hazard(board.snakes[i].head()) {
+                    board.snakes[i].health -= 14;
                 }
             }
         }

@@ -12,12 +12,11 @@ use crate::{
 
 
 
-type BoolGrid = [[bool; HEIGHT as usize]; WIDTH as usize];
+// type BoolGrid = [[bool; HEIGHT as usize]; WIDTH as usize];
 
 /// Bool grids:
 /// - Food
 /// - Hazard
-/// - Hazard start
 /// - First player head
 /// - Second player head
 /// - First player body
@@ -30,68 +29,61 @@ type BoolGrid = [[bool; HEIGHT as usize]; WIDTH as usize];
 /// Float players' parameters:
 /// 1. First player health
 /// 2. Second player health
-pub type Position = ([BoolGrid; 11], [f32; MAX_SNAKE_COUNT]);
+// pub type Position = ([BoolGrid; 11], [f32; MAX_SNAKE_COUNT]);
 
-pub fn get_position(board: &Board) -> Position {
-    let w = WIDTH as usize;
-    let h = HEIGHT as usize;
+// pub fn get_position(board: &Board) -> Position {
+//     let w = WIDTH as usize;
+//     let h = HEIGHT as usize;
 
-    let mut bool_grids: [BoolGrid; 11] = Default::default();
-    let mut float_parameters: [f32; MAX_SNAKE_COUNT] = Default::default();
+//     let mut bool_grids: [BoolGrid; 11] = Default::default();
+//     let mut float_parameters: [f32; MAX_SNAKE_COUNT] = Default::default();
 
-    // Hazards
-    {
-        let i = 0;
-        for x in 0..w {
-            for y in 0..h {
-                bool_grids[i][x][y] = board.hazard[(x, y)];
-            }
-        }
-    }
+//     // Hazards
+//     {
+//         for x in 0..w {
+//             for y in 0..h {
+//                 bool_grids[0][x][y] = board.is_hazard(Point{x, y});
+//             }
+//         }
+//     }
 
-    // Hazard start
-    {
-        let i = 1;
-        bool_grids[i][board.hazard_start.x as usize][board.hazard_start.y as usize] = true;
-    }
+//     // Snakes
+//     let heads_i = 2;
+//     let bodies_i = heads_i + MAX_SNAKE_COUNT;
+//     let body_directions_i = bodies_i + MAX_SNAKE_COUNT;
+//     for i in 0..MAX_SNAKE_COUNT {
+//         let snake = &board.snakes[i];
 
-    // Snakes
-    let heads_i = 2;
-    let bodies_i = heads_i + MAX_SNAKE_COUNT;
-    let body_directions_i = bodies_i + MAX_SNAKE_COUNT;
-    for i in 0..MAX_SNAKE_COUNT {
-        let snake = &board.snakes[i];
+//         float_parameters[i] = snake.health as f32 / 100.0;
 
-        float_parameters[i] = snake.health as f32 / 100.0;
+//         let mut front = snake.head();
+//         bool_grids[heads_i + i][front.x as usize][front.y as usize] = true;
 
-        let mut front = snake.head();
-        bool_grids[heads_i + i][front.x as usize][front.y as usize] = true;
+//         for j in 1..snake.body.len() {
+//             let back = snake.body[j];
 
-        for j in 1..snake.body.len() {
-            let back = snake.body[j];
+//             bool_grids[bodies_i + i][back.x as usize][back.y as usize] = true;
 
-            bool_grids[bodies_i + i][back.x as usize][back.y as usize] = true;
+//             let direction = body_direction(back, front);
+//             if direction == BodyDirections::Still {
+//                 // First two turn there can be body parts under each other.
+//                 // They can't have direction.
+//                 break;
+//             }
+//             bool_grids[body_directions_i + direction as usize][back.x as usize][back.y as usize] = true;
 
-            let direction = body_direction(back, front);
-            if direction == BodyDirections::Still {
-                // First two turn there can be body parts under each other.
-                // They can't have direction.
-                break;
-            }
-            bool_grids[body_directions_i + direction as usize][back.x as usize][back.y as usize] = true;
+//             front = back;
+//         }
+//     }
 
-            front = back;
-        }
-    }
+//     // Food
+//     let foods_i = body_directions_i + 4;
+//     for food in board.foods.iter() {
+//         bool_grids[foods_i][food.x as usize][food.y as usize] = true;
+//     }
 
-    // Food
-    let foods_i = body_directions_i + 4;
-    for food in board.foods.iter() {
-        bool_grids[foods_i][food.x as usize][food.y as usize] = true;
-    }
-
-    (bool_grids, float_parameters)
-}
+//     (bool_grids, float_parameters)
+// }
 
 pub type Rewards = ([f32; MAX_SNAKE_COUNT], bool);
 
@@ -122,8 +114,7 @@ const BODY_PARTS_AT: usize = TAILS_AT + ALL_PLAYERS_GRIDS_SIZE;
 const BODIES_ON_TAIL_AT: usize = BODY_PARTS_AT + ALL_PLAYERS_GRIDS_SIZE * 5;
 const FOOD_AT: usize = BODIES_ON_TAIL_AT + MAX_BODIES_ON_TAIL * MAX_SNAKE_COUNT;
 const HAZARD_AT: usize = FOOD_AT + SIZE;
-const HAZARD_START_AT: usize = HAZARD_AT + SIZE;
-const HEALTH_AT: usize = HAZARD_START_AT + SIZE;
+const HEALTH_AT: usize = HAZARD_AT + SIZE;
 pub const TOTAL_FEATURES_SIZE: usize = HEALTH_AT + MAX_SNAKE_COUNT * HEALTH_BARS;
 
 
@@ -214,10 +205,6 @@ fn get_hazard_index(hazard: Point) -> usize {
     HAZARD_AT + get_point_index(hazard)
 }
 
-fn get_hazard_start_index(hazard_start: Point) -> usize {
-    HAZARD_START_AT + get_point_index(hazard_start)
-}
-
 fn get_health_index(owner: usize, health: i32) -> usize {
     // TODO: Health should always be non-negative
     OWNER_HEALTH_AT[owner] + (if health < 0 { 0 } else {health}) as usize
@@ -275,14 +262,11 @@ pub fn get_nnue_features(board: &Board) -> [bool; TOTAL_FEATURES_SIZE] {
     for x in 0..WIDTH {
         for y in 0..HEIGHT {
             let p = Point {x, y};
-            if board.hazard[p] {
+            if board.is_hazard(p) {
                 features[get_hazard_index(p)] = true;
             }
         }
     }
-
-    // (hazard_start[grid],)
-    features[get_hazard_start_index(board.hazard_start)] = true;
 
     features
 }

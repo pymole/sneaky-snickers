@@ -22,13 +22,11 @@ pub fn generate_board() -> Board {
     ];
 
     // let foods = vec![];
-    let hazard_start = random_point_inside_borders();
     // let hazards = vec![];
 
     let board = Board::new(
         0,
         None,
-        Some(hazard_start),
         None,
         snakes,
     );

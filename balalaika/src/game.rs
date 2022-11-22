@@ -12,7 +12,7 @@ use colored::*;
 
 use crate::api;
 use crate::api::objects::Movement;
-use crate::vec2d::Vec2D;
+use crate::array2d::Array2D;
 use crate::zobrist::{ZobristHash, body_direction};
 
 pub const MAX_SNAKE_COUNT: usize = 2;
@@ -26,8 +26,7 @@ pub struct Board {
     pub foods: Vec<Point>,
     pub snakes: [Snake; MAX_SNAKE_COUNT],
     pub turn: i32,
-    pub hazard: Vec2D<bool>,
-    pub hazard_start: Point,
+    pub safe_zone: Rectangle,
     pub objects: Objects,
     pub zobrist_hash: ZobristHash,
     pub is_terminal: bool,
@@ -42,7 +41,7 @@ pub struct Snake {
 pub use crate::api::objects::Point;
 
 /// Represents [p0.x, p1.x) × [p0.y, p1.y)
-#[derive(PartialEq, Eq, Debug, Copy, Clone, Hash)]
+#[derive(PartialEq, Eq, Debug, Copy, Clone, Hash, Serialize, Deserialize)]
 pub struct Rectangle {
     pub p0: Point,
     pub p1: Point,
@@ -56,8 +55,7 @@ impl Board {
         Board::new(
             state_api.turn as i32,
             Some(state_api.board.food.clone()),
-            None,
-            Some(&state_api.board.hazards),
+            Some(Self::calculate_safe_zone(&state_api.board.hazards)),
             Self::snake_api_to_snake_game(&state_api.board.snakes),
         )
     }
@@ -65,8 +63,7 @@ impl Board {
     pub fn new(
         turn: i32,
         foods: Option<Vec<Point>>,
-        hazard_start: Option<Point>,
-        hazards: Option<&Vec<Point>>,
+        safe_zone: Option<Rectangle>,
         snakes: [Snake; MAX_SNAKE_COUNT],
     ) -> Board {
         debug_assert_eq!(MAX_SNAKE_COUNT, 2);
@@ -95,22 +92,13 @@ impl Board {
             &foods,
         );
 
-        let hazard_start_;
-        let hazards_;
-
-        let empty_hazards = Vec::new();
-
-        if hazard_start.is_some() {
-            assert!(hazards.is_none());
-            hazards_ = &empty_hazards;
-            hazard_start_ = hazard_start.unwrap();
-        } else if hazards.is_some() && hazards.unwrap().len() != 0 {
-            let hazards = hazards.unwrap();
-            hazards_ = hazards;
-            hazard_start_ = hazards[0];
+        let safe_zone = if safe_zone.is_some() {
+            safe_zone.unwrap()
         } else {
-            hazards_ = &empty_hazards;
-            hazard_start_ = random_point_inside_borders();
+            Rectangle {
+                p0: Point {x: 0, y: 0},
+                p1: Point {x: WIDTH, y: HEIGHT},
+            }
         };
 
         let objects = Self::calculate_objects(&snakes, &foods);
@@ -119,8 +107,7 @@ impl Board {
             foods,
             snakes,
             turn,
-            hazard: Self::calcualate_hazard(hazards_),
-            hazard_start: hazard_start_,
+            safe_zone,
             objects,
             zobrist_hash,
             is_terminal: false,
@@ -129,6 +116,10 @@ impl Board {
 
     pub fn contains(&self, p: Point) -> bool {
         (p.x < WIDTH) && (p.y < HEIGHT) && (p.x >= 0) && (p.y >= 0)
+    }
+
+    pub fn is_hazard(&self, p: Point) -> bool {
+        !self.safe_zone.contains(p)
     }
 
     pub fn is_terminal(&self) -> bool {
@@ -168,14 +159,42 @@ impl Board {
         objects
     }
 
-    fn calcualate_hazard(hazards : &Vec<Point>) -> Vec2D<bool> {
-        let mut hazard = Vec2D::init_same(WIDTH as usize, HEIGHT as usize, false);
+    pub fn calculate_safe_zone(hazards: &Vec<Point>) -> Rectangle {
+        let is_safe = {
+            let mut mask = Array2D::init_same(true);
 
-        for &p in hazards {
-            hazard[p] = true;
+            for &p in hazards {
+                mask[p] = false;
+            }
+
+            mask
+        };
+
+        let mut safe_zone = Rectangle {
+            p0: Point { x: WIDTH, y: HEIGHT },
+            p1: Point { x: -1, y: -1 },
+        };
+
+        for x in 0..WIDTH {
+            for y in 0..HEIGHT {
+                if is_safe[(x, y)] {
+                    safe_zone.p0.x = safe_zone.p0.x.min(x as i32);
+                    safe_zone.p1.x = safe_zone.p1.x.max(x as i32);
+                    safe_zone.p0.y = safe_zone.p0.y.min(y as i32);
+                    safe_zone.p1.y = safe_zone.p1.y.max(y as i32);
+                }
+            }
         }
 
-        hazard
+        // Add one to include borders ( rectangle represents [p0.x, p1.x) × [p0.y, p1.y) )
+        safe_zone.p1.x += 1;
+        safe_zone.p1.y += 1;
+
+        if safe_zone.empty() {
+            Rectangle { p0: Point::ZERO, p1: Point::ZERO }
+        } else {
+            safe_zone
+        }
     }
 
     fn initial_zobrist_hash(
@@ -411,7 +430,7 @@ impl fmt::Display for Board {
                     fill = ColoredString::from(".");
                 }
 
-                if self.hazard[(x, y)] {
+                if self.is_hazard(Point {x, y}) {
                     fill = fill.on_truecolor(HAZARD_COLOR.0, HAZARD_COLOR.1, HAZARD_COLOR.2)
                 };
                 

@@ -26,32 +26,6 @@ fn rewind(
 }
 
 #[pyfunction]
-fn get_positions(
-    game_log: &PyDict
-) -> PyResult<(Vec<[usize; MAX_SNAKE_COUNT]>, Vec<features::Position>, features::Rewards)> {
-    let game_log: gl::GameLog = depythonize(game_log).unwrap();
-    let (actions, boards) = gl::rewind(&game_log);
-    // let s = format!("print(\"{:?}{}\")", &boards[game_log.turns], &boards[game_log.turns]);
-    // let s = Box::leak(s.into_boxed_str());
-    // py.run(&s, None, None).expect("bang");
-    let positions = boards
-        .iter()
-        .map(features::get_position)
-        .collect();
-    let rewards = features::get_rewards(&boards[game_log.turns]);
-    Ok((actions, positions, rewards))
-}
-
-#[pyfunction]
-fn get_position(
-    board: &PyDict
-) -> PyResult<features::Position> {
-    let board: Board = depythonize(board).unwrap();
-    let position = features::get_position(&board);
-    Ok(position)
-}
-
-#[pyfunction]
 fn flood_fill(
     board: &PyDict,
 ) -> heuristics::flood_fill::FloodFill {
@@ -129,8 +103,6 @@ fn advance_one_step(
 #[pymodule]
 fn balalaika(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(rewind, m)?)?;
-    m.add_function(wrap_pyfunction!(get_positions, m)?)?;
-    m.add_function(wrap_pyfunction!(get_position, m)?)?;
     m.add_function(wrap_pyfunction!(flood_fill, m)?)?;
     m.add_function(wrap_pyfunction!(draw_board, m)?)?;
     m.add_function(wrap_pyfunction!(get_nnue_features, m)?)?;

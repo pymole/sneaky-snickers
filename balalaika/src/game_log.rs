@@ -4,10 +4,11 @@ use mongodb::bson::{doc, Bson};
 use mongodb::error::Error;
 use mongodb::results::InsertOneResult;
 
-use crate::api::objects::State;
+use crate::api::objects::{State, Movement};
 use crate::engine::food_spawner::{dirty_store_empties_on_heads_if_there_is_no, dirty_restore_empties};
-use crate::engine::{EngineSettings, safe_zone_shrinker, advance_one_step_with_settings};
-use crate::game::{Point, Board, Snake, MAX_SNAKE_COUNT, WIDTH, HEIGHT};
+use crate::engine::safe_zone_shrinker::shrink;
+use crate::engine::{EngineSettings, advance_one_step_with_settings};
+use crate::game::{Point, Board, Snake, MAX_SNAKE_COUNT, WIDTH, HEIGHT, Rectangle};
 use crate::zobrist::{body_direction, BodyDirections};
 
 use bitvec::prelude::*;
@@ -22,6 +23,8 @@ pub struct GameLog {
     pub actions: Vec<u8>,
     #[serde(with = "serde_bytes")]
     pub food: Vec<u8>,
+    #[serde(with = "serde_bytes")]
+    pub shrinks: Vec<u8>,
     pub turns: usize,
     tags: Vec<String>,
 }
@@ -52,13 +55,34 @@ impl GameLog {
 
         foods
     }
+
+    pub fn get_shrinks(&self) -> Vec<Option<Movement>> {
+        let mut shrinks = Vec::new();
+        let shrinks_bits: BitVec<u8, Msb0> = BitVec::from_vec(self.shrinks.clone());
+
+        let mut i = 0;
+        for _ in 0..self.turns {
+            let shrunk = shrinks_bits[i];
+            if shrunk {
+                let side: u32 = shrinks_bits[i + 1 .. i + 3].load_be();
+                
+                shrinks.push(Some(Movement::from_usize(side as usize)));
+
+                i += 3;
+            } else {
+                shrinks.push(None);
+                i += 1;
+            }
+        }
+
+        shrinks
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 struct BoardLog {
     food: Vec<Point>,
-    hazards: Vec<Point>,
-    hazard_start: Option<Point>,
+    safe_zone: Rectangle,
     snakes: [Snake; MAX_SNAKE_COUNT],
 }
 
@@ -73,10 +97,11 @@ struct SnakeLog {
 pub struct GameLogBuilder {
     // TODO: Use only inside selfplay, because Battlesnake API don't send
     // dead snakes and we can't figure out where they moved last turn.
-    current_decomposition: ([Point; MAX_SNAKE_COUNT], HashSet<Point>),
+    current_decomposition: ([Point; MAX_SNAKE_COUNT], HashSet<Point>, Rectangle),
     initial_board: BoardLog,
     actions: BitVec<u8, Msb0>,
     food: BitVec<u8, Msb0>,
+    shrinks: BitVec<u8, Msb0>,
     turns: usize,
     tags: Vec<String>,
 }
@@ -85,14 +110,14 @@ impl GameLogBuilder {
     pub fn new_from_state(state: &State) -> GameLogBuilder {
         GameLogBuilder::new(
             Board::snake_api_to_snake_game(&state.board.snakes),
-            &state.board.hazards,
+            Board::calculate_safe_zone(&state.board.hazards),
             &state.board.food,
         )
     }
 
     pub fn new(
         snakes: [Snake; MAX_SNAKE_COUNT],
-        hazards: &Vec<Point>,
+        safe_zone: Rectangle,
         foods: &Vec<Point>,
     ) -> GameLogBuilder {
         let food = foods.iter().copied().collect();
@@ -105,12 +130,11 @@ impl GameLogBuilder {
             unsafe { mem::transmute(heads) }
         };
 
-        let current_decomposition = (heads, food);
+        let current_decomposition = (heads, food, safe_zone);
 
         let initial_board = BoardLog {
             food: foods.clone(),
-            hazards: hazards.clone(),
-            hazard_start: None,
+            safe_zone,
             snakes,
         };
 
@@ -119,6 +143,7 @@ impl GameLogBuilder {
             food: Default::default(),
             actions: Default::default(),
             tags: Default::default(),
+            shrinks: Default::default(),
             initial_board,
             current_decomposition,
         }
@@ -128,6 +153,7 @@ impl GameLogBuilder {
         self.add_turn(
             &Board::snake_api_to_snake_game(&state.board.snakes),
             &state.board.food,
+            Board::calculate_safe_zone(&state.board.hazards),
         )
     }
 
@@ -135,13 +161,15 @@ impl GameLogBuilder {
         self.add_turn(
             &board.snakes,
             &board.foods,
+            board.safe_zone,
         )
     }
 
     pub fn add_turn(
         &mut self,
         snakes: &[Snake; MAX_SNAKE_COUNT],
-        foods: &Vec<Point>
+        foods: &Vec<Point>,
+        safe_zone: Rectangle,
     ) {
         self.turns += 1;
 
@@ -197,12 +225,33 @@ impl GameLogBuilder {
 
         // Only one food spawned at the same time
         assert!(spawned_foods.next().is_none());
-        
-        self.current_decomposition = (heads, foods);
-    }
 
-    pub fn set_hazard_start(&mut self, hazard_start: Point) {
-        self.initial_board.hazard_start = Some(hazard_start);
+        // Safe zone shrinking
+        let old_safe_zone = self.current_decomposition.2;
+        let side = if old_safe_zone.p0.x != safe_zone.p0.x {
+            Some(Movement::Left)
+        } else if old_safe_zone.p0.y != safe_zone.p0.y {
+            Some(Movement::Down)
+        } else if old_safe_zone.p1.x != safe_zone.p1.x {
+            Some(Movement::Right)
+        } else if old_safe_zone.p1.y != safe_zone.p1.y {
+            Some(Movement::Up)
+        } else {
+            None
+        };
+
+        if let Some(side) = side {
+            self.shrinks.push(true);
+
+            let len = self.shrinks.len();
+            self.shrinks.reserve(2);
+            unsafe { self.shrinks.set_len(len + 2) };
+            self.shrinks[len .. len + 2].store_be(side as u32);
+        } else {
+            self.shrinks.push(false);
+        }
+        
+        self.current_decomposition = (heads, foods, safe_zone);
     }
 
     pub fn add_tag(&mut self, tag: String) {
@@ -214,12 +263,16 @@ impl GameLogBuilder {
         food.shrink_to_fit();
 
         let mut actions = self.actions.clone();
-        actions.shrink_to_fit();        
+        actions.shrink_to_fit();
+
+        let mut shrinks = self.shrinks.clone();
+        shrinks.shrink_to_fit();
 
         GameLog {
             initial_board: self.initial_board.clone(),
             actions: actions.into_vec(),
             food: food.into_vec(),
+            shrinks: shrinks.into_vec(),
             turns: self.turns,
             tags: self.tags.clone(),
         }
@@ -257,8 +310,7 @@ pub fn rewind(game_log: &GameLog) -> (Vec<[usize; MAX_SNAKE_COUNT]>, Vec<Board>)
     let mut board = Board::new(
         0,
         Some(game_log.initial_board.food.clone()),
-        game_log.initial_board.hazard_start,
-        None,
+        Some(game_log.initial_board.safe_zone),
         game_log.initial_board.snakes.clone(),
     );
     
@@ -278,9 +330,17 @@ pub fn rewind(game_log: &GameLog) -> (Vec<[usize; MAX_SNAKE_COUNT]>, Vec<Board>)
         dirty_restore_empties(board, restore_empties);
     };
 
+    let shrinks = game_log.get_shrinks();
+
+    let mut log_safe_zone_shrinker = |board: &mut Board| {
+        if let Some(side) = shrinks[board.turn as usize - 1] {
+            shrink(board, side);
+        }
+    };
+
     let mut settings = EngineSettings {
         food_spawner: &mut log_food_spawner,
-        safe_zone_shrinker: &mut safe_zone_shrinker::standard,
+        safe_zone_shrinker: &mut log_safe_zone_shrinker,
     };
 
     let mut game_actions = Vec::new();
@@ -332,11 +392,9 @@ mod tests {
 
         let mut game_log_builder = GameLogBuilder::new(
             board.snakes.clone(),
-            &Vec::new(),
+            board.safe_zone,
             &board.foods,
         );
-
-        game_log_builder.set_hazard_start(board.hazard_start);
 
         let mut spawn_food_at_2_and_4_turn = |board: &mut Board| {
             if board.turn == 2 {
@@ -394,10 +452,9 @@ mod tests {
             let mut board = generate_board();
             let mut game_log_builder = GameLogBuilder::new(
                 board.snakes.clone(),
-                &Vec::new(),
+                board.safe_zone,
                 &board.foods,
             );
-            game_log_builder.set_hazard_start(board.hazard_start);
 
             let mut engine_settings = EngineSettings {
                 food_spawner: &mut food_spawner::create_standard,
@@ -440,7 +497,7 @@ mod tests {
 
             assert_eq!(actual_boards.len(), boards.len(), "Different positions count");
             for i in 0..actual_boards.len() {
-                assert_eq!(actual_boards[i].hazard, boards[i].hazard, "{}", board);
+                assert_eq!(actual_boards[i].safe_zone, boards[i].safe_zone, "{}", board);
                 assert_eq!(actual_boards[i].snakes, boards[i].snakes, "{}", board);
                 assert_eq!(actual_boards[i].foods, boards[i].foods, "{}", board);
                 assert_eq!(actual_boards[i].zobrist_hash, boards[i].zobrist_hash, "{}", board);
