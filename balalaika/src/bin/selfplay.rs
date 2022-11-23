@@ -49,9 +49,14 @@ fn main() {
 
             let mut actions = [0; MAX_SNAKE_COUNT];
 
-            for snake_index in 0..board.snakes.len() {
-                let action = mcts.get_final_movement(&board, snake_index);
-                actions[snake_index] = action as usize;
+            let mut alive_i = 0;
+            for snake_i in 0..board.snakes.len() {
+                if !board.snakes[snake_i].is_alive() {
+                    continue;
+                }
+                let action = mcts.get_final_movement(&board, alive_i);
+                actions[snake_i] = action as usize;
+                alive_i += 1;
             }
             advance_one_step_with_settings(&mut board, &mut engine_settings, actions);
             game_log_builder.add_turn_from_board(&board);

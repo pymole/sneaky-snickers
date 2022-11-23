@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::mem::{self, MaybeUninit};
+use arrayvec::ArrayVec;
 use mongodb::bson::{doc, Bson};
 use mongodb::error::Error;
 use mongodb::results::InsertOneResult;
@@ -83,7 +84,7 @@ impl GameLog {
 struct BoardLog {
     food: Vec<Point>,
     safe_zone: Rectangle,
-    snakes: [Snake; MAX_SNAKE_COUNT],
+    snakes: ArrayVec<Snake, MAX_SNAKE_COUNT>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -116,7 +117,7 @@ impl GameLogBuilder {
     }
 
     pub fn new(
-        snakes: [Snake; MAX_SNAKE_COUNT],
+        snakes: ArrayVec<Snake, MAX_SNAKE_COUNT>,
         safe_zone: Rectangle,
         foods: &Vec<Point>,
     ) -> GameLogBuilder {
@@ -124,8 +125,8 @@ impl GameLogBuilder {
 
         let heads: [Point; MAX_SNAKE_COUNT] = {
             let mut heads: [MaybeUninit<Point>; MAX_SNAKE_COUNT] = unsafe { MaybeUninit::uninit().assume_init() };
-            for i in 0..MAX_SNAKE_COUNT {
-                heads[i] = MaybeUninit::new(snakes[i].head());
+            for (i, snake) in snakes.iter().enumerate() {
+                heads[i] = MaybeUninit::new(snake.head());
             }
             unsafe { mem::transmute(heads) }
         };
@@ -167,7 +168,7 @@ impl GameLogBuilder {
 
     pub fn add_turn(
         &mut self,
-        snakes: &[Snake; MAX_SNAKE_COUNT],
+        snakes: &ArrayVec<Snake, MAX_SNAKE_COUNT>,
         foods: &Vec<Point>,
         safe_zone: Rectangle,
     ) {
@@ -181,20 +182,22 @@ impl GameLogBuilder {
             let old_heads = &self.current_decomposition.0;
 
             // 2 bits per move
-            self.actions.reserve(2 * MAX_SNAKE_COUNT);
-            
-            for i in 0..MAX_SNAKE_COUNT {
+            for i in 0..snakes.len() {
                 let old_head = old_heads[i];
                 let new_head = snakes[i].head();
 
                 let direction = body_direction(old_head, new_head);
                 if direction == BodyDirections::Still {
                     // Dead more than 1 turn ago (no move)
+                    heads[i] = MaybeUninit::new(old_head);
                     continue;
                 }
 
+                // println!("{:?} {}", direction, snakes.iter().filter(|s| s.is_alive()).count());
+
                 heads[i] = MaybeUninit::new(new_head);
 
+                self.actions.reserve(2);
                 let len = self.actions.len();
                 unsafe { self.actions.set_len(len + 2) };
                 
@@ -349,8 +352,13 @@ pub fn rewind(game_log: &GameLog) -> (Vec<[usize; MAX_SNAKE_COUNT]>, Vec<Board>)
     for _ in 0..game_log.turns {
         let mut actions = [0; MAX_SNAKE_COUNT];
         for i in 0..board.snakes.len() {
+            if !board.snakes[i].is_alive() {
+                continue;
+            }
             actions[i] = actions_bits.next().expect("Corrupted actions").load_be();
         }
+
+        // println!("{:?}", actions);
 
         game_actions.push(actions);
 
@@ -377,66 +385,12 @@ mod tests {
     use crate::board_generator::generate_board;
     use crate::engine::food_spawner;
     use crate::game_log::{save_game_log, load_game_log};
-    use crate::mcts::utils::{get_masks, get_random_actions_from_masks};
-    use crate::test_utils::create_board;
+    use crate::mcts::utils::get_random_actions_from_masks;
     use crate::{
-        test_data as data,
-        game::{Board, Point},
-        api::objects::Movement,
+        game::Point,
         engine::{advance_one_step_with_settings, EngineSettings, safe_zone_shrinker}
     };
     
-    #[test]
-    fn test_rewind() {
-        let mut board = create_board(data::FOOD_HEAD_TO_HEAD_EQUAL);
-
-        let mut game_log_builder = GameLogBuilder::new(
-            board.snakes.clone(),
-            board.safe_zone,
-            &board.foods,
-        );
-
-        let mut spawn_food_at_2_and_4_turn = |board: &mut Board| {
-            if board.turn == 2 {
-                board.put_food(Point {x: 0, y: 0});
-            }
-            else
-            if board.turn == 4 {
-                board.put_food(Point {x: 10, y: 10});
-            }
-        };
-
-        let mut settings = EngineSettings {
-            food_spawner: &mut spawn_food_at_2_and_4_turn,
-            safe_zone_shrinker: &mut safe_zone_shrinker::noop,
-        };
-
-        let mut boards = Vec::new();
-        boards.push(board.clone());
-
-        advance_one_step_with_settings(&mut board, &mut settings, [Movement::Right as usize, Movement::Up as usize]);
-        game_log_builder.add_turn_from_board(&board);
-        boards.push(board.clone());
-        advance_one_step_with_settings(&mut board, &mut settings, [Movement::Up as usize, Movement::Up as usize]);
-        game_log_builder.add_turn_from_board(&board);
-        boards.push(board.clone());
-        advance_one_step_with_settings(&mut board, &mut settings, [Movement::Up as usize, Movement::Up as usize]);
-        game_log_builder.add_turn_from_board(&board);
-        boards.push(board.clone());
-        advance_one_step_with_settings(&mut board, &mut settings, [Movement::Up as usize, Movement::Up as usize]);
-        game_log_builder.add_turn_from_board(&board);
-        boards.push(board.clone());
-        advance_one_step_with_settings(&mut board, &mut settings, [Movement::Up as usize, Movement::Left as usize]);
-        game_log_builder.add_turn_from_board(&board);
-        boards.push(board.clone());
-
-        let game_log = game_log_builder.finalize();
-
-        let (_, rewinded_boards) = rewind(&game_log);
-
-        assert_eq!(boards, rewinded_boards);
-    }
-
     #[test]
     fn test_rewind_random_play_integrational() {
         // NOTE: Run MongoDB: docker compose up
@@ -455,6 +409,7 @@ mod tests {
                 board.safe_zone,
                 &board.foods,
             );
+            
 
             let mut engine_settings = EngineSettings {
                 food_spawner: &mut food_spawner::create_standard,
@@ -467,11 +422,11 @@ mod tests {
             actual_boards.push(board.clone());
 
             while !board.is_terminal() {
-                let masks = get_masks(&board);
-                let actions = get_random_actions_from_masks(&mut random, masks);
+                let actions = get_random_actions_from_masks(&mut random, &board);
                 actual_actions.push(actions);
                 advance_one_step_with_settings(&mut board, &mut engine_settings, actions);
                 game_log_builder.add_turn_from_board(&board);
+                // println!("{}", board);
                 actual_boards.push(board.clone());
             }
 

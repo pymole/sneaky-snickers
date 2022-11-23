@@ -92,10 +92,10 @@ pub fn get_rewards(board: &Board) -> Rewards {
     let mut rewards = [0.0; MAX_SNAKE_COUNT];
     let mut draw = true;
     for (i, snake) in board.snakes.iter().enumerate() {
-        let is_alive = snake.is_alive();
-        if is_alive {
+        if snake.is_alive() {
             draw = false;
             rewards[i] = 1.0;
+            break;
         }
     }
     (rewards, draw)
@@ -206,15 +206,14 @@ fn get_hazard_index(hazard: Point) -> usize {
 }
 
 fn get_health_index(owner: usize, health: i32) -> usize {
-    // TODO: Health should always be non-negative
-    OWNER_HEALTH_AT[owner] + (if health < 0 { 0 } else {health}) as usize
+    OWNER_HEALTH_AT[owner] + health as usize
 }
 
 pub fn get_nnue_features(board: &Board) -> [bool; TOTAL_FEATURES_SIZE] {
     let mut features = [false; TOTAL_FEATURES_SIZE];
     
     for (owner, snake) in board.snakes.iter().enumerate() {
-        // (owner[snakes], health[100])
+        // (owner[snakes], health[101])
         features[get_health_index(owner, snake.health)] = true;
 
         // (owner[snakes], head[grid])

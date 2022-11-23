@@ -3,7 +3,6 @@ use log::info;
 use std::cell::{RefCell, RefMut};
 use std::collections::HashMap;
 use std::hash::BuildHasherDefault;
-use std::mem::{MaybeUninit, self};
 use std::time::{Duration, Instant};
 
 use crate::api::objects::Movement;
@@ -30,14 +29,19 @@ cfg_if::cfg_if! {
 struct Node {
     visits: f32,
     // Alive snakes
-    agents: [Strategy; MAX_SNAKE_COUNT],
+    agents: Vec<Agent>,
+}
+
+struct Agent {
+    id: usize,
+    strategy: Strategy,
 }
 
 impl Node {
-    fn new(agents: [Strategy; MAX_SNAKE_COUNT]) -> Node {
+    fn new(agents: Vec<Agent>) -> Node {
         Node {
             visits: 0.0,
-            agents: agents,
+            agents,
         }
     }
 }
@@ -73,8 +77,8 @@ impl Search<SequentialMCTSConfig> for SequentialMCTS {
 
     fn get_final_movement(&self, board: &Board, agent_index: usize) -> Movement {
         let node = self.nodes[&board.zobrist_hash.get_value()].borrow();
-        let bandit = &node.agents[agent_index];
-        bandit.get_final_movement(&self.config, node.visits)
+        let strategy = &node.agents[agent_index].strategy;
+        strategy.get_final_movement(&self.config, node.visits)
     }
 
     fn get_config(&self) -> &SequentialMCTSConfig {
@@ -95,9 +99,9 @@ impl SequentialMCTS {
     fn print_stats(&self, board: &Board) {
         let node = self.nodes.get(&board.zobrist_hash.get_value()).unwrap().borrow();
 
-        for (i, bandit) in node.agents.iter().enumerate() {
+        for (i, agent) in node.agents.iter().enumerate() {
             info!("Snake {}", i);
-            bandit.print_stats(&self.config, node.visits);
+            agent.strategy.print_stats(&self.config, node.visits);
         }
     }
 
@@ -135,13 +139,19 @@ impl SequentialMCTS {
 
             let mut node = node_cell.borrow_mut();
             let n = node.visits;
+            // TODO: MaybeUninit
             let mut joint_action = [0; MAX_SNAKE_COUNT];
 
-            for agent_index in 0..board.snakes.len() {
-                let bandit = &mut node.agents[agent_index];
-                let best_action = bandit.get_best_movement(&self.config, n);
+            let mut alive_i = 0;
 
-                joint_action[agent_index] = best_action;
+            for snake_i in 0..board.snakes.len() {
+                if !board.snakes[snake_i].is_alive() {
+                    continue;
+                }
+                let best_action = node.agents[alive_i].strategy.get_best_movement(&self.config, n);
+
+                joint_action[snake_i] = best_action;
+                alive_i += 1;
             }
 
             advance_one_step_with_settings(
@@ -157,13 +167,15 @@ impl SequentialMCTS {
     }
 
     fn expansion(&mut self, board: &Board, masks: [[bool; 4]; MAX_SNAKE_COUNT]) {
-        let agents: [Strategy; MAX_SNAKE_COUNT] = {
-            let mut agents: [MaybeUninit<Strategy>; MAX_SNAKE_COUNT] = unsafe { MaybeUninit::uninit().assume_init() };
-            for i in 0..board.snakes.len() {
-                agents[i] = MaybeUninit::new(Strategy::new(masks[i]));
+        let mut agents = Vec::new();
+        for i in 0..board.snakes.len() {
+            if board.snakes[i].is_alive() {
+                agents.push(Agent {
+                    id: i,
+                    strategy: Strategy::new(masks[i]),
+                });
             }
-            unsafe { mem::transmute(agents) }
-        };
+        }
 
         let node = Node::new(agents);
         self.nodes.insert(board.zobrist_hash.get_value(), RefCell::new(node));
@@ -177,11 +189,10 @@ impl SequentialMCTS {
             // info!("{}", node_key);
             node.visits += 1.0;
 
-            for (agent_index, bandit) in node.agents.iter_mut().enumerate() {
-                let reward = rewards[agent_index];
-                let movement = joint_action[agent_index];
-
-                bandit.backpropagate(reward, movement);
+            for agent in node.agents.iter_mut() {
+                let reward = rewards[agent.id];
+                let movement = joint_action[agent.id];
+                agent.strategy.backpropagate(reward, movement);
             }
         }
     }
@@ -199,7 +210,7 @@ impl SequentialMCTS {
 
         let end_turn = board.turn + rollout_cutoff;
         while board.turn <= end_turn && !board.is_terminal() {
-            let actions = get_random_actions_from_masks(random, get_masks(&board));
+            let actions = get_random_actions_from_masks(random, &board);
 
             advance_one_step_with_settings(
                 &mut board,

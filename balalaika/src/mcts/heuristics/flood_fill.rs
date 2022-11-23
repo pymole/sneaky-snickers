@@ -29,7 +29,6 @@ impl Default for ContendersInfo {
 }
 
 pub fn flood_fill(board: &Board) -> FloodFill {
-    // Like other rewards returns in initial index order
     let mut sizes = [0; MAX_SNAKE_COUNT];
 
     let mut flood_fronts: [Vec<Point>; MAX_SNAKE_COUNT] = Default::default();

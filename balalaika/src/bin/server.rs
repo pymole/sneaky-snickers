@@ -94,7 +94,7 @@ fn movement_options() -> Status {
     Status::Ok
 }
 
-fn get_our_snake_index(state: &api::objects::State) -> usize {
+fn get_our_snake_alive_index(state: &api::objects::State) -> usize {
     let snake_index = state.board.snakes
         .iter()
         .filter(|snake| snake.health > 0)
@@ -109,7 +109,7 @@ fn movement(storage: &State<Storage>, body: String) -> Json<api::responses::Move
     info!("MOVE - {}", body);
     let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
     let board = Board::from_api(&state);
-    let our_snake_index = get_our_snake_index(&state);
+    let our_snake_alive_index = get_our_snake_alive_index(&state);
 
     if let Some(game_session_mutex) = storage.game_sessions.get(&state.game.id) {
         let mut game_session = game_session_mutex.lock().unwrap();
@@ -122,13 +122,13 @@ fn movement(storage: &State<Storage>, body: String) -> Json<api::responses::Move
         }
 
         if let Some(mcts) = game_session.mcts.as_mut() {
-            let movement = get_best_movement(mcts, &board, our_snake_index);
+            let movement = get_best_movement(mcts, &board, our_snake_alive_index);
             return Json(api::responses::Move::new(movement));
         }
     }
 
     let mut mcts = MCTS::new(MCTSConfig::from_env());
-    let movement = get_best_movement(&mut mcts, &board, our_snake_index);
+    let movement = get_best_movement(&mut mcts, &board, our_snake_alive_index);
     mcts.shutdown();
     
     Json(api::responses::Move::new(movement))

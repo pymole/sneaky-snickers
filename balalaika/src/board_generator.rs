@@ -1,25 +1,25 @@
+use std::collections::HashSet;
+
 use crate::{game::{Board, random_point_inside_borders, Snake}};
 
 pub fn generate_board() -> Board {
-    // Generate board
-    let head1 = random_point_inside_borders();
-    let head2 = loop {
-        let p = random_point_inside_borders();
-        if p != head1 {
-            break p
+    let mut heads = HashSet::new();
+    let head = random_point_inside_borders();
+    heads.insert(head);
+    while heads.len() < 4 {
+        let head = random_point_inside_borders();
+        if !heads.contains(&head) {
+            heads.insert(head);
         }
-    };
+    }
 
-    let snakes = [
-        Snake {
+    let snakes = heads
+        .into_iter()
+        .map(|head| Snake {
             health: 100,
-            body: [head1, head1, head1].try_into().unwrap(),
-        },
-        Snake {
-            health: 100,
-            body: [head2, head2, head2].try_into().unwrap(),
-        },
-    ];
+            body: [head, head, head].try_into().unwrap(),
+        })
+        .collect();
 
     // let foods = vec![];
     // let hazards = vec![];

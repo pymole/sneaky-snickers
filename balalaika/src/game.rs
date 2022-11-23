@@ -1,6 +1,5 @@
 use std::collections::VecDeque;
 use std::fmt::{Debug, self};
-use std::mem::{MaybeUninit, self};
 use std::ops::{Add, AddAssign};
 use std::hash::{Hash, Hasher};
 use arrayvec::ArrayVec;
@@ -15,16 +14,15 @@ use crate::api::objects::Movement;
 use crate::array2d::Array2D;
 use crate::zobrist::{ZobristHash, body_direction};
 
-pub const MAX_SNAKE_COUNT: usize = 2;
+pub const MAX_SNAKE_COUNT: usize = 4;
 pub const WIDTH: i32 = 11;
 pub const HEIGHT: i32 = 11;
 pub const SIZE: usize = (WIDTH * HEIGHT) as usize;
 
 #[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
 pub struct Board {
-    // WARNING: Optimized for 2 players
     pub foods: Vec<Point>,
-    pub snakes: [Snake; MAX_SNAKE_COUNT],
+    pub snakes: ArrayVec<Snake, MAX_SNAKE_COUNT>,
     pub turn: i32,
     pub safe_zone: Rectangle,
     pub objects: Objects,
@@ -64,10 +62,8 @@ impl Board {
         turn: i32,
         foods: Option<Vec<Point>>,
         safe_zone: Option<Rectangle>,
-        snakes: [Snake; MAX_SNAKE_COUNT],
+        snakes: ArrayVec<Snake, MAX_SNAKE_COUNT>,
     ) -> Board {
-        debug_assert_eq!(MAX_SNAKE_COUNT, 2);
-
         // There always must be food.
         let mut foods = if let Some(foods) = foods {
             foods
@@ -123,7 +119,7 @@ impl Board {
     }
 
     pub fn is_terminal(&self) -> bool {
-        self.is_terminal
+        (0..self.snakes.len()).filter(|&i| self.snakes[i].is_alive()).count() <= 1
     }
 
     pub fn put_food(&mut self, pos: Point) {
@@ -132,7 +128,7 @@ impl Board {
         self.zobrist_hash.xor_food(pos);
     }
 
-    fn calculate_objects(snakes: &[Snake; MAX_SNAKE_COUNT], foods: &Vec<Point>) -> Objects {
+    fn calculate_objects(snakes: &ArrayVec<Snake, MAX_SNAKE_COUNT>, foods: &Vec<Point>) -> Objects {
         let mut objects = Objects::new();
 
         for snake in snakes {
@@ -199,7 +195,7 @@ impl Board {
 
     fn initial_zobrist_hash(
         turn: i32,
-        snakes: &[Snake; MAX_SNAKE_COUNT],
+        snakes: &ArrayVec<Snake, MAX_SNAKE_COUNT>,
         foods: &Vec<Point>,
     ) -> ZobristHash {
         let mut zobrist_hash = ZobristHash::new();
@@ -225,14 +221,8 @@ impl Board {
         zobrist_hash
     }
 
-    pub fn snake_api_to_snake_game(snakes_api: &Vec<api::objects::Snake>) -> [Snake; MAX_SNAKE_COUNT] {
-        let mut snakes: [MaybeUninit<Snake>; MAX_SNAKE_COUNT] = unsafe { MaybeUninit::uninit().assume_init() };
-
-        for (i, snake) in snakes_api.iter().enumerate() {
-            snakes[i] = MaybeUninit::new(Snake::from_api(snake));
-        }
-
-        unsafe { mem::transmute(snakes) }
+    pub fn snake_api_to_snake_game(snakes_api: &Vec<api::objects::Snake>) -> ArrayVec<Snake, MAX_SNAKE_COUNT> {
+        snakes_api.iter().map(Snake::from_api).collect()
     }
 }
 
@@ -381,10 +371,12 @@ pub fn random_point_inside_borders() -> Point {
 const SNAKE_COLORS: [(u8, u8, u8); MAX_SNAKE_COUNT] = [
     (252, 90, 50),
     (50, 90, 252),
+    (255, 250, 160),
+    (105, 0, 198),
 ];
 const HAZARD_COLOR: (u8, u8, u8) = (64, 64, 64);
 const FOOD_CHAR: &str = "*";
-const DEAD_SNAKE_CHAR: &str = "X";
+// const DEAD_SNAKE_CHAR: &str = "X";
 
 impl fmt::Display for Board {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -392,6 +384,9 @@ impl fmt::Display for Board {
         let mut output = String::new();
 
         for (i, snake) in self.snakes.iter().enumerate() {
+            if !snake.is_alive() {
+                continue;
+            }
             let color = SNAKE_COLORS[i];
 
             let health_count = (WIDTH as f32 * snake.health as f32 / 100.0) as usize;
@@ -410,11 +405,7 @@ impl fmt::Display for Board {
             }
             
             let head = snake.head();
-            let fill = if snake.is_alive() {
-                i.to_string().truecolor(color.0, color.1, color.2)
-            } else {
-                DEAD_SNAKE_CHAR.truecolor(color.0, color.1, color.2)
-            };
+            let fill = i.to_string().truecolor(color.0, color.1, color.2);
             
             view[head.x as usize][head.y as usize] = fill;
         }

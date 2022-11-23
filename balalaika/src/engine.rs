@@ -143,7 +143,7 @@ pub fn advance_one_step_with_settings(
     engine_settings: &mut EngineSettings,
     actions: [usize; MAX_SNAKE_COUNT]
 ) {
-    debug_assert!(!board.is_terminal());
+    debug_assert!(!board.is_terminal(), "{}", board);
 
     board.zobrist_hash.xor_turn(board.turn);
     board.turn += 1;
@@ -159,10 +159,13 @@ pub fn advance_one_step_with_settings(
     //     - Last body part (their tail) is removed from the board.
     //     - Health is reduced by 1.
 
+    let alive_snakes: ArrayVec<usize, MAX_SNAKE_COUNT> = (0..board.snakes.len()).filter(|&i| board.snakes[i].is_alive()).collect();
+
     {
-        for (snake_i, snake) in board.snakes.iter_mut().enumerate() {
+        for &snake_i in &alive_snakes {
             let movement = actions[snake_i];
-            debug_assert!(snake.body.len() > 0);
+            let snake = &mut board.snakes[snake_i];
+            debug_assert!(snake.body.len() > 2);
             let old_head_position = snake.head();
 
             let mut new_head_position = old_head_position + Movement::from_usize(movement).to_direction();
@@ -211,7 +214,8 @@ pub fn advance_one_step_with_settings(
     let objects_under_head: [Object; MAX_SNAKE_COUNT] = {
         let mut objects_under_head: [MaybeUninit<Object>; MAX_SNAKE_COUNT] = unsafe { MaybeUninit::uninit().assume_init() };
         
-        for (i, snake) in board.snakes.iter().enumerate() {
+        for &i in &alive_snakes {
+            let snake = &board.snakes[i];
             debug_assert!(board.contains(snake.head()));
             let object_under_head = board.objects.get(snake.head());
             objects_under_head[i] = MaybeUninit::new(object_under_head);
@@ -224,10 +228,12 @@ pub fn advance_one_step_with_settings(
     //     - Additional body part placed on top of current tail (this will extend their visible length by one on the
     //       next turn).
     //     - The food is removed from the board.
+
+    // TODO: Try MaybeUninit
     let mut snake_ate_food = [false; MAX_SNAKE_COUNT];
     {
         let mut eaten_food = ArrayVec::<_, MAX_SNAKE_COUNT>::new();
-        for i in 0..board.snakes.len() {
+        for &i in &alive_snakes {
             if objects_under_head[i] != FOOD {
                 continue;
             }
@@ -268,7 +274,7 @@ pub fn advance_one_step_with_settings(
     {
         let mut died_snakes = ArrayVec::<usize, MAX_SNAKE_COUNT>::new();
 
-        for (i, snake ) in board.snakes.iter().enumerate() {
+        for &i in &alive_snakes {
             let object_under_head = objects_under_head[i];
 
             // Collided with themselves or another battlesnake.
@@ -277,8 +283,10 @@ pub fn advance_one_step_with_settings(
                 continue;
             }
 
+            let snake = &board.snakes[i];
+
             // Head-to-head.
-            for j in 0..MAX_SNAKE_COUNT {
+            for &j in &alive_snakes {
                 if i == j {
                     continue;
                 }
@@ -303,7 +311,7 @@ pub fn advance_one_step_with_settings(
     // - Deal out-of-safe-zone damage
     // - Maybe shrink safe zone
     {
-        for i in 0..board.snakes.len() {
+        for &i in &alive_snakes {
             if !snake_ate_food[i] {
                 if board.is_hazard(board.snakes[i].head()) {
                     board.snakes[i].health -= 14;
@@ -322,15 +330,16 @@ pub fn advance_one_step_with_settings(
     debug_assert!(
         board.snakes
             .iter()
+            .filter(|snake| snake.is_alive())
             .all(|snake| board.foods.iter().all(|food| !snake.body.contains(&food)))
     );
 
     // Remove dead snakes from board.objects
     {
-        for i in 0..board.snakes.len() {
+        for &i in &alive_snakes {
             let snake = &mut board.snakes[i];
             if !snake.is_alive() {
-                board.is_terminal = true;
+                snake.health = 0;
 
                 // TODO: I don't understand why we have to put this empty.
                 //  No food - it was eaten
@@ -365,7 +374,7 @@ pub fn advance_one_step_with_settings(
         }
 
         // Restore alive heads, which were removed in previous loop in case of a head-to-head collision.
-        for i in 0..board.snakes.len() {
+        for i in alive_snakes {
             if board.snakes[i].is_alive() {
                 board.objects.set_body_on_empty(board.snakes[i].head());
             }

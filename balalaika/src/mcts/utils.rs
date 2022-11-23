@@ -14,6 +14,9 @@ pub fn get_masks(board: &Board) -> [[bool; 4]; MAX_SNAKE_COUNT] {
     let mut tails = ArrayVec::<_, MAX_SNAKE_COUNT>::new();
     
     for snake in board.snakes.iter() {
+        if !snake.is_alive() {
+            continue;
+        }
         let tail = snake.body[snake.body.len() - 1];
         let pretail = snake.body[snake.body.len() - 2];
         if tail != pretail {
@@ -23,8 +26,10 @@ pub fn get_masks(board: &Board) -> [[bool; 4]; MAX_SNAKE_COUNT] {
     
     let mut masks = [[false; 4]; MAX_SNAKE_COUNT];
 
-    board.snakes.iter()
+    board.snakes
+        .iter()
         .enumerate()
+        .filter(|(_, snake)| snake.is_alive())
         .for_each(|(snake_index, snake)| {
             MOVEMENTS
                 .iter()
@@ -59,10 +64,14 @@ pub fn movement_positions(position: Point) -> [Point; 4] {
     positions
 }
 
-pub fn get_random_actions_from_masks(random: &mut impl Rng, masks: [[bool; 4]; MAX_SNAKE_COUNT]) -> [usize; MAX_SNAKE_COUNT] {
+pub fn get_random_actions_from_masks(random: &mut impl Rng, board: &Board) -> [usize; MAX_SNAKE_COUNT] {
+    let masks = get_masks(board);
     let mut actions = [0; MAX_SNAKE_COUNT];
 
-    for i in 0..MAX_SNAKE_COUNT {
+    for i in 0..board.snakes.len() {
+        if !board.snakes[i].is_alive() {
+            continue;
+        }
         let available_actions = masks[i]
             .into_iter()
             .enumerate()
@@ -97,24 +106,31 @@ pub fn get_best_movement<C: Config, S: Search<C>>(searcher: &mut S, board: &Boar
 
 #[cfg(test)]
 mod tests {
+    use arrayvec::ArrayVec;
+
     use crate::{game::{Board, Snake, Point}, mcts::utils::get_masks};
 
     #[test]
     fn test_get_masks() {
+        let mut snakes = ArrayVec::new();
+        snakes.push(
+            Snake {
+                health: 100,
+                body: [Point {x: 0, y: 6}, Point {x: 0, y: 6}, Point {x: 0, y: 6}].into()
+            }
+        );
+        snakes.push(
+            Snake {
+                health: 100,
+                body: [Point {x: 1, y: 6}, Point {x: 1, y: 6}, Point {x: 1, y: 6}].into()
+            },
+        );
+
         let board = Board::new(
             0,
             Some(vec![Point {x: 0, y: 0}]),
             None,
-            [
-                Snake {
-                    health: 100,
-                    body: [Point {x: 0, y: 6}, Point {x: 0, y: 6}, Point {x: 0, y: 6}].into()
-                },
-                Snake {
-                    health: 100,
-                    body: [Point {x: 1, y: 6}, Point {x: 1, y: 6}, Point {x: 1, y: 6}].into()
-                },
-            ],
+            snakes,
         );
 
         let masks = get_masks(&board);
