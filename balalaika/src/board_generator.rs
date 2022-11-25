@@ -1,4 +1,3 @@
-
 use arrayvec::ArrayVec;
 use rand::{
     seq::SliceRandom,
@@ -11,18 +10,15 @@ use crate::game::{
     Snake,
     MAX_SNAKE_COUNT,
     Point,
-    WIDTH,
+    WIDTH, HEIGHT,
 };
 
 pub fn generate_board() -> Board {
     let snakes = make_snakes();
-
-    // let foods = vec![];
-    // let hazards = vec![];
-
+    let foods = make_food(&snakes);
     let board = Board::new(
         0,
-        None,
+        Some(foods),
         None,
         snakes,
     );
@@ -71,6 +67,54 @@ fn make_snakes() -> ArrayVec<Snake, MAX_SNAKE_COUNT> {
     snakes
 }
 
-fn make_food() {
-    
+fn make_food(snakes: &ArrayVec<Snake, MAX_SNAKE_COUNT>) -> Vec<Point> {
+    let rng = &mut thread_rng();
+
+	let center = Point {
+        x: (WIDTH - 1) / 2,
+        y: (HEIGHT - 1) / 2,
+    };
+
+    let mut foods = Vec::new();
+	
+    // Place 1 food within exactly 2 moves of each snake, but never towards the center or in a corner
+    for snake in snakes {
+        let head = snake.head();
+        let possible_food_locations = [
+            Point {x: head.x - 1, y: head.y - 1},
+            Point {x: head.x - 1, y: head.y + 1},
+            Point {x: head.x + 1, y: head.y - 1},
+            Point {x: head.x + 1, y: head.y + 1},
+        ];
+
+        // Remove any invalid/unwanted positions
+        let mut available_food_locations = Vec::new();
+        for p in possible_food_locations {
+            // Food must be further than snake from center on at least one axis
+            if !(
+                p.x < head.x && head.x < center.x ||
+                center.x < head.x && head.x < p.x ||
+                p.y < head.y && head.y < center.y ||
+                center.y < head.y && head.y < p.y
+            ) {
+                continue;
+            }
+
+            // Don't spawn food in corners
+            if (p.x == 0 || p.x == (WIDTH - 1)) && (p.y == 0 || p.y == (HEIGHT - 1)) {
+                continue
+            }
+
+            available_food_locations.push(p);
+        }
+
+        // Select randomly from available locations
+        let food_spot = *available_food_locations.choose(rng).unwrap();
+        foods.push(food_spot);
+    }
+
+	// Finally, try to place 1 food in center of board for dramatic purposes
+	foods.push(center);
+
+	foods
 }
