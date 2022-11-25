@@ -53,12 +53,23 @@ pub fn get_movement_position(position: Point, movement: Movement) -> Point {
     }
 }
 
-pub fn movement_positions(position: Point) -> [Point; 4] {
+pub fn movement_positions_wrapped(position: Point) -> [Point; 4] {
     let positions = [
         Point {x: position.x, y: (position.y + 1) % HEIGHT },
         Point {x: (position.x + 1) % WIDTH, y: position.y},
         Point {x: position.x, y: (HEIGHT + position.y - 1) % HEIGHT},
         Point {x: (WIDTH + position.x - 1) % WIDTH, y: position.y},
+    ];
+
+    positions
+}
+
+pub fn movement_positions_standard(position: Point) -> [Point; 4] {
+    let positions = [
+        Point {x: position.x, y: position.y + 1 },
+        Point {x: position.x + 1, y: position.y},
+        Point {x: position.x, y: position.y - 1},
+        Point {x: position.x - 1, y: position.y},
     ];
 
     positions

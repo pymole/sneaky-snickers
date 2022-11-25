@@ -51,12 +51,33 @@ pub struct EngineSettings<'a, 'b> {
 }
 
 pub mod food_spawner {
+    use std::collections::{HashSet, hash_map::RandomState};
+
+    use crate::mcts::utils::movement_positions_standard;
+
     use super::*;
-    use rand;
+    use rand::{self, seq::IteratorRandom};
+
+    fn get_food_spawn_spots(board: &Board) -> HashSet<&Point> {
+        let mut spawn_spots: HashSet<&Point, RandomState> = HashSet::from_iter(board.objects.empties.iter());
+        for snake in &board.snakes {
+            if !snake.is_alive() {
+                continue;
+            }
+            for move_pos in movement_positions_standard(snake.head()) {
+                if board.contains(move_pos) {
+                    spawn_spots.remove(&move_pos);
+                }
+            }
+        }
+        spawn_spots
+    }
 
     fn spawn_one(rng: &mut impl rand::Rng, board: &mut Board) {
-        if let Some(empty_pos) = board.objects.get_empty_position(rng) {
-            board.put_food(empty_pos);
+        let spawn_spots = get_food_spawn_spots(board);
+
+        if let Some(&&food_spot) = spawn_spots.iter().choose(rng) {
+            board.put_food(food_spot);
         }
     }
 

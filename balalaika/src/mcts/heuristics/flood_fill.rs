@@ -2,7 +2,7 @@ use crate::{
     game::{
         Point, Board, MAX_SNAKE_COUNT, WIDTH, HEIGHT, SIZE
     },
-    mcts::utils::movement_positions
+    mcts::utils::movement_positions_wrapped
 };
 
 pub type FloodFill = [f32; MAX_SNAKE_COUNT];
@@ -56,7 +56,7 @@ pub fn flood_fill(board: &Board) -> FloodFill {
     loop {
         for (i, flood_front) in flood_fronts.iter_mut().enumerate() {
             while let Some(point) = flood_front.pop() {
-                for movement_position in movement_positions(point) {
+                for movement_position in movement_positions_wrapped(point) {
                     let contenders_info = &mut contenders_at_point[movement_position.x as usize][movement_position.y as usize];
 
                     if contenders_info.visited {
