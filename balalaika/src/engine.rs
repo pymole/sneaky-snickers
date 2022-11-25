@@ -54,38 +54,10 @@ pub mod food_spawner {
     use super::*;
     use rand;
 
-    pub fn dirty_store_empties_on_heads_if_there_is_no(board: &mut Board) -> [bool; MAX_SNAKE_COUNT] {
-        // It's used in GameLog to save board.objects ordering.
-        let mut restore_empty = [false; MAX_SNAKE_COUNT];
-        for (i, snake) in board.snakes.iter().enumerate() {
-            let head = snake.head();
-            if board.objects.is_empty(head) {
-                board.objects.set_body_on_empty(head);
-                restore_empty[i] = true;
-            }
-        }
-        restore_empty
-    }
-
-    pub fn dirty_restore_empties(board: &mut Board, restore_empties: [bool; MAX_SNAKE_COUNT]) {
-        for (i, snake) in board.snakes.iter().enumerate() {
-            if restore_empties[i] {
-                board.objects.set_empty_on_body(snake.head());
-            }
-        }
-    }
-
     fn spawn_one(rng: &mut impl rand::Rng, board: &mut Board) {
-        // WARN: Dirty hack with heads. Set heads, generate food and restore empties again.
-        // TODO: Check if there is no need to restore empties. "Make hack legal"
-        
-        let restore_empties = dirty_store_empties_on_heads_if_there_is_no(board);
-
         if let Some(empty_pos) = board.objects.get_empty_position(rng) {
             board.put_food(empty_pos);
         }
-
-        dirty_restore_empties(board, restore_empties);
     }
 
     pub fn create_standard(board: &mut Board) {
@@ -153,42 +125,47 @@ pub fn advance_one_step_with_settings(
         board.snakes.iter().all(|snake| snake.body.len() > 2)
     );
 
-    // From https://docs.battlesnake.com/references/rules
-    // 1. Each Battlesnake will have its chosen move applied:
-    //     - A new body part is added to the board in the direction they moved.
-    //     - Last body part (their tail) is removed from the board.
-    //     - Health is reduced by 1.
+    // Pre update
+    
+    // ... Empty in royale
+
+    
+    // Ruleset (Wrapped)
 
     let alive_snakes: ArrayVec<usize, MAX_SNAKE_COUNT> = (0..board.snakes.len()).filter(|&i| board.snakes[i].is_alive()).collect();
 
-    {
+    let objects_under_head: [Object; MAX_SNAKE_COUNT] = {
+        let mut objects_under_head: [MaybeUninit<Object>; MAX_SNAKE_COUNT] = unsafe { MaybeUninit::uninit().assume_init() };
+        let mut eaten_food = ArrayVec::<_, MAX_SNAKE_COUNT>::new();
+
         for &snake_i in &alive_snakes {
+
+            // Ruleset: Move snakes (standard)
             let movement = actions[snake_i];
             let snake = &mut board.snakes[snake_i];
             debug_assert!(snake.body.len() > 2);
-            let old_head_position = snake.head();
+            let old_head = snake.head();
+            let mut new_head = old_head + Movement::from_usize(movement).to_direction();
 
-            let mut new_head_position = old_head_position + Movement::from_usize(movement).to_direction();
-            if new_head_position.x < 0 {
-                new_head_position.x = WIDTH - 1;
+            // Ruleset: Move snakes (wrapped)
+            if new_head.x < 0 {
+                new_head.x = WIDTH - 1;
             } else
-            if new_head_position.y < 0 {
-                new_head_position.y = HEIGHT - 1;
+            if new_head.y < 0 {
+                new_head.y = HEIGHT - 1;
             } else
-            if new_head_position.x == WIDTH {
-                new_head_position.x = 0;
+            if new_head.x == WIDTH {
+                new_head.x = 0;
             } else
-            if new_head_position.y == HEIGHT {
-                new_head_position.y = 0;
+            if new_head.y == HEIGHT {
+                new_head.y = 0;
             }
 
-            snake.health -= 1;
-
-            snake.body.push_front(new_head_position);
+            snake.body.push_front(new_head);
 
             // Move neck (first body part next to head)
-            let new_neck_direction = body_direction(old_head_position, new_head_position);
-            board.zobrist_hash.xor_body_direction(old_head_position, snake_i, new_neck_direction);
+            let new_neck_direction = body_direction(old_head, new_head);
+            board.zobrist_hash.xor_body_direction(old_head, snake_i, new_neck_direction);
 
             // Remove old tail
             let old_tail = snake.body.pop_back().unwrap();
@@ -207,49 +184,29 @@ pub fn advance_one_step_with_settings(
                 board.objects.set_empty_on_body(old_tail);
             }
             
-            // The head will be set in a separate loop.
-        }
-    }
+            // WARN: The head will be set in a separate loop.
 
-    let objects_under_head: [Object; MAX_SNAKE_COUNT] = {
-        let mut objects_under_head: [MaybeUninit<Object>; MAX_SNAKE_COUNT] = unsafe { MaybeUninit::uninit().assume_init() };
-        
-        for &i in &alive_snakes {
-            let snake = &board.snakes[i];
-            debug_assert!(board.contains(snake.head()));
-            let object_under_head = board.objects.get(snake.head());
-            objects_under_head[i] = MaybeUninit::new(object_under_head);
-        }
-        unsafe { mem::transmute(objects_under_head) }
-    };
-
-    // 2. Any Battlesnake that has found food will consume it:
-    //     - Health reset set maximum.
-    //     - Additional body part placed on top of current tail (this will extend their visible length by one on the
-    //       next turn).
-    //     - The food is removed from the board.
-
-    // TODO: Try MaybeUninit
-    let mut snake_ate_food = [false; MAX_SNAKE_COUNT];
-    {
-        let mut eaten_food = ArrayVec::<_, MAX_SNAKE_COUNT>::new();
-        for &i in &alive_snakes {
-            if objects_under_head[i] != FOOD {
-                continue;
+            // Ruleset: starvation (standard)
+            snake.health -= 1;
+            
+            // Rulset: Feed or maybe do hazard damage
+            let object_under_head = board.objects.get(new_head);
+            if object_under_head == FOOD {
+                snake.health = 100;
+                snake.body.push_back(new_tail);
+                eaten_food.push(new_head);
+            } else
+            if !board.safe_zone.contains(new_head) {
+                snake.health -= 14;
             }
 
-            let snake = &mut board.snakes[i];
-            let head = snake.head();
+            objects_under_head[snake_i] = MaybeUninit::new(object_under_head);
 
-            snake.health = 100;
-
-            let tail = *snake.body.back().unwrap();
-            snake.body.push_back(tail);
-            debug_assert!(board.objects.is_body(tail));
-            eaten_food.push(head);
-            snake_ate_food[i] = true;
+            debug_assert!(board.objects.is_body(new_tail));
+            debug_assert!(board.contains(new_head));
         }
-        for &food in eaten_food.iter() {
+
+        for food in eaten_food {
             if let Some(food_i) = board.foods.iter().position(|&x| x == food) {
                 board.foods.swap_remove(food_i);
                 // TODO: Проверить, что никто этот эмпти потом не будет изменять под другим типом
@@ -257,20 +214,11 @@ pub fn advance_one_step_with_settings(
                 board.zobrist_hash.xor_food(food);
             }
         }
-    }
 
-    // 3. Any new food spawning will be placed in empty objects on the board.
-    // TODO: Fix bag when food generated under new head position.
-    //  At this moment new head positions are empty
-    {
-        (engine_settings.food_spawner)(board);
-    }
+        unsafe { mem::transmute(objects_under_head) }
+    };
 
-
-    //     - Collided with themselves
-    //     - Collided with another Battlesnake
-    //     - Collided head-to-head and lost
-
+    // Ruleset: Eliminate snakes
     {
         let mut died_snakes = ArrayVec::<usize, MAX_SNAKE_COUNT>::new();
 
@@ -306,33 +254,6 @@ pub fn advance_one_step_with_settings(
             board.snakes[i].health = 0;
         }
     }
-
-    // At last, aplly Battle Royale ruleset. Do in this order:
-    // - Deal out-of-safe-zone damage
-    // - Maybe shrink safe zone
-    {
-        for &i in &alive_snakes {
-            if !snake_ate_food[i] {
-                if board.is_hazard(board.snakes[i].head()) {
-                    board.snakes[i].health -= 14;
-                }
-            }
-        }
-
-        (engine_settings.safe_zone_shrinker)(board);
-    }
-
-    // if cfg!(debug_assertions) {
-        // println!("{:?} {}", board, board);
-        // println!("{}", board);
-    // }
-
-    debug_assert!(
-        board.snakes
-            .iter()
-            .filter(|snake| snake.is_alive())
-            .all(|snake| board.foods.iter().all(|food| !snake.body.contains(&food)))
-    );
 
     // Remove dead snakes from board.objects
     {
@@ -373,13 +294,22 @@ pub fn advance_one_step_with_settings(
             }
         }
 
-        // Restore alive heads, which were removed in previous loop in case of a head-to-head collision.
+        // Restore alive heads
         for i in alive_snakes {
             if board.snakes[i].is_alive() {
                 board.objects.set_body_on_empty(board.snakes[i].head());
             }
         }
     }
+
+    // Post map update (Royale).
+    
+    // Food spawn (Standard)
+    (engine_settings.food_spawner)(board);
+
+    // Hazard spawn (Royale)
+    (engine_settings.safe_zone_shrinker)(board);
+
 
     if cfg!(debug_assertions) {
         let mut empties_on_map = 0;
@@ -415,6 +345,18 @@ pub fn advance_one_step_with_settings(
         "{}",
         board,
     );
+
+    debug_assert!(
+        board.snakes
+            .iter()
+            .filter(|snake| snake.is_alive())
+            .all(|snake| board.foods.iter().all(|food| !snake.body.contains(&food)))
+    );
+
+    // if cfg!(debug_assertions) {
+    //     println!("{:?} {}", board, board);
+    //     println!("{}", board);
+    // }
 }
 
 #[cfg(test)]

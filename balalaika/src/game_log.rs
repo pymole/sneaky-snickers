@@ -6,7 +6,6 @@ use mongodb::error::Error;
 use mongodb::results::InsertOneResult;
 
 use crate::api::objects::{State, Movement};
-use crate::engine::food_spawner::{dirty_store_empties_on_heads_if_there_is_no, dirty_restore_empties};
 use crate::engine::safe_zone_shrinker::shrink;
 use crate::engine::{EngineSettings, advance_one_step_with_settings};
 use crate::game::{Point, Board, Snake, MAX_SNAKE_COUNT, WIDTH, HEIGHT, Rectangle};
@@ -322,15 +321,9 @@ pub fn rewind(game_log: &GameLog) -> (Vec<[usize; MAX_SNAKE_COUNT]>, Vec<Board>)
     let foods = game_log.get_foods();
     
     let mut log_food_spawner = |board: &mut Board| {
-        // WARN: Dirties used to save ordering in board.objects. See details in implemetation
-        // of the food_spawner::spawn_one.
-        let restore_empties = dirty_store_empties_on_heads_if_there_is_no(board);
-
         if let Some(food) = foods[board.turn as usize - 1] {
             board.put_food(food);
         }
-
-        dirty_restore_empties(board, restore_empties);
     };
 
     let shrinks = game_log.get_shrinks();
