@@ -213,6 +213,10 @@ pub fn get_nnue_features(board: &Board) -> [bool; TOTAL_FEATURES_SIZE] {
     let mut features = [false; TOTAL_FEATURES_SIZE];
     
     for (owner, snake) in board.snakes.iter().enumerate() {
+        if !snake.is_alive() {
+            continue;
+        }
+        
         // (owner[snakes], health[101])
         features[get_health_index(owner, snake.health)] = true;
 

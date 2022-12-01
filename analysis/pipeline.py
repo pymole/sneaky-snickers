@@ -1,6 +1,3 @@
-import xgboost
-from sklearn.model_selection import cross_val_score
-from sklearn.model_selection import RepeatedKFold
 import numpy as np
 import balalaika
 
@@ -77,26 +74,17 @@ def make_example(bool_grids, float_parameters, rewards):
 
 
 def prepare_examples_from_game_log(game_log):
-    positions, rewards = get_positions(game_log)
+    _, boards, (rewards, _) = balalaika.rewind(game_log)
     rewards = np.array(rewards, np.float32)
     
     xs = []
     ys = []
 
-    for position in positions:
-        bool_grids, float_parameters = convert_position(position)
-        swapped_bool_grids, swapped_float_parameters, swapped_rewards = swap_places(
-            bool_grids, float_parameters, rewards
-        )
-
-        x, y = make_example(bool_grids, float_parameters, rewards)
-        xs.append(x)
-        ys.append(y)
-
-        x, y = make_example(swapped_bool_grids, swapped_float_parameters, swapped_rewards)
-        xs.append(x)
-        ys.append(y)
-
+    # TODO: Get features from game_log, no need to parse to boards
+    for board in boards:
+        features = balalaika.get_nnue_features(board)
+        xs.append(np.array(features, dtype=np.float32))
+        ys.append(rewards)
 
     xs = np.array(xs)
     ys = np.array(ys)
@@ -117,21 +105,3 @@ def prepare_examples(game_logs):
     ys = np.concatenate(ys)
 
     return xs, ys
-
-
-class BoardXGBRegressor(xgboost.XGBRegressor):
-    def predict(self, X, **kwargs) -> np.ndarray:
-        new_X = []
-        for board in X:
-            position = balalaika.get_position(board)
-            bool_grids, float_parameters = convert_position(position)
-            x = make_features(bool_grids, float_parameters)
-            new_X.append(x)
-        
-        return super().predict(new_X, **kwargs)
-
-
-def fit_xgboost(x, y) -> BoardXGBRegressor:
-    model = BoardXGBRegressor()
-    model.fit(x, y)
-    return model

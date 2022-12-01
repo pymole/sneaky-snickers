@@ -1,58 +1,74 @@
-from sklearn.base import BaseEstimator
+import argparse
 from sklearn.metrics import mean_absolute_error
-from sklearn.linear_model import LinearRegression
-import numpy as np
 import balalaika
+import torch
 
 import pipeline
+from model import NNUE
 
 
-class FloodFillEstimator(BaseEstimator):
-    def fit(self, **kwargs):
-        return self
+class FloodFillPredictor:
+    def predict(self, board):
+        return balalaika.flood_fill(board)
 
-    def predict(self, X):
-        Y = []
-        for board in X:
-            flood_fill = balalaika.flood_fill(board)
-            Y.append(flood_fill[0])
-        
-        return Y
+
+class NNUEPredictor:
+    def __init__(self, model: NNUE):
+        self.model = model
+
+    def predict(self, board):
+        features = balalaika.get_nnue_features(board)
+        return self.model(torch.Tensor(features))
 
 
 def compare(model1, model2, game_log):
     _, boards, (rewards, _) = balalaika.rewind(game_log)
 
-    pred1 = model1.predict(boards)
-    pred2 = model2.predict(boards)
-
     model1_name = type(model1).__name__
     model2_name = type(model2).__name__
 
-    for i, board in enumerate(boards):
+    for board in boards:
+        pred1 = model1.predict(board)
+        pred2 = model2.predict(board)
+        
         balalaika.draw_board(board)
         
         print(f"Turn: {board['turn']}/{game_log['turns']}")
-        print(f"{model1_name}: {pred1[i]}")
-        print(f"{model2_name}: {pred2[i]}")
+        print(f"{model1_name}: {pred1}")
+        print(f"{model2_name}: {pred2}")
 
         input()
 
-    rewards = [rewards[0]] * len(boards)
 
-    scores1 = mean_absolute_error(pred1, rewards)
-    scores2 = mean_absolute_error(pred2, rewards)
-
-    print("Mean absolute error")
-    print(f"{model1_name}. avg: {scores1.mean()} std: {scores1.std()}")
-    print(f"{model2_name}. avg: {scores2.mean()} std: {scores2.std()}")
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model1", type=str)
+    parser.add_argument("--model2", type=str, required=False)
+    return parser.parse_args()
 
 
-(test, *train) = pipeline.load_random_game_logs(5)
+if __name__ == "__main__":
+    args = parse_args()
+    
+    # TODO: Why weren't gamma and lr saved?
+    model1 = NNUE.load_from_checkpoint(
+        args.model1,
+        gamma=0.0,
+        lr=1.0
+    )
+    model1.eval()
+    model1 = NNUEPredictor(model1)
 
-x, y = pipeline.prepare_examples(train)
-xgboost = pipeline.fit_xgboost(x, y)
+    if args.model2 is None:
+        model2 = FloodFillPredictor()
+    else:
+        model2 = NNUE.load_from_checkpoint(
+            args.model2,
+            gamma=0.0,
+            lr=1.0,
+        )
+        model2.eval()
+        model2 = NNUEPredictor(model2)
 
-flood_fill = FloodFillEstimator()
-
-compare(xgboost, flood_fill, test)
+    (game_log, ) = pipeline.load_random_game_logs(1)
+    compare(model1, model2, game_log)

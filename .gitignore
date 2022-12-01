@@ -55,3 +55,5 @@ venv
 /analysis/data
 
 **/*.rs.bk
+
+logs
