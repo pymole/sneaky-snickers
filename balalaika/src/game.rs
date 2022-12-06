@@ -17,6 +17,7 @@ use crate::zobrist::{ZobristHash, body_direction};
 pub const MAX_SNAKE_COUNT: usize = 4;
 pub const WIDTH: i32 = 11;
 pub const HEIGHT: i32 = 11;
+pub const CENTER: Point = Point {x: WIDTH / 2, y: HEIGHT / 2};
 pub const SIZE: usize = (WIDTH * HEIGHT) as usize;
 
 #[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]

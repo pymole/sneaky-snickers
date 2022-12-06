@@ -42,12 +42,14 @@ fn draw_board(
 }
 
 #[pyfunction]
-fn get_nnue_features(
+fn get_examples(
     board: &PyDict,
-) -> PyResult<[bool; features::TOTAL_FEATURES_SIZE]> {
+) -> PyResult<[Vec<usize>; 16]> {
     let board: Board = depythonize(board).unwrap();
-    let nnue_features = features::get_nnue_features(&board);
-    Ok(nnue_features)
+    let mut collector = features::FlipRotateIndicesCollector::new();
+    features::collect_features_loop(&board, &mut collector);
+    let examples = collector.collectors.map(|c| c.indices);
+    Ok(examples)
 }
 
 #[pyfunction]
@@ -105,7 +107,7 @@ fn balalaika(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(rewind, m)?)?;
     m.add_function(wrap_pyfunction!(flood_fill, m)?)?;
     m.add_function(wrap_pyfunction!(draw_board, m)?)?;
-    m.add_function(wrap_pyfunction!(get_nnue_features, m)?)?;
+    m.add_function(wrap_pyfunction!(get_examples, m)?)?;
     m.add_function(wrap_pyfunction!(get_board_from_state, m)?)?;
     m.add_function(wrap_pyfunction!(search, m)?)?;
     m.add_function(wrap_pyfunction!(get_masks, m)?)?;

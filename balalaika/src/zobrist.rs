@@ -23,6 +23,19 @@ pub enum BodyDirections {
     Still = 4,
 }
 
+impl From<usize> for BodyDirections {
+    fn from(x: usize) -> Self {
+        match x {
+            0 => BodyDirections::Up,
+            1 => BodyDirections::Right,
+            2 => BodyDirections::Down,
+            3 => BodyDirections::Left,
+            4 => BodyDirections::Still,
+            _ => unreachable!(""),
+        }
+    }
+}
+
 #[derive(PartialEq, Debug, Clone, Copy, Eq, Serialize, Deserialize)]
 pub struct ZobristHash {
     value: ValueInt,
