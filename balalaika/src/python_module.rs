@@ -44,12 +44,20 @@ fn draw_board(
 #[pyfunction]
 fn get_examples(
     board: &PyDict,
-) -> PyResult<[Vec<usize>; 16]> {
+    rewards: [f32; MAX_SNAKE_COUNT],
+) -> PyResult<Vec<(Vec<usize>, [f32; MAX_SNAKE_COUNT])>> {
     let board: Board = depythonize(board).unwrap();
-    let mut collector = features::FlipRotateIndicesCollector::new();
-    features::collect_features_loop(&board, &mut collector);
-    let examples = collector.collectors.map(|c| c.indices);
+    let examples = features::collect_examples(&board, rewards);
     Ok(examples)
+}
+
+#[pyfunction]
+fn get_features(
+    board: &PyDict,
+) -> PyResult<Vec<usize>> {
+    let board: Board = depythonize(board).unwrap();
+    let indices = features::get_features_indices(&board);
+    Ok(indices)
 }
 
 #[pyfunction]
@@ -109,6 +117,7 @@ fn balalaika(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(draw_board, m)?)?;
     m.add_function(wrap_pyfunction!(get_examples, m)?)?;
     m.add_function(wrap_pyfunction!(get_board_from_state, m)?)?;
+    m.add_function(wrap_pyfunction!(get_features, m)?)?;
     m.add_function(wrap_pyfunction!(search, m)?)?;
     m.add_function(wrap_pyfunction!(get_masks, m)?)?;
     m.add_function(wrap_pyfunction!(advance_one_step, m)?)?;

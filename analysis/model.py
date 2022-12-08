@@ -6,7 +6,7 @@ from pytorch_lightning.core.lightning import LightningModule
 import settings
 
 
-L1 = 4046
+L1 = settings.FEATURES_COUNT
 L2 = 32
 L3 = 8
 L4 = settings.SNAKES_COUNT
@@ -23,6 +23,7 @@ class NNUE(pl.LightningModule):
             nn.Linear(L2, L3),
             nn.ReLU(),
             nn.Linear(L3, L4),
+            nn.Softmax(),
         )
         self.ce = nn.CrossEntropyLoss()
 
@@ -33,19 +34,18 @@ class NNUE(pl.LightningModule):
         loss = self._step(batch, 'train_loss')
         return loss
 
-    def test_step(self, batch, batch_idx):
-        loss = self._step(batch, 'test_loss')
+    def validation_step(self, batch, batch_idx):
+        loss = self._step(batch, 'val_loss')
         return loss
     
     def _step(self, batch, log_name):
         x, y = batch
         y_hat = self.layers(x)
         loss = self.ce(y_hat, y)
-        self.log(log_name, loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
+        self.log(log_name, loss, on_step=True, prog_bar=True, logger=True)
         return loss
     
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.lr)
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=self.gamma)
-        return optimizer
-
+        return [optimizer], [scheduler]

@@ -36,10 +36,12 @@ if __name__ == '__main__':
             lr=args.lr,
         )
     else:
-        nnue = torch.load(args.resume_from_model)
-        # TODO: Why do parameters set like this?
-        nnue.gamma = args.gamma
-        nnue.lr = args.lr
+        nnue = NNUE.load_from_checkpoint(
+            args.resume_from_model,
+            gamma = args.gamma,
+            lr = args.lr,
+        )
+        nnue.eval()
 
     pl.seed_everything(args.seed)
     print("Seed {}".format(args.seed))

@@ -5,6 +5,7 @@ import torch
 
 import pipeline
 from model import NNUE
+import dataset
 
 
 class FloodFillPredictor:
@@ -17,12 +18,14 @@ class NNUEPredictor:
         self.model = model
 
     def predict(self, board):
-        features = balalaika.get_nnue_features(board)
-        return self.model(torch.Tensor(features))
+        indices = balalaika.get_features(board)
+        features = dataset.prepare_feature_inidices(indices)
+        x = self.model(features)
+        return torch.round(x, decimals=2)
 
 
 def compare(model1, model2, game_log):
-    _, boards, (rewards, _) = balalaika.rewind(game_log)
+    _, boards, _ = balalaika.rewind(game_log)
 
     model1_name = type(model1).__name__
     model2_name = type(model2).__name__
