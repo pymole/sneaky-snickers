@@ -1,4 +1,5 @@
 from torch.utils.data import DataLoader, IterableDataset
+import pytorch_lightning as pl
 import torch
 import balalaika
 import settings
@@ -38,6 +39,13 @@ def prepare_examples(game_logs):
     return xs, ys
 
 
+class BalalaikaProvider:
+    def __init__(self) -> None:
+        
+    
+    def __next__(self):
+        pass
+
 class SelfplayDataset(IterableDataset):
     def __init__(self, mongo_uri: str, batch_size: int = 128, prefetch_batches: int = 10, mixer_size: int = 80000) -> None:
         # TODO: Game log filtering
@@ -51,6 +59,14 @@ class SelfplayDataset(IterableDataset):
     def __iter__(self):
         # TODO: Handle workers. Add indexing for workers.
         pass
+
+
+class DataModule(pl.LightningDataModule):
+    def train_dataloader(self) -> TRAIN_DATALOADERS:
+        return super().train_dataloader()
+
+    def test_dataloader(self) -> EVAL_DATALOADERS:
+        return super().test_dataloader()
 
 
 # TODO Use LightningDataModule to refresh dataset at the end of epoch
