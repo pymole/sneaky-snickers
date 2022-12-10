@@ -303,20 +303,13 @@ pub fn load_game_logs(client: &Client, filter: Option<Document>) -> Result<Curso
 }
 
 pub fn load_game_log(client: &Client, id: Bson) -> Option<GameLog> {
-    let cursor = load_game_logs(client, Some(doc! {
+    let db = client.default_database().expect("Default database must be provided");
+    let games = db.collection::<GameLog>("games");
+    let cursor = games.find_one(Some(doc! {
         "_id": id
-    }));
+    }), None);
 
-    if cursor.is_err() {
-        return None;
-    }
-    let mut cursor = cursor.unwrap();
-
-    if let Some(result) = cursor.next() {
-        result.ok()
-    } else {
-        None
-    }
+    cursor.unwrap()
 }
 
 
@@ -386,7 +379,10 @@ pub fn rewind(game_log: &GameLog) -> (Vec<[usize; MAX_SNAKE_COUNT]>, Vec<Board>)
 mod tests {
     use std::collections::HashSet;
     use std::collections::hash_map::RandomState;
+    use std::str::FromStr;
 
+    use mongodb::bson::Bson;
+    use mongodb::bson::oid::ObjectId;
     use mongodb::sync::Client;
     use rand::thread_rng;
     use pretty_assertions::{assert_eq};
@@ -493,5 +489,12 @@ mod tests {
         let games = db.collection::<GameLog>("games");
         let game_log = games.find_one(None, None).expect("Loading error").expect("No games in main DB");
         let _ = rewind(&game_log);
+    }
+
+    #[test]
+    fn test_aa() {
+        let client = Client::with_uri_str("mongodb://battlesnake:battlesnake@localhost:27017/battlesnake?authSource=admin").unwrap();
+        let a = load_game_log(&client, Bson::ObjectId(ObjectId::from_str(String::from("6394717da6a3ebf9afdf5423").as_str()).unwrap()));
+        println!("{:?}", a);
     }
 }

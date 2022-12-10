@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import pytorch_lightning as pl
 from pytorch_lightning.core.lightning import LightningModule
+from dataset import BalalaikaBatch
 import settings
 
 
@@ -30,19 +31,18 @@ class NNUE(pl.LightningModule):
     def forward(self, x):
         return self.layers(x)
   
-    def training_step(self, batch, batch_idx):
+    def training_step(self, batch: BalalaikaBatch, batch_idx):
         loss = self._step(batch, 'train_loss')
         return loss
 
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch: BalalaikaBatch, batch_idx):
         loss = self._step(batch, 'val_loss')
         return loss
     
-    def _step(self, batch, log_name):
-        x, y = batch
-        y_hat = self.layers(x)
-        loss = self.ce(y_hat, y)
-        self.log(log_name, loss, on_step=True, prog_bar=True, logger=True)
+    def _step(self, batch: BalalaikaBatch, log_name):
+        y_hat = self.layers(batch.x)
+        loss = self.ce(y_hat, batch.y)
+        self.log(log_name, loss, on_step=True, prog_bar=True, logger=True, batch_size=len(batch.x))
         return loss
     
     def configure_optimizers(self):

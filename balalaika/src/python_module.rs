@@ -140,12 +140,14 @@ impl DataLoader {
         batch_size: usize,
         prefetch_batches: usize,
         mixer_size: usize,
+        game_log_ids: Vec<String>,
     ) -> Self {
         let dataloader = dataloader::DataLoader::new(
             mongo_uri,
             batch_size,
             prefetch_batches,
             mixer_size,
+            game_log_ids,
         );
 
         Self {

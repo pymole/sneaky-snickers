@@ -64,6 +64,7 @@ fn main() {
             }
             advance_one_step_with_settings(&mut board, &mut engine_settings, actions);
             game_log_builder.add_turn_from_board(&board);
+            // TODO: verbose
             println!("{}", board);
         }
 

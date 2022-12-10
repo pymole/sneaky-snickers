@@ -1,11 +1,11 @@
 import argparse
-from sklearn.metrics import mean_absolute_error
 import balalaika
 import torch
 
-import pipeline
 from model import NNUE
+import database
 import dataset
+import settings
 
 
 class FloodFillPredictor:
@@ -73,5 +73,5 @@ if __name__ == "__main__":
         model2.eval()
         model2 = NNUEPredictor(model2)
 
-    (game_log, ) = pipeline.load_random_game_logs(1)
+    (game_log, ) = database.SelfplayRepository(settings.MONGO_URI).load_random_game_logs(1)
     compare(model1, model2, game_log)

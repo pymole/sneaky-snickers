@@ -1,11 +1,14 @@
+use std::str::FromStr;
 use std::sync::{Mutex, Arc, Condvar};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
 
-use mongodb::sync::{Client, Cursor};
+use mongodb::bson::oid::ObjectId;
+use mongodb::bson::Bson;
+use mongodb::sync::Client;
 use rand::{thread_rng, Rng};
 
-use crate::game_log::{load_game_logs, rewind, GameLog};
+use crate::game_log::{load_game_log, rewind};
 use crate::features::{collect_examples, get_rewards, Example};
 
 enum LoaderCommand {
@@ -14,7 +17,8 @@ enum LoaderCommand {
 }
 
 pub struct Loader {
-    cursor: Cursor<GameLog>,
+    client: Client,
+    game_log_ids: Vec<ObjectId>,
     loader_receiver: Receiver<LoaderCommand>,
     examples: Arc<(Mutex<Vec<Example>>, Condvar)>,
     loader_is_empty: Arc<Mutex<bool>>,
@@ -22,13 +26,20 @@ pub struct Loader {
 
 impl Loader {
     fn new(
+        client: Client,
+        game_log_ids: Vec<String>,
         loader_receiver: Receiver<LoaderCommand>,
-        cursor: Cursor<GameLog>,
         examples: Arc<(Mutex<Vec<Example>>, Condvar)>,
         loader_is_empty: Arc<Mutex<bool>>,
     ) -> Self {
+        let game_log_ids: Vec<ObjectId> = game_log_ids
+            .into_iter()
+            .map(|x| ObjectId::from_str(x.as_str()).unwrap())
+            .collect();
+
         Loader {
-            cursor,
+            client,
+            game_log_ids,
             loader_receiver,
             examples,
             loader_is_empty,
@@ -67,19 +78,24 @@ impl Loader {
     }
 
     fn next_examples(&mut self) -> Option<Vec<Example>> {
-        let res_option = self.cursor.next();
-        if let Some(res) = res_option {
-            if let Some(game_log) = res.ok() {
-                let (_, boards) = rewind(&game_log);
-                let (rewards, _) = get_rewards(&boards[game_log.turns]);
-                let mut examples = Vec::new();
-                for board in boards {
-                    examples.extend(collect_examples(&board, rewards));
-                }
-                return Some(examples);
-            }
+        if self.game_log_ids.is_empty() {
+            return None;
         }
-        None
+
+        let id = self.game_log_ids.pop().unwrap();
+        let option = load_game_log(&self.client, Bson::ObjectId(id));
+        if let Some(game_log) = option {
+            let (_, boards) = rewind(&game_log);
+            let (rewards, _) = get_rewards(&boards[game_log.turns]);
+            let mut examples = Vec::new();
+            for board in boards {
+                examples.extend(collect_examples(&board, rewards));
+            }
+
+            Some(examples)
+        } else {
+            None
+        }
     }
 
 }
@@ -146,7 +162,7 @@ impl Mixer {
                     }
                 }
                 MixerCommand::Close => {
-                    self.loader_sender.send(LoaderCommand::Close).unwrap();
+                    self.loader_sender.send(LoaderCommand::Close);
                     break;
                 }
             }
@@ -220,10 +236,9 @@ impl DataLoader {
         batch_size: usize,
         prefetch_batches: usize,
         mixer_size: usize,
+        game_log_ids: Vec<String>,
     ) -> Self {
         let client = Client::with_uri_str(mongo_uri).unwrap();
-        // TODO: Game logs filtering
-        let cursor = load_game_logs(&client, None).expect("MongoDB error");
         let (loader_sender, loader_receiver) = channel();
         let (batch_sender, batch_receiver) = channel();
         let (mixer_sender, mixer_receiver) = channel();
@@ -239,8 +254,9 @@ impl DataLoader {
         );
 
         let loader = Loader::new(
+            client,
+            game_log_ids,
             loader_receiver,
-            cursor,
             mixer.examples.clone(),
             loader_is_empty.clone(),
         );
@@ -257,7 +273,7 @@ impl DataLoader {
 
 impl Drop for DataLoader {
     fn drop(&mut self) {
-        self.mixer_sender.send(MixerCommand::Close).unwrap();
+        self.mixer_sender.send(MixerCommand::Close);
     }
 }
 
@@ -266,7 +282,11 @@ impl Iterator for DataLoader {
 
     fn next(&mut self) -> Option<Self::Item> {
         let batch_result = self.batch_receiver.recv().unwrap();
-        self.mixer_sender.send(MixerCommand::NeedBatch).unwrap();
+        let send_res = self.mixer_sender.send(MixerCommand::NeedBatch);
+        if send_res.is_err() {
+            return None;
+        }
+
         if let BatchResult::Batch(batch) = batch_result {
             Some(batch)
         } else {
