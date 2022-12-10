@@ -27,7 +27,7 @@ pub struct GameLog {
     #[serde(with = "serde_bytes")]
     pub shrinks: Vec<u8>,
     pub turns: usize,
-    tags: Vec<String>,
+    tag: Option<String>,
 }
 
 impl GameLog {
@@ -104,7 +104,7 @@ pub struct GameLogBuilder {
     food: BitVec<u8, Msb0>,
     shrinks: BitVec<u8, Msb0>,
     turns: usize,
-    tags: Vec<String>,
+    tag: Option<String>,
 }
 
 impl GameLogBuilder {
@@ -143,7 +143,7 @@ impl GameLogBuilder {
             turns: 0,
             food: Default::default(),
             actions: Default::default(),
-            tags: Default::default(),
+            tag: None,
             shrinks: Default::default(),
             initial_board,
             current_decomposition,
@@ -257,8 +257,8 @@ impl GameLogBuilder {
         self.current_decomposition = (heads, foods, safe_zone);
     }
 
-    pub fn add_tag(&mut self, tag: String) {
-        self.tags.push(tag);
+    pub fn set_tag(&mut self, tag: String) {
+        self.tag = Some(tag);
     }
 
     pub fn finalize(&self) -> GameLog {
@@ -277,7 +277,7 @@ impl GameLogBuilder {
             food: food.into_vec(),
             shrinks: shrinks.into_vec(),
             turns: self.turns,
-            tags: self.tags.clone(),
+            tag: self.tag.clone(),
         }
     }
 }

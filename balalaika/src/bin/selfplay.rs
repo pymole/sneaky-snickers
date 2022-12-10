@@ -22,6 +22,8 @@ cfg_if::cfg_if! {
 
 
 fn main() {
+    let tag_option = env::var("SELFPLAY_TAG").ok();
+
     let uri = env::var("MONGO_URI").expect("Provide MONGO_URI");
     let client = Client::with_uri_str(uri).unwrap();
 
@@ -39,7 +41,9 @@ fn main() {
             board.safe_zone,
             &board.foods,
         );
-        game_log_builder.add_tag("selfplay-v1.1.0".to_string());
+        if let Some(tag) = &tag_option {
+            game_log_builder.set_tag(tag.clone());
+        }
 
         // Play game
         println!("Starting new game");
@@ -65,7 +69,7 @@ fn main() {
 
         // Upload game
         let game_log = game_log_builder.finalize();
-        save_game_log(&client, &game_log);
+        save_game_log(&client, &game_log).expect("Error");
         println!("Saved game");
     }
 }
