@@ -60,6 +60,7 @@ if __name__ == '__main__':
     train, val = make_dataloaders(
         args.epoch_size,
         args.validation_size,
+        batch_size,
     )
 
     trainer.fit(nnue, train, val)

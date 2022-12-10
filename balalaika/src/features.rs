@@ -188,8 +188,11 @@ impl IndicesCollector {
 /// Flips on rotation: 3
 /// Snake positions permutations: A(n=MAX_SNAKES_COUNT, k=alive_snakes_count)
 
-pub fn collect_examples(board: &Board, rewards: [f32; MAX_SNAKE_COUNT]) -> Vec<(Vec<usize>, [f32; MAX_SNAKE_COUNT])> {
+pub type Example = (Vec<usize>, [f32; MAX_SNAKE_COUNT]);
+
+pub fn collect_examples(board: &Board, rewards: [f32; MAX_SNAKE_COUNT]) -> Vec<Example> {
     let alive_snakes: Vec<(usize, &Snake)> = board.snakes.iter().enumerate().filter(|(_, snake)| snake.is_alive()).collect();
+    assert!(!alive_snakes.is_empty());
     // TODO: precalulate permutations
     let alive_permutations = get_permutations(alive_snakes.len());
     let perm_count = alive_permutations.len();

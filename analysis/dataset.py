@@ -1,50 +1,27 @@
-import numpy as np
-from torch.utils.data import DataLoader, Dataset, random_split
+from torch.utils.data import DataLoader, IterableDataset
 import torch
-import pipeline
 import balalaika
 import settings
 
 
-class SelfplayDataset(Dataset):
-    def __init__(self, size: int) -> None:
-        # TODO: Use iterator of latest game logs to construct samples
-        # TODO: Cache samples
-        # TODO: Rotate, permutate
-        # TODO: Pick by tags
-        game_logs = pipeline.load_random_game_logs(10)
-        self.samples, self.labels = prepare_examples(game_logs)
-        
-    def __len__(self):
-        return len(self.samples)
-
-    def __getitem__(self, index):
-        return self.samples[index], self.labels[index]
-
-
 def get_examples_from_game_log(game_log):
-    _, boards, (board_rewards, _) = balalaika.rewind(game_log)
+    examples = balalaika.get_examples_from_game_log(game_log)
     
     xs = []
     ys = []
 
-    # TODO: Get examples directly from balalaika
-    for board in boards:
-        examples = balalaika.get_examples(board, board_rewards)
-        
-        for indices, rewards in examples:
-            # TODO: Make indices coalesed at the moment of parsing
-            # TODO: C-structs
-            features = prepare_feature_inidices(indices)
-            xs.append(features)
-            ys.append(torch.tensor(rewards))
-
+    for indices, rewards in examples:
+        features = prepare_feature_inidices(indices)
+        xs.append(features)
+        ys.append(torch.tensor(rewards))
+    
     return xs, ys
 
 
 def prepare_feature_inidices(indices):
     values = torch.ones(len(indices))
     indices = torch.Tensor(indices).unsqueeze(0)
+    # TODO: Make indices coalesed at the moment of parsing
     features = torch.sparse_coo_tensor(indices, values, size=(settings.FEATURES_COUNT,))
     return features
 
@@ -61,10 +38,30 @@ def prepare_examples(game_logs):
     return xs, ys
 
 
-def make_dataloaders(epoch_size, validation_size):
-    dataset = SelfplayDataset(epoch_size + validation_size)
+class SelfplayDataset(IterableDataset):
+    def __init__(self, mongo_uri: str, batch_size: int = 128, prefetch_batches: int = 10, mixer_size: int = 80000) -> None:
+        # TODO: Game log filtering
+        self.provider = balalaika.DataLoader(
+            mongo_uri=mongo_uri,
+            batch_size=batch_size,
+            prefetch_batches=prefetch_batches,
+            mixer_size=mixer_size,
+        )
+
+    def __iter__(self):
+        # TODO: Handle workers. Add indexing for workers.
+        pass
+
+
+# TODO Use LightningDataModule to refresh dataset at the end of epoch
+def make_dataloaders(
+    epoch_size,
+    validation_size,
+    batch_size,
+):
+    train_dataset = SelfplayDataset(settings.MONGO_URI, batch_size=batch_size)
+    test_dataset = SelfplayDataset(settings.MONGO_URI, batch_size=batch_size)
     # TODO: actual size
-    train, val = random_split(dataset, [0.99, 0.01])
-    train_dataloader = DataLoader(train)
-    test_dataloader = DataLoader(val)
+    train_dataloader = DataLoader(train_dataset, batch_size=None)
+    test_dataloader = DataLoader(test_dataset, batch_size=None)
     return train_dataloader, test_dataloader

@@ -4,7 +4,7 @@ use crate::api::objects::State;
 use crate::mcts::config::Config;
 use crate::mcts::seq::{SequentialMCTS, SequentialMCTSConfig};
 use crate::mcts::search::Search;
-use crate::{features, mcts};
+use crate::{features, mcts, dataloader};
 use crate::game::Board;
 use crate::game_log as gl;
 use crate::engine;
@@ -42,12 +42,29 @@ fn draw_board(
 }
 
 #[pyfunction]
-fn get_examples(
+fn get_examples_from_board(
     board: &PyDict,
     rewards: [f32; MAX_SNAKE_COUNT],
-) -> PyResult<Vec<(Vec<usize>, [f32; MAX_SNAKE_COUNT])>> {
+) -> PyResult<Vec<features::Example>> {
     let board: Board = depythonize(board).unwrap();
     let examples = features::collect_examples(&board, rewards);
+    Ok(examples)
+}
+
+#[pyfunction]
+fn get_examples_from_game_log(
+    game_log: &PyDict,
+) -> PyResult<Vec<features::Example>> {
+    let game_log: gl::GameLog = depythonize(game_log).unwrap();
+    let (_, boards) = gl::rewind(&game_log);
+    let (terminal_board, boards) = boards.split_last().unwrap();
+    let (rewards, _) = features::get_rewards(terminal_board);
+    let mut examples = Vec::new();
+    // Do not use terminal board in examples
+    for board in boards {
+        examples.extend(features::collect_examples(&board, rewards));
+    }
+    
     Ok(examples)
 }
 
@@ -110,16 +127,53 @@ fn advance_one_step(
     Ok(board)
 }
 
+#[pyclass]
+pub struct DataLoader {
+    provider: dataloader::DataLoader,
+}
+
+#[pymethods]
+impl DataLoader {
+    #[new]
+    pub fn new(
+        mongo_uri: String,
+        batch_size: usize,
+        prefetch_batches: usize,
+        mixer_size: usize,
+    ) -> Self {
+        let dataloader = dataloader::DataLoader::new(
+            mongo_uri,
+            batch_size,
+            prefetch_batches,
+            mixer_size,
+        );
+
+        Self {
+            provider: dataloader,
+        }
+    }
+
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(mut slf: PyRefMut<'_, Self>) -> Option<Vec<features::Example>> {
+        slf.provider.next()
+    }
+}
+
 #[pymodule]
 fn balalaika(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(rewind, m)?)?;
     m.add_function(wrap_pyfunction!(flood_fill, m)?)?;
     m.add_function(wrap_pyfunction!(draw_board, m)?)?;
-    m.add_function(wrap_pyfunction!(get_examples, m)?)?;
+    m.add_function(wrap_pyfunction!(get_examples_from_board, m)?)?;
+    m.add_function(wrap_pyfunction!(get_examples_from_game_log, m)?)?;
     m.add_function(wrap_pyfunction!(get_board_from_state, m)?)?;
     m.add_function(wrap_pyfunction!(get_features, m)?)?;
     m.add_function(wrap_pyfunction!(search, m)?)?;
     m.add_function(wrap_pyfunction!(get_masks, m)?)?;
     m.add_function(wrap_pyfunction!(advance_one_step, m)?)?;
+    m.add_class::<DataLoader>()?;
     Ok(())
 }

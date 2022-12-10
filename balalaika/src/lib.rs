@@ -16,3 +16,5 @@ pub mod test_utils;
 
 #[cfg(feature = "python")]
 pub mod python_module;
+#[cfg(feature = "python")]
+pub mod dataloader;

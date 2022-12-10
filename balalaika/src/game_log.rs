@@ -1,7 +1,8 @@
 use std::collections::HashSet;
 use std::mem::{self, MaybeUninit};
 use arrayvec::ArrayVec;
-use mongodb::bson::{doc, Bson};
+use mongodb::sync::Cursor;
+use mongodb::bson::{doc, Document, Bson};
 use mongodb::error::Error;
 use mongodb::results::InsertOneResult;
 
@@ -294,12 +295,28 @@ pub fn save_game_log(client: &Client, game_log: &GameLog) -> Result<InsertOneRes
     // }
 }
 
-pub fn load_game_log(client: &Client, id: Bson) -> Result<Option<GameLog>, Error> {
+pub fn load_game_logs(client: &Client, filter: Option<Document>) -> Result<Cursor<GameLog>, Error> {
     let db = client.default_database().expect("Default database must be provided");
     let games = db.collection::<GameLog>("games");
-    let game_log = games.find_one(doc! {"_id": id }, None);
+    let cursor = games.find(filter, None);
+    cursor
+}
 
-    game_log
+pub fn load_game_log(client: &Client, id: Bson) -> Option<GameLog> {
+    let cursor = load_game_logs(client, Some(doc! {
+        "_id": id
+    }));
+
+    if cursor.is_err() {
+        return None;
+    }
+    let mut cursor = cursor.unwrap();
+
+    if let Some(result) = cursor.next() {
+        result.ok()
+    } else {
+        None
+    }
 }
 
 
@@ -431,7 +448,7 @@ mod tests {
                 &client,
                 insert_res.expect("Failed to write game").inserted_id
             );
-            let game_log_loaded = load_res.expect("Failed to load").unwrap();
+            let game_log_loaded = load_res.expect("Failed to load");
 
             assert_eq!(game_log_constructed, game_log_loaded);
 
