@@ -1,7 +1,7 @@
 use arrayvec::ArrayVec;
 use rand::{seq::SliceRandom, Rng};
 
-use crate::api::objects::Movement;
+use crate::{api::objects::Movement, game::GridPoint};
 use crate::engine::MOVEMENTS;
 use super::config::Config;
 use super::search::Search;
@@ -35,7 +35,7 @@ pub fn get_masks(board: &Board) -> [[bool; 4]; MAX_SNAKE_COUNT] {
                 .iter()
                 .for_each(|&movement| {
                     let movement_position = get_movement_position(snake.head(), movement);
-                    if !board.objects.is_body(movement_position) || tails.contains(&movement_position) {
+                    if !board.objects.is_body(movement_position.into()) || tails.contains(&movement_position) {
                         masks[snake_index][movement as usize] = true;
                     }
                 });
@@ -44,7 +44,7 @@ pub fn get_masks(board: &Board) -> [[bool; 4]; MAX_SNAKE_COUNT] {
     masks
 }
 
-pub fn get_movement_position(position: Point, movement: Movement) -> Point {
+pub fn get_movement_position(position: GridPoint, movement: Movement) -> GridPoint {
     match movement {
         Movement::Right => Point {x: (position.x + 1) % WIDTH, y: position.y},
         Movement::Left => Point {x: (WIDTH + position.x - 1) % WIDTH, y: position.y},
@@ -53,7 +53,7 @@ pub fn get_movement_position(position: Point, movement: Movement) -> Point {
     }
 }
 
-pub fn movement_positions_wrapped(position: Point) -> [Point; 4] {
+pub fn movement_positions_wrapped(position: GridPoint) -> [GridPoint; 4] {
     let positions = [
         Point {x: position.x, y: (position.y + 1) % HEIGHT },
         Point {x: (position.x + 1) % WIDTH, y: position.y},
@@ -64,7 +64,7 @@ pub fn movement_positions_wrapped(position: Point) -> [Point; 4] {
     positions
 }
 
-pub fn movement_positions_standard(position: Point) -> [Point; 4] {
+pub fn movement_positions_standard(position: GridPoint) -> [GridPoint; 4] {
     let positions = [
         Point {x: position.x, y: position.y + 1 },
         Point {x: position.x + 1, y: position.y},
@@ -95,6 +95,27 @@ pub fn get_random_actions_from_masks(random: &mut impl Rng, board: &Board) -> [u
         }
     }
 
+    actions
+}
+
+pub fn get_first_able_actions_from_masks(board: &Board) -> [usize; MAX_SNAKE_COUNT] {
+    let masks = get_masks(board);
+    let mut actions = [0; MAX_SNAKE_COUNT];
+
+    for i in 0..board.snakes.len() {
+        if !board.snakes[i].is_alive() {
+            continue;
+        }
+        let action = masks[i]
+            .into_iter()
+            .enumerate()
+            .filter(|(_, mask)| *mask)
+            .map(|x| x.0)
+            .next()
+            .unwrap_or(0);
+        
+        actions[i] = action;
+    }
     actions
 }
 

@@ -14,15 +14,26 @@ use crate::api::objects::Movement;
 use crate::array2d::Array2D;
 use crate::zobrist::{ZobristHash, body_direction};
 
+#[derive(Serialize, Deserialize, PartialEq, Eq, Hash, Debug, Copy, Clone)]
+pub struct Point<T> {
+    pub x: T,
+    pub y: T,
+}
+
+pub type PointUsize = Point<usize>;
+
+pub type CoordType = i32;
+pub type GridPoint = Point<CoordType>;
+
 pub const MAX_SNAKE_COUNT: usize = 4;
-pub const WIDTH: i32 = 11;
-pub const HEIGHT: i32 = 11;
-pub const CENTER: Point = Point {x: WIDTH / 2, y: HEIGHT / 2};
+pub const WIDTH: CoordType = 11;
+pub const HEIGHT: CoordType = 11;
+pub const CENTER: GridPoint = Point {x: WIDTH / 2, y: HEIGHT / 2};
 pub const SIZE: usize = (WIDTH * HEIGHT) as usize;
 
 #[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
 pub struct Board {
-    pub foods: Vec<Point>,
+    pub foods: Vec<GridPoint>,
     pub snakes: ArrayVec<Snake, MAX_SNAKE_COUNT>,
     pub turn: i32,
     pub safe_zone: Rectangle,
@@ -34,16 +45,14 @@ pub struct Board {
 #[derive(PartialEq, Eq, Debug, Clone, Hash, Serialize, Deserialize)]
 pub struct Snake {
     pub health: i32,
-    pub body: VecDeque<Point>,
+    pub body: VecDeque<GridPoint>,
 }
-
-pub use crate::api::objects::Point;
 
 /// Represents [p0.x, p1.x) × [p0.y, p1.y)
 #[derive(PartialEq, Eq, Debug, Copy, Clone, Hash, Serialize, Deserialize)]
 pub struct Rectangle {
-    pub p0: Point,
-    pub p1: Point,
+    pub p0: GridPoint,
+    pub p1: GridPoint,
 }
 
 impl Board {
@@ -61,7 +70,7 @@ impl Board {
 
     pub fn new(
         turn: i32,
-        foods: Option<Vec<Point>>,
+        foods: Option<Vec<GridPoint>>,
         safe_zone: Option<Rectangle>,
         snakes: ArrayVec<Snake, MAX_SNAKE_COUNT>,
     ) -> Board {
@@ -111,11 +120,11 @@ impl Board {
         }
     }
 
-    pub fn contains(&self, p: Point) -> bool {
+    pub fn contains(&self, p: GridPoint) -> bool {
         (p.x < WIDTH) && (p.y < HEIGHT) && (p.x >= 0) && (p.y >= 0)
     }
 
-    pub fn is_hazard(&self, p: Point) -> bool {
+    pub fn is_hazard(&self, p: GridPoint) -> bool {
         !self.safe_zone.contains(p)
     }
 
@@ -123,32 +132,32 @@ impl Board {
         (0..self.snakes.len()).filter(|&i| self.snakes[i].is_alive()).count() <= 1
     }
 
-    pub fn put_food(&mut self, pos: Point) {
-        self.objects.set_food_on_empty(pos);
+    pub fn put_food(&mut self, pos: GridPoint) {
+        self.objects.set_food_on_empty(pos.into());
         self.foods.push(pos);
-        self.zobrist_hash.xor_food(pos);
+        self.zobrist_hash.xor_food(pos.into());
     }
 
-    fn calculate_objects(snakes: &ArrayVec<Snake, MAX_SNAKE_COUNT>, foods: &Vec<Point>) -> Objects {
+    fn calculate_objects(snakes: &ArrayVec<Snake, MAX_SNAKE_COUNT>, foods: &Vec<GridPoint>) -> Objects {
         let mut objects = Objects::new();
 
         for snake in snakes {
             for body_part in snake.body.iter().copied() {
-                if !objects.is_body(body_part) {
-                    objects.init_body(body_part);
+                if !objects.is_body(body_part.into()) {
+                    objects.init_body(body_part.into());
                 }
             }
         }
 
         for food in foods.iter().copied() {
-            objects.init_food(food);
+            objects.init_food(food.into());
         }
 
         for x in 0..WIDTH {
             for y in 0..HEIGHT {
                 let pos = Point {x, y};
-                if objects.is_default(pos) {
-                    objects.init_empty(pos);
+                if objects.is_default(pos.into()) {
+                    objects.init_empty(pos.into());
                 }
             }
         }
@@ -156,29 +165,30 @@ impl Board {
         objects
     }
 
-    pub fn calculate_safe_zone(hazards: &Vec<Point>) -> Rectangle {
+    pub fn calculate_safe_zone(hazards: &Vec<GridPoint>) -> Rectangle {
         let is_safe = {
             let mut mask = Array2D::init_same(true);
 
             for &p in hazards {
-                mask[p] = false;
+                let p: PointUsize = p.into();
+                mask[(p.x, p.y)] = false;
             }
 
             mask
         };
 
         let mut safe_zone = Rectangle {
-            p0: Point { x: WIDTH, y: HEIGHT },
-            p1: Point { x: -1, y: -1 },
+            p0: GridPoint { x: WIDTH, y: HEIGHT },
+            p1: GridPoint { x: -1, y: -1 },
         };
 
         for x in 0..WIDTH {
             for y in 0..HEIGHT {
-                if is_safe[(x, y)] {
-                    safe_zone.p0.x = safe_zone.p0.x.min(x as i32);
-                    safe_zone.p1.x = safe_zone.p1.x.max(x as i32);
-                    safe_zone.p0.y = safe_zone.p0.y.min(y as i32);
-                    safe_zone.p1.y = safe_zone.p1.y.max(y as i32);
+                if is_safe[(x as usize, y as usize)] {
+                    safe_zone.p0.x = safe_zone.p0.x.min(x);
+                    safe_zone.p1.x = safe_zone.p1.x.max(x);
+                    safe_zone.p0.y = safe_zone.p0.y.min(y);
+                    safe_zone.p1.y = safe_zone.p1.y.max(y);
                 }
             }
         }
@@ -197,7 +207,7 @@ impl Board {
     fn initial_zobrist_hash(
         turn: i32,
         snakes: &ArrayVec<Snake, MAX_SNAKE_COUNT>,
-        foods: &Vec<Point>,
+        foods: &Vec<GridPoint>,
     ) -> ZobristHash {
         let mut zobrist_hash = ZobristHash::new();
 
@@ -207,7 +217,7 @@ impl Board {
                 let prev = snake.body[i - 1];
                 let cur = snake.body[i];
                 let direction = body_direction(cur, prev);
-                zobrist_hash.xor_body_direction(cur, snake_index, direction);
+                zobrist_hash.xor_body_direction(cur.into(), snake_index, direction);
                 // TODO: Prevent unxor of Still on first turn
                 // if direction == BodyDirections::Still {
                 //     break
@@ -216,7 +226,7 @@ impl Board {
         }
 
         for food in foods.iter().copied() {
-            zobrist_hash.xor_food(food);
+            zobrist_hash.xor_food(food.into());
         }
 
         zobrist_hash
@@ -247,7 +257,7 @@ pub fn is_empty(obj: Object) -> bool {
 #[derive(PartialEq, Clone, Eq, Debug, Serialize, Deserialize)]
 pub struct Objects {
     pub map: [[Object; HEIGHT as usize]; WIDTH as usize],
-    pub empties: ArrayVec<Point, SIZE>,
+    pub empties: ArrayVec<PointUsize, SIZE>,
     // TODO: foods from 121 to 241
 }
 
@@ -259,8 +269,8 @@ impl Objects {
         }
     }
 
-    pub fn get(&self, pos: Point) -> Object {
-        self.map[pos.x as usize][pos.y as usize]
+    pub fn get(&self, pos: PointUsize) -> Object {
+        self.map[pos.x][pos.y]
     }
 
     pub fn empties_count(&self) -> usize {
@@ -269,99 +279,99 @@ impl Objects {
 
     // Food
 
-    pub fn set_food_on_empty(&mut self, pos: Point) {
+    pub fn set_food_on_empty(&mut self, pos: PointUsize) {
         self._remove_empty(pos);
-        self.map[pos.x as usize][pos.y as usize] = FOOD;
+        self.map[pos.x][pos.y] = FOOD;
     }
 
-    pub fn set_food_on_body(&mut self, pos: Point) {
+    pub fn set_food_on_body(&mut self, pos: PointUsize) {
         debug_assert!(self.is_body(pos));
-        self.map[pos.x as usize][pos.y as usize] = FOOD;
+        self.map[pos.x][pos.y] = FOOD;
     }
 
-    pub fn init_food(&mut self, pos: Point) {
+    pub fn init_food(&mut self, pos: PointUsize) {
         debug_assert!(self.is_default(pos));
-        self.map[pos.x as usize][pos.y as usize] = FOOD;
+        self.map[pos.x][pos.y] = FOOD;
     }
 
-    pub fn is_food(&self, pos: Point) -> bool {
+    pub fn is_food(&self, pos: PointUsize) -> bool {
         self.get(pos) == FOOD
     }
 
     // Body
 
-    pub fn set_body_on_empty(&mut self, pos: Point) {
+    pub fn set_body_on_empty(&mut self, pos: PointUsize) {
         self._remove_empty(pos);
-        self.map[pos.x as usize][pos.y as usize] = BODY;
+        self.map[pos.x][pos.y] = BODY;
     }
 
-    pub fn set_body_on_food(&mut self, pos: Point) {
+    pub fn set_body_on_food(&mut self, pos: PointUsize) {
         debug_assert!(self.is_food(pos));
-        self.map[pos.x as usize][pos.y as usize] = BODY;
+        self.map[pos.x][pos.y] = BODY;
     }
 
-    pub fn init_body(&mut self, pos: Point) {
+    pub fn init_body(&mut self, pos: PointUsize) {
         debug_assert!(self.is_default(pos));
-        self.map[pos.x as usize][pos.y as usize] = BODY;
+        self.map[pos.x][pos.y] = BODY;
     }
 
-    pub fn is_body(&self, pos: Point) -> bool {
+    pub fn is_body(&self, pos: PointUsize) -> bool {
         self.get(pos) == BODY
     }
 
     // Empty
 
-    pub fn set_empty_on_body(&mut self, pos: Point) {
+    pub fn set_empty_on_body(&mut self, pos: PointUsize) {
         debug_assert!(self.is_body(pos), "At {:?} there is {} not BODY", pos, self.get(pos));
         self._set_empty(pos);
     }
 
-    pub fn set_empty_on_food(&mut self, pos: Point) {
+    pub fn set_empty_on_food(&mut self, pos: PointUsize) {
         debug_assert!(self.is_food(pos));
         self._set_empty(pos);
     }
 
-    pub fn init_empty(&mut self, pos: Point) {
+    pub fn init_empty(&mut self, pos: PointUsize) {
         debug_assert!(self.is_default(pos));
         self._set_empty(pos);
     }
 
-    pub fn is_empty(&self, pos: Point) -> bool {
+    pub fn is_empty(&self, pos: PointUsize) -> bool {
         is_empty(self.get(pos))
     }
 
-    fn _set_empty(&mut self, pos: Point) {
+    fn _set_empty(&mut self, pos: PointUsize) {
         let empty = self.empties.len() as u8;
         self.empties.push(pos);
-        self.map[pos.x as usize][pos.y as usize] = empty;
+        self.map[pos.x][pos.y] = empty;
     }
 
-    fn _remove_empty(&mut self, pos: Point) {
+    fn _remove_empty(&mut self, pos: PointUsize) {
         debug_assert!(self.is_empty(pos), "{:?} is not empty, it's {}", pos, self.get(pos));
-        let i = self.map[pos.x as usize][pos.y as usize] as usize;
+        let i = self.map[pos.x][pos.y] as usize;
         self.empties.swap_remove(i);
         
         if i != self.empties.len() {
             // Now when where is new empty on this position
             // we must change map pointer
             let last_empty_pos = self.empties[i];
-            self.map[last_empty_pos.x as usize][last_empty_pos.y as usize] = i as u8;
+            self.map[last_empty_pos.x][last_empty_pos.y] = i as u8;
         }
     }
 
-    pub fn get_empty_position(&self, rng: &mut impl rand::Rng) -> Option<Point> {
+    pub fn get_empty_position(&self, rng: &mut impl rand::Rng) -> Option<PointUsize> {
         self.empties.choose(rng).copied()
     }
 
     // Default
 
-    pub fn is_default(&self, pos: Point) -> bool {
-        self.map[pos.x as usize][pos.y as usize] == DEFAULT
+    pub fn is_default(&self, pos: PointUsize) -> bool {
+        self.map[pos.x][pos.y] == DEFAULT
     }
 
 }
 
-pub fn random_point_inside_borders() -> Point {
+pub fn random_point_inside_borders() -> GridPoint {
     let mut rnd = thread_rng();
     Point {
         x: rnd.gen_range(0..WIDTH),
@@ -458,35 +468,55 @@ impl Snake {
         self.health > 0
     }
 
-    pub fn head(&self) -> Point {
+    pub fn head(&self) -> GridPoint {
         self.body[0]
     }
 
-    pub fn tail(&self) -> Point {
+    pub fn tail(&self) -> GridPoint {
         self.body[self.body.len() - 1]
     }
 }
 
-impl Point {
-    pub const ZERO: Point = Point { x: 0, y: 0 };
+impl Point<GridPoint> {
+    pub const ZERO: Point<CoordType> = Point { x: 0, y: 0 };
 }
 
-impl Add for Point {
-    type Output = Point;
+impl<T> Add for Point<T> where T: Add<Output=T> {
+    type Output = Point<T>;
 
-    fn add(self, other: Point) -> Point {
+    fn add(self, other: Point<T>) -> Point<T> {
         Point { x: self.x + other.x, y: self.y + other.y }
     }
 }
 
-impl AddAssign for Point {
-    fn add_assign(&mut self, other: Point) {
-        *self = *self + other;
+impl<T: AddAssign> AddAssign for Point<T> {
+    fn add_assign(&mut self, other: Point<T>) {
+        self.x += other.x;
+        self.y += other.y;
     }
 }
 
+impl Into<PointUsize> for GridPoint {
+    fn into(self) -> PointUsize {
+        PointUsize {
+            x: self.x as usize,
+            y: self.y as usize,
+        }
+    }
+}
+
+impl From<PointUsize> for GridPoint {
+    fn from(point: PointUsize) -> GridPoint {
+        GridPoint {
+            x: point.x as CoordType,
+            y: point.y as CoordType,
+        }
+    }
+}
+
+
 impl Rectangle {
-    pub fn contains(&self, p: Point) -> bool {
+    pub fn contains(&self, p: GridPoint) -> bool {
         self.p0.x <= p.x && p.x < self.p1.x &&
         self.p0.y <= p.y && p.y < self.p1.y
     }
@@ -495,13 +525,5 @@ impl Rectangle {
     pub fn empty(&self) -> bool {
         self.p0.x >= self.p1.x ||
         self.p0.y >= self.p1.y
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn board_from_api() {
-        // TODO
     }
 }

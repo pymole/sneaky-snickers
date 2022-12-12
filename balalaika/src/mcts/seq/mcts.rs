@@ -57,22 +57,22 @@ impl Search<SequentialMCTSConfig> for SequentialMCTS {
             // info!("iteration {}", i);
             self.rollout(board);
         }
-        self.print_stats(board);
     }
 
-    fn search_with_time(&mut self, board: &Board, target_duration: Duration) {
+    fn search_with_time(&mut self, board: &Board, target_duration: Duration) -> usize {
         let time_start = Instant::now();
         let time_end = time_start + target_duration;
 
-        let mut i = 0u32;
+        let mut i = 0;
         while Instant::now() < time_end {
             self.rollout(board);
             i += 1;
         }
 
-        let actual_duration = Instant::now() - time_start;
-        self.print_stats(board);
-        info!("Searched {} iterations in {} ms (target={} ms)", i, actual_duration.as_millis(), target_duration.as_millis());
+        // let actual_duration = Instant::now() - time_start;
+        // self.print_stats(board);
+        // info!("Searched {} iterations in {} ms (target={} ms)", i, actual_duration.as_millis(), target_duration.as_millis());
+        i
     }
 
     fn get_final_movement(&self, board: &Board, agent_index: usize) -> Movement {
@@ -96,6 +96,7 @@ impl SequentialMCTS {
         }
     }
 
+    #[allow(dead_code)]
     fn print_stats(&self, board: &Board) {
         let node = self.nodes.get(&board.zobrist_hash.get_value()).unwrap().borrow();
 

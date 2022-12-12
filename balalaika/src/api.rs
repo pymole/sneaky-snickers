@@ -1,12 +1,7 @@
 pub mod objects {
     use std::fmt;
     use serde::{Serialize, Deserialize};
-
-    #[derive(Serialize, Deserialize, PartialEq, Eq, Hash, Debug, Copy, Clone)]
-    pub struct Point {
-        pub x: i32,
-        pub y: i32,
-    }
+    use crate::game::{GridPoint, CoordType};
 
     #[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
     pub struct State {
@@ -31,10 +26,10 @@ pub mod objects {
 
     #[derive(Serialize, Deserialize, PartialEq, Eq, Debug, Clone)]
     pub struct Board {
-        pub height: i32,
-        pub width: i32,
-        pub food: Vec<Point>,
-        pub hazards: Vec<Point>,
+        pub height: CoordType,
+        pub width: CoordType,
+        pub food: Vec<GridPoint>,
+        pub hazards: Vec<GridPoint>,
         pub snakes: Vec<Snake>,
     }
 
@@ -43,9 +38,9 @@ pub mod objects {
         pub id: String,
         pub name: String,
         pub health: i32,
-        pub body: Vec<Point>,
+        pub body: Vec<GridPoint>,
         pub latency: String,
-        pub head: Point,
+        pub head: GridPoint,
         pub length: u32,
         #[serde(default)]
         pub shout: String,

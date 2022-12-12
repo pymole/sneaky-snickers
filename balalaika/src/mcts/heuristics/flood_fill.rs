@@ -1,6 +1,6 @@
 use crate::{
     game::{
-        Point, Board, MAX_SNAKE_COUNT, WIDTH, HEIGHT, SIZE
+        Board, MAX_SNAKE_COUNT, WIDTH, HEIGHT, SIZE, GridPoint
     },
     mcts::utils::movement_positions_wrapped
 };
@@ -31,7 +31,7 @@ impl Default for ContendersInfo {
 pub fn flood_fill(board: &Board) -> FloodFill {
     let mut sizes = [0; MAX_SNAKE_COUNT];
 
-    let mut flood_fronts: [Vec<Point>; MAX_SNAKE_COUNT] = Default::default();
+    let mut flood_fronts: [Vec<GridPoint>; MAX_SNAKE_COUNT] = Default::default();
     // let mut seized_points: [Vec<Point>; MAX_SNAKE_COUNT] = Default::default();
     let mut seized_points = [0f32; MAX_SNAKE_COUNT];
 

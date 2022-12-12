@@ -9,8 +9,8 @@ use crate::game::{
     Board,
     Snake,
     MAX_SNAKE_COUNT,
-    Point,
-    WIDTH, HEIGHT,
+    GridPoint,
+    WIDTH, HEIGHT, CENTER,
 };
 
 pub fn generate_board() -> Board {
@@ -37,18 +37,18 @@ fn make_snakes() -> ArrayVec<Snake, MAX_SNAKE_COUNT> {
 
     let mut start_points = if rng.gen_bool(0.5) {
         let corner_points = [
-            Point {x: mn, y: mn},
-            Point {x: mn, y: mx},
-            Point {x: mx, y: mn},
-            Point {x: mx, y: mx},
+            GridPoint {x: mn, y: mn},
+            GridPoint {x: mn, y: mx},
+            GridPoint {x: mx, y: mn},
+            GridPoint {x: mx, y: mx},
         ];
         corner_points
     } else {
         let cardinal_points = [
-            Point {x: mn, y: md},
-            Point {x: md, y: mn},
-            Point {x: md, y: mx},
-            Point {x: mx, y: md},
+            GridPoint {x: mn, y: md},
+            GridPoint {x: md, y: mn},
+            GridPoint {x: md, y: mx},
+            GridPoint {x: mx, y: md},
         ];
         cardinal_points
     };
@@ -67,10 +67,10 @@ fn make_snakes() -> ArrayVec<Snake, MAX_SNAKE_COUNT> {
     snakes
 }
 
-fn make_food(snakes: &ArrayVec<Snake, MAX_SNAKE_COUNT>) -> Vec<Point> {
+fn make_food(snakes: &ArrayVec<Snake, MAX_SNAKE_COUNT>) -> Vec<GridPoint> {
     let rng = &mut thread_rng();
 
-	let center = Point {
+	let center = GridPoint {
         x: (WIDTH - 1) / 2,
         y: (HEIGHT - 1) / 2,
     };
@@ -81,10 +81,10 @@ fn make_food(snakes: &ArrayVec<Snake, MAX_SNAKE_COUNT>) -> Vec<Point> {
     for snake in snakes {
         let head = snake.head();
         let possible_food_locations = [
-            Point {x: head.x - 1, y: head.y - 1},
-            Point {x: head.x - 1, y: head.y + 1},
-            Point {x: head.x + 1, y: head.y - 1},
-            Point {x: head.x + 1, y: head.y + 1},
+            GridPoint {x: head.x - 1, y: head.y - 1},
+            GridPoint {x: head.x - 1, y: head.y + 1},
+            GridPoint {x: head.x + 1, y: head.y - 1},
+            GridPoint {x: head.x + 1, y: head.y + 1},
         ];
 
         // Remove any invalid/unwanted positions
@@ -117,4 +117,40 @@ fn make_food(snakes: &ArrayVec<Snake, MAX_SNAKE_COUNT>) -> Vec<Point> {
 	foods.push(center);
 
 	foods
+}
+
+pub fn static_board() -> Board {
+    let mut snakes = ArrayVec::new();
+    snakes.push(
+        Snake {
+            health: 100,
+            body: vec![GridPoint {x: 1, y: 1}, GridPoint {x: 1, y: 1}, GridPoint {x: 1, y: 1}].into(),
+        }
+    );
+    snakes.push(
+        Snake {
+            health: 100,
+            body: vec![GridPoint {x: 9, y: 1}, GridPoint {x: 9, y: 1}, GridPoint {x: 9, y: 1}].into(),
+        }
+    );
+    snakes.push(
+        Snake {
+            health: 100,
+            body: vec![GridPoint {x: 9, y: 9}, GridPoint {x: 9, y: 9}, GridPoint {x: 9, y: 9}].into(),
+        }
+    );
+    snakes.push(
+        Snake {
+            health: 100,
+            body: vec![GridPoint {x: 1, y: 9}, GridPoint {x: 1, y: 9}, GridPoint {x: 1, y: 9}].into(),
+        }
+    );
+    let foods = vec![CENTER];
+    let board = Board::new(
+        0,
+        Some(foods),
+        None,
+        snakes,
+    );
+    board
 }

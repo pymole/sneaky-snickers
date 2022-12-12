@@ -1,21 +1,22 @@
 use crate::{
     game::{
+        self,
         WIDTH,
         HEIGHT,
         Board,
-        MAX_SNAKE_COUNT,
         Point,
-        SIZE, CENTER, Snake,
+        CENTER,
+        Snake, GridPoint,
     },
     zobrist::{body_direction, BodyDirections}
 };
 
 
-pub type Rewards = ([f32; MAX_SNAKE_COUNT], bool);
+pub type Rewards = ([f32; game::MAX_SNAKE_COUNT], bool);
 
 pub fn get_rewards(board: &Board) -> Rewards {
     debug_assert!(board.is_terminal());
-    let mut rewards = [0.0; MAX_SNAKE_COUNT];
+    let mut rewards = [0.0; game::MAX_SNAKE_COUNT];
     let mut draw = true;
     for (i, snake) in board.snakes.iter().enumerate() {
         if snake.is_alive() {
@@ -30,42 +31,48 @@ pub fn get_rewards(board: &Board) -> Rewards {
 
 // NNUE Features
 
-const MAX_BODIES_ON_TAIL: usize = 3;
-const ALL_PLAYERS_GRIDS_SIZE: usize = MAX_SNAKE_COUNT * SIZE;
-const HEALTH_BARS: usize = 101;
+// i64 for torch sparse tensor
+type IndexType = i64;
 
-const HEADS_AT: usize = 0;
-const TAILS_AT: usize = ALL_PLAYERS_GRIDS_SIZE;
-const BODY_PARTS_AT: usize = TAILS_AT + ALL_PLAYERS_GRIDS_SIZE;
-const BODIES_ON_TAIL_AT: usize = BODY_PARTS_AT + ALL_PLAYERS_GRIDS_SIZE * 5;
-const FOOD_AT: usize = BODIES_ON_TAIL_AT + MAX_BODIES_ON_TAIL * MAX_SNAKE_COUNT;
-const HAZARD_AT: usize = FOOD_AT + SIZE;
-const HEALTH_AT: usize = HAZARD_AT + SIZE;
-pub const TOTAL_FEATURES_SIZE: usize = HEALTH_AT + MAX_SNAKE_COUNT * HEALTH_BARS;
+const SIZE: IndexType = game::SIZE as IndexType;
+const MAX_SNAKE_COUNT: IndexType = game::MAX_SNAKE_COUNT as IndexType;
+
+const MAX_BODIES_ON_TAIL: IndexType = 3;
+const ALL_PLAYERS_GRIDS_SIZE: IndexType = MAX_SNAKE_COUNT * SIZE;
+const HEALTH_BARS: IndexType = 101;
+
+const HEADS_AT: IndexType = 0;
+const TAILS_AT: IndexType = ALL_PLAYERS_GRIDS_SIZE;
+const BODY_PARTS_AT: IndexType = TAILS_AT + ALL_PLAYERS_GRIDS_SIZE;
+const BODIES_ON_TAIL_AT: IndexType = BODY_PARTS_AT + ALL_PLAYERS_GRIDS_SIZE * 5;
+const FOOD_AT: IndexType = BODIES_ON_TAIL_AT + MAX_BODIES_ON_TAIL * MAX_SNAKE_COUNT;
+const HAZARD_AT: IndexType = FOOD_AT + SIZE;
+const HEALTH_AT: IndexType = HAZARD_AT + SIZE;
+pub const TOTAL_FEATURES_SIZE: IndexType = HEALTH_AT + MAX_SNAKE_COUNT * HEALTH_BARS;
 
 
-const fn calculate_owner_heads_at() -> [usize; MAX_SNAKE_COUNT] {
-    let mut owner_heads_at = [0; MAX_SNAKE_COUNT];
+const fn calculate_owner_heads_at() -> [IndexType; game::MAX_SNAKE_COUNT] {
+    let mut owner_heads_at = [0; game::MAX_SNAKE_COUNT];
     let mut i = 0;
     while i < MAX_SNAKE_COUNT {
-        owner_heads_at[i] = HEADS_AT + i * SIZE;
+        owner_heads_at[i as usize] = HEADS_AT + i * SIZE;
         i += 1;
     }
     owner_heads_at
 }
 
-const fn calculate_owner_tails_at() -> [usize; MAX_SNAKE_COUNT] {
-    let mut owner_tails_at = [0; MAX_SNAKE_COUNT];
+const fn calculate_owner_tails_at() -> [IndexType; game::MAX_SNAKE_COUNT] {
+    let mut owner_tails_at = [0; game::MAX_SNAKE_COUNT];
     let mut i = 0;
     while i < MAX_SNAKE_COUNT {
-        owner_tails_at[i] = TAILS_AT + i * SIZE;
+        owner_tails_at[i as usize] = TAILS_AT + i * SIZE;
         i += 1;
     }
     owner_tails_at
 }
 
-const fn calculate_owner_body_parts_at() -> [[usize; 5]; MAX_SNAKE_COUNT] {
-    let mut owner_body_parts_at = [[0; 5]; MAX_SNAKE_COUNT];
+const fn calculate_owner_body_parts_at() -> [[IndexType; 5]; game::MAX_SNAKE_COUNT] {
+    let mut owner_body_parts_at = [[0; 5]; game::MAX_SNAKE_COUNT];
     let mut i = 0;
     let mut d;
     let mut owner_offset;
@@ -73,7 +80,7 @@ const fn calculate_owner_body_parts_at() -> [[usize; 5]; MAX_SNAKE_COUNT] {
         d = 0;
         owner_offset = BODY_PARTS_AT + i * SIZE * 5;
         while d < 5 {
-            owner_body_parts_at[i][d] = owner_offset + d * SIZE;
+            owner_body_parts_at[i as usize][d] = owner_offset + d as IndexType * SIZE;
             d += 1;
         }
         i += 1;
@@ -81,63 +88,63 @@ const fn calculate_owner_body_parts_at() -> [[usize; 5]; MAX_SNAKE_COUNT] {
     owner_body_parts_at
 }
 
-const fn calculate_owner_bodies_on_tail_at() -> [usize; MAX_SNAKE_COUNT] {
-    let mut owner_bodies_on_tail_at = [0; MAX_SNAKE_COUNT];
+const fn calculate_owner_bodies_on_tail_at() -> [IndexType; game::MAX_SNAKE_COUNT] {
+    let mut owner_bodies_on_tail_at = [0; game::MAX_SNAKE_COUNT];
     let mut i = 0;
     while i < MAX_SNAKE_COUNT {
-        owner_bodies_on_tail_at[i] = BODIES_ON_TAIL_AT + i * MAX_BODIES_ON_TAIL;
+        owner_bodies_on_tail_at[i as usize] = BODIES_ON_TAIL_AT + i * MAX_BODIES_ON_TAIL;
         i += 1;
     }
     owner_bodies_on_tail_at
 }
 
-const fn calculate_owner_health_at() -> [usize; MAX_SNAKE_COUNT] {
-    let mut owner_on_health_at = [0; MAX_SNAKE_COUNT];
+const fn calculate_owner_health_at() -> [IndexType; game::MAX_SNAKE_COUNT] {
+    let mut owner_on_health_at = [0; game::MAX_SNAKE_COUNT];
     let mut i = 0;
     while i < MAX_SNAKE_COUNT {
-        owner_on_health_at[i] = HEALTH_AT + i * HEALTH_BARS;
+        owner_on_health_at[i as usize] = HEALTH_AT + i * HEALTH_BARS;
         i += 1;
     }
     owner_on_health_at
 }
 
-const OWNER_HEADS_AT: [usize; MAX_SNAKE_COUNT] = calculate_owner_heads_at();
-const OWNER_TAILS_AT: [usize; MAX_SNAKE_COUNT] = calculate_owner_tails_at();
-const OWNER_BODY_PARTS_AT: [[usize; 5]; MAX_SNAKE_COUNT] = calculate_owner_body_parts_at();
-const OWNER_BODIES_ON_TAIL_AT: [usize; MAX_SNAKE_COUNT] = calculate_owner_bodies_on_tail_at();
-const OWNER_HEALTH_AT: [usize; MAX_SNAKE_COUNT] = calculate_owner_health_at();
+const OWNER_HEADS_AT: [IndexType; game::MAX_SNAKE_COUNT] = calculate_owner_heads_at();
+const OWNER_TAILS_AT: [IndexType; game::MAX_SNAKE_COUNT] = calculate_owner_tails_at();
+const OWNER_BODY_PARTS_AT: [[IndexType; 5]; game::MAX_SNAKE_COUNT] = calculate_owner_body_parts_at();
+const OWNER_BODIES_ON_TAIL_AT: [IndexType; game::MAX_SNAKE_COUNT] = calculate_owner_bodies_on_tail_at();
+const OWNER_HEALTH_AT: [IndexType; game::MAX_SNAKE_COUNT] = calculate_owner_health_at();
 
-fn get_head_index(owner: usize, head: Point) -> usize {
+fn get_head_index(owner: usize, head: GridPoint) -> IndexType {
     OWNER_HEADS_AT[owner] + get_point_index(head)
 }
 
-fn get_tail_index(owner: usize, tail: Point) -> usize {
+fn get_tail_index(owner: usize, tail: GridPoint) -> IndexType {
     OWNER_TAILS_AT[owner] + get_point_index(tail)
 }
 
-fn get_body_part_index(owner: usize, body: Point, body_direction: BodyDirections) -> usize {
+fn get_body_part_index(owner: usize, body: GridPoint, body_direction: BodyDirections) -> IndexType {
     OWNER_BODY_PARTS_AT[owner][body_direction as usize] + get_point_index(body)
 }
 
-fn get_bodies_on_tail_index(owner: usize, bodies_on_tail: usize) -> usize {
+fn get_bodies_on_tail_index(owner: usize, bodies_on_tail: IndexType) -> IndexType {
     OWNER_BODIES_ON_TAIL_AT[owner] + bodies_on_tail - 1
 }
 
-fn get_food_index(food: Point) -> usize {
+fn get_food_index(food: GridPoint) -> IndexType {
     FOOD_AT + get_point_index(food)
 }
 
-fn get_hazard_index(hazard: Point) -> usize {
+fn get_hazard_index(hazard: GridPoint) -> IndexType {
     HAZARD_AT + get_point_index(hazard)
 }
 
-fn get_health_index(owner: usize, health: i32) -> usize {
-    OWNER_HEALTH_AT[owner] + health as usize
+fn get_health_index(owner: usize, health: IndexType) -> IndexType {
+    OWNER_HEALTH_AT[owner] + health
 }
 
 #[derive(Clone)]
 pub struct IndicesCollector {
-    pub indices: Vec<usize>,
+    pub indices: Vec<IndexType>,
 }
 
 impl IndicesCollector {
@@ -145,35 +152,35 @@ impl IndicesCollector {
         IndicesCollector { indices: Vec::new() }
     }
 
-    pub fn health(&mut self, owner: usize, health: i32) {
+    pub fn health(&mut self, owner: usize, health: IndexType) {
         self.add(get_health_index(owner, health));
     }
 
-    pub fn head(&mut self, owner: usize, pos: Point) {
+    pub fn head(&mut self, owner: usize, pos: GridPoint) {
         self.add(get_head_index(owner, pos));
     }
 
-    pub fn tail(&mut self, owner: usize, pos: Point) {
+    pub fn tail(&mut self, owner: usize, pos: GridPoint) {
         self.add(get_tail_index(owner, pos));
     }
 
-    pub fn body_direction(&mut self, owner: usize, body: Point, body_direction: BodyDirections) {
+    pub fn body_direction(&mut self, owner: usize, body: GridPoint, body_direction: BodyDirections) {
         self.add(get_body_part_index(owner, body, body_direction));
     }
 
-    pub fn bodies_on_tail(&mut self, owner: usize, bodies_on_tail: usize) {
+    pub fn bodies_on_tail(&mut self, owner: usize, bodies_on_tail: IndexType) {
         self.add(get_bodies_on_tail_index(owner, bodies_on_tail));
     }
 
-    pub fn food(&mut self, pos: Point) {
+    pub fn food(&mut self, pos: GridPoint) {
         self.add(get_food_index(pos));
     }
 
-    pub fn hazard(&mut self, pos: Point) {
+    pub fn hazard(&mut self, pos: GridPoint) {
         self.add(get_hazard_index(pos));
     }
 
-    fn add(&mut self, i: usize) {
+    fn add(&mut self, i: IndexType) {
         self.indices.push(i);
     }
 }
@@ -188,9 +195,9 @@ impl IndicesCollector {
 /// Flips on rotation: 3
 /// Snake positions permutations: A(n=MAX_SNAKES_COUNT, k=alive_snakes_count)
 
-pub type Example = (Vec<usize>, [f32; MAX_SNAKE_COUNT]);
+pub type Example = (Vec<IndexType>, [f32; game::MAX_SNAKE_COUNT]);
 
-pub fn collect_examples(board: &Board, rewards: [f32; MAX_SNAKE_COUNT]) -> Vec<Example> {
+pub fn collect_examples(board: &Board, rewards: [f32; game::MAX_SNAKE_COUNT]) -> Vec<Example> {
     let alive_snakes: Vec<(usize, &Snake)> = board.snakes.iter().enumerate().filter(|(_, snake)| snake.is_alive()).collect();
     assert!(!alive_snakes.is_empty());
     // TODO: precalulate permutations
@@ -198,7 +205,7 @@ pub fn collect_examples(board: &Board, rewards: [f32; MAX_SNAKE_COUNT]) -> Vec<E
     let perm_count = alive_permutations.len();
 
     let mut collectors = vec![IndicesCollector::new(); 12 * perm_count];
-    let mut rewards_collectors = vec![[0.0; MAX_SNAKE_COUNT]; 12 * perm_count];
+    let mut rewards_collectors = vec![[0.0; game::MAX_SNAKE_COUNT]; 12 * perm_count];
 
     for (alive_i, (snake_i, snake)) in alive_snakes.into_iter().enumerate() {
         // (owner[snakes], health[101])
@@ -208,7 +215,7 @@ pub fn collect_examples(board: &Board, rewards: [f32; MAX_SNAKE_COUNT]) -> Vec<E
             &mut collectors,
             &alive_permutations,
             |collector: &mut IndicesCollector, owner: usize| {
-                collector.health(owner, health);
+                collector.health(owner, health as IndexType);
             },
         );
 
@@ -277,7 +284,7 @@ pub fn collect_examples(board: &Board, rewards: [f32; MAX_SNAKE_COUNT]) -> Vec<E
         );
 
         // (bodies_on_tail[3 * snakes], )
-        let bodies_on_tail = snake.body.len() - nearest_to_head_body_on_tail_index;
+        let bodies_on_tail = (snake.body.len() - nearest_to_head_body_on_tail_index) as IndexType;
         debug_assert!(bodies_on_tail <= MAX_BODIES_ON_TAIL);
         
         snake_parameter_filler(
@@ -334,11 +341,11 @@ pub fn collect_examples(board: &Board, rewards: [f32; MAX_SNAKE_COUNT]) -> Vec<E
 }
 
 fn snake_point_filler(
-    point: Point,
+    point: GridPoint,
     alive_index: usize,
     collectors: &mut Vec<IndicesCollector>,
     permutations: &Vec<Vec<usize>>,
-    func: fn(&mut IndicesCollector, usize, Point),
+    func: fn(&mut IndicesCollector, usize, GridPoint),
 ) {
     let perm_count = permutations.len();
     for (rot_i, rot) in rotate_point(point).into_iter().enumerate() {
@@ -377,7 +384,7 @@ fn snake_parameter_filler<F: Fn(&mut IndicesCollector, usize)>(
 }
 
 fn snake_body_part_filler(
-    point: Point,
+    point: GridPoint,
     direction: BodyDirections,
     alive_index: usize,
     collectors: &mut Vec<IndicesCollector>,
@@ -400,10 +407,10 @@ fn snake_body_part_filler(
 
 
 fn grid_point_filler(
-    point: Point,
+    point: GridPoint,
     permutations_count: usize,
     collectors: &mut Vec<IndicesCollector>,
-    func: fn(&mut IndicesCollector, Point),
+    func: fn(&mut IndicesCollector, GridPoint),
 ) {
     for (rot_i, rot) in rotate_point(point).into_iter().enumerate() {
         let flips_at = rot_i * 3 * permutations_count;
@@ -421,7 +428,7 @@ fn grid_point_filler(
 fn rewards_filler(
     reward: f32,
     alive_index: usize,
-    rewards: &mut Vec<[f32; MAX_SNAKE_COUNT]>,
+    rewards: &mut Vec<[f32; game::MAX_SNAKE_COUNT]>,
     permutations: &Vec<Vec<usize>>,
 ) {
     
@@ -439,14 +446,14 @@ fn rewards_filler(
     }
 }
 
-fn get_point_index(p: Point) -> usize {
-    (p.y * HEIGHT + p.x) as usize
+fn get_point_index(p: GridPoint) -> IndexType {
+    (p.y * HEIGHT + p.x) as IndexType
 }
 
 // NOTE: Flips for x and y together are created by 180 rotation so
 // we don't need to do x + y flip
 
-fn flip_point(p: Point) -> [Point; 3] {
+fn flip_point(p: GridPoint) -> [GridPoint; 3] {
     [
         Point {x: p.x, y: p.y},                             // original
         Point {x: WIDTH - p.x - 1, y: p.y},                 // x-flip
@@ -455,13 +462,13 @@ fn flip_point(p: Point) -> [Point; 3] {
     ]
 }
 
-fn rotate_point(p: Point) -> [Point; 4] {
+fn rotate_point(p: GridPoint) -> [GridPoint; 4] {
     let diff = Point {x: p.x - CENTER.x, y: p.y - CENTER.y};
     [
-        Point {x: p.x, y: p.y},
-        Point {x: CENTER.x + 0 * diff.x + 1 * diff.y, y: CENTER.y - 1 * diff.x + 0 * diff.y},  // Units x=(0, -1); y=(1, 0)
-        Point {x: CENTER.x - 1 * diff.x + 0 * diff.y, y: CENTER.y + 0 * diff.x - 1 * diff.y},  // Units x=(-1, 0); y=(0, -1)
-        Point {x: CENTER.x + 0 * diff.x - 1 * diff.y, y: CENTER.y + 1 * diff.x + 0 * diff.y},  // Units x=(0, 1); y=(-1, 0)
+        GridPoint {x: p.x, y: p.y},
+        GridPoint {x: CENTER.x + 0 * diff.x + 1 * diff.y, y: CENTER.y - 1 * diff.x + 0 * diff.y},  // Units x=(0, -1); y=(1, 0)
+        GridPoint {x: CENTER.x - 1 * diff.x + 0 * diff.y, y: CENTER.y + 0 * diff.x - 1 * diff.y},  // Units x=(-1, 0); y=(0, -1)
+        GridPoint {x: CENTER.x + 0 * diff.x - 1 * diff.y, y: CENTER.y + 1 * diff.x + 0 * diff.y},  // Units x=(0, 1); y=(-1, 0)
     ]
 }
 
@@ -492,9 +499,9 @@ fn rotate_body_direction(body_direction: BodyDirections) -> [BodyDirections; 4] 
 }
 
 fn get_permutations(alive_snakes_count: usize) -> Vec<Vec<usize>> {
-    assert!(alive_snakes_count <= MAX_SNAKE_COUNT);
+    assert!(alive_snakes_count <= game::MAX_SNAKE_COUNT);
 
-    let mut is_selected = [false; MAX_SNAKE_COUNT];
+    let mut is_selected = [false; game::MAX_SNAKE_COUNT];
     let mut permutations = Vec::new();
 
     let mut seq = vec![0; alive_snakes_count];
@@ -503,7 +510,7 @@ fn get_permutations(alive_snakes_count: usize) -> Vec<Vec<usize>> {
 
     loop {
         loop {
-            while n == MAX_SNAKE_COUNT {
+            while n == game::MAX_SNAKE_COUNT {
                 if i == 0 {
                     return permutations;
                 }
@@ -534,7 +541,7 @@ fn get_permutations(alive_snakes_count: usize) -> Vec<Vec<usize>> {
     }
 }
 
-pub fn get_features_indices(board: &Board) -> Vec<usize> {
+pub fn get_features_indices(board: &Board) -> Vec<IndexType> {
     let mut collector = IndicesCollector::new();
 
     for (owner, snake) in board.snakes.iter().enumerate() {
@@ -544,7 +551,7 @@ pub fn get_features_indices(board: &Board) -> Vec<usize> {
 
         // (owner[snakes], health[101])
         let health = snake.health;
-        collector.health(owner, health);
+        collector.health(owner, health as IndexType);
 
         // (owner[snakes], head[grid])
         let head = snake.head();
@@ -577,7 +584,7 @@ pub fn get_features_indices(board: &Board) -> Vec<usize> {
         collector.body_direction(owner, head, BodyDirections::Still);
 
         // (bodies_on_tail[3 * snakes], )
-        let bodies_on_tail = snake.body.len() - nearest_to_head_body_on_tail_index;
+        let bodies_on_tail = (snake.body.len() - nearest_to_head_body_on_tail_index) as IndexType;
         debug_assert!(bodies_on_tail <= MAX_BODIES_ON_TAIL);
         
         collector.bodies_on_tail(owner, bodies_on_tail);

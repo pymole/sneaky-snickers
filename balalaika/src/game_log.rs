@@ -9,13 +9,12 @@ use mongodb::results::InsertOneResult;
 use crate::api::objects::{State, Movement};
 use crate::engine::safe_zone_shrinker::shrink;
 use crate::engine::{EngineSettings, advance_one_step_with_settings};
-use crate::game::{Point, Board, Snake, MAX_SNAKE_COUNT, WIDTH, HEIGHT, Rectangle};
+use crate::game::{Point, Board, Snake, MAX_SNAKE_COUNT, WIDTH, HEIGHT, Rectangle, GridPoint, CoordType};
 use crate::zobrist::{body_direction, BodyDirections};
 
 use bitvec::prelude::*;
 use mongodb::sync::Client;
 use serde::{Deserialize, Serialize};
-
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct GameLog {
@@ -31,7 +30,7 @@ pub struct GameLog {
 }
 
 impl GameLog {
-    pub fn get_foods(&self) -> Vec<Option<Point>> {
+    pub fn get_foods(&self) -> Vec<Option<GridPoint>> {
         let mut foods = Vec::new();
         let foods_bits: BitVec<u8, Msb0> = BitVec::from_vec(self.food.clone());
 
@@ -39,13 +38,15 @@ impl GameLog {
         for _ in 0..self.turns {
             let is_spawned = foods_bits[i];
             if is_spawned {
+                // TODO: Use u64 instead of u32 to allow bigger grid coords types.
+                //  Now we can store only i8, i16, i32
                 let x: u32 = foods_bits[i + 1 .. i + 5].load_be();
                 let y: u32 = foods_bits[i + 5 .. i + 9].load_be();
 
                 assert!(x < WIDTH as u32, "{}", x);
                 assert!(y < HEIGHT as u32, "{}", y);
                 
-                foods.push(Some(Point {x: x as i32, y: y as i32}));
+                foods.push(Some(Point {x: x as CoordType, y: y as CoordType}));
 
                 i += 9;
             } else {
@@ -82,7 +83,7 @@ impl GameLog {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 struct BoardLog {
-    food: Vec<Point>,
+    food: Vec<GridPoint>,
     safe_zone: Rectangle,
     snakes: ArrayVec<Snake, MAX_SNAKE_COUNT>,
 }
@@ -90,7 +91,7 @@ struct BoardLog {
 #[derive(Debug, Serialize, Deserialize)]
 struct SnakeLog {
     pub health: i32,
-    pub body: Vec<Point>,
+    pub body: Vec<GridPoint>,
 }
 
 
@@ -98,7 +99,7 @@ struct SnakeLog {
 pub struct GameLogBuilder {
     // TODO: Use only inside selfplay, because Battlesnake API don't send
     // dead snakes and we can't figure out where they moved last turn.
-    current_decomposition: ([Point; MAX_SNAKE_COUNT], HashSet<Point>, Rectangle),
+    current_decomposition: ([GridPoint; MAX_SNAKE_COUNT], HashSet<GridPoint>, Rectangle),
     initial_board: BoardLog,
     actions: BitVec<u8, Msb0>,
     food: BitVec<u8, Msb0>,
@@ -119,12 +120,12 @@ impl GameLogBuilder {
     pub fn new(
         snakes: ArrayVec<Snake, MAX_SNAKE_COUNT>,
         safe_zone: Rectangle,
-        foods: &Vec<Point>,
+        foods: &Vec<GridPoint>,
     ) -> GameLogBuilder {
         let food = foods.iter().copied().collect();
 
-        let heads: [Point; MAX_SNAKE_COUNT] = {
-            let mut heads: [MaybeUninit<Point>; MAX_SNAKE_COUNT] = unsafe { MaybeUninit::uninit().assume_init() };
+        let heads: [GridPoint; MAX_SNAKE_COUNT] = {
+            let mut heads: [MaybeUninit<GridPoint>; MAX_SNAKE_COUNT] = unsafe { MaybeUninit::uninit().assume_init() };
             for (i, snake) in snakes.iter().enumerate() {
                 heads[i] = MaybeUninit::new(snake.head());
             }
@@ -169,15 +170,15 @@ impl GameLogBuilder {
     pub fn add_turn(
         &mut self,
         snakes: &ArrayVec<Snake, MAX_SNAKE_COUNT>,
-        foods: &Vec<Point>,
+        foods: &Vec<GridPoint>,
         safe_zone: Rectangle,
     ) {
         self.turns += 1;
 
         // Actions
         
-        let heads: [Point; MAX_SNAKE_COUNT] = {
-            let mut heads: [MaybeUninit<Point>; MAX_SNAKE_COUNT] = unsafe { MaybeUninit::uninit().assume_init() };
+        let heads: [GridPoint; MAX_SNAKE_COUNT] = {
+            let mut heads: [MaybeUninit<GridPoint>; MAX_SNAKE_COUNT] = unsafe { MaybeUninit::uninit().assume_init() };
 
             let old_heads = &self.current_decomposition.0;
 
@@ -390,10 +391,10 @@ mod tests {
     use super::{GameLogBuilder, rewind, GameLog};
     use crate::board_generator::generate_board;
     use crate::engine::food_spawner;
+    use crate::game::PointUsize;
     use crate::game_log::{save_game_log, load_game_log};
     use crate::mcts::utils::get_random_actions_from_masks;
     use crate::{
-        game::Point,
         engine::{advance_one_step_with_settings, EngineSettings, safe_zone_shrinker}
     };
     
@@ -403,7 +404,7 @@ mod tests {
 
         let client = Client::with_uri_str("mongodb://battlesnake:battlesnake@localhost:27017/battlesnake?authSource=admin").unwrap();
         let db = client.default_database().expect("Provide default database");
-        db.collection::<GameLog>("rewind_test").drop(None);
+        db.collection::<GameLog>("rewind_test").drop(None).unwrap();
         db.create_collection("rewind_test", None).expect("Collection rewind_test isn't created");
 
         let mut random = thread_rng();
@@ -470,7 +471,7 @@ mod tests {
                 // map is also corrupted
 
                 assert_eq!(
-                    HashSet::<Point, RandomState>::from_iter(actual_boards[i].objects.empties.iter().copied()),
+                    HashSet::<PointUsize, RandomState>::from_iter(actual_boards[i].objects.empties.iter().copied()),
                     HashSet::from_iter(boards[i].objects.empties.iter().copied()),
                     "{}\n\n{:?}", board, board
                 );

@@ -24,7 +24,7 @@ class NNUE(pl.LightningModule):
             nn.Linear(L2, L3),
             nn.ReLU(),
             nn.Linear(L3, L4),
-            nn.Softmax(),
+            nn.Softmax(dim=0),
         )
         self.ce = nn.CrossEntropyLoss()
 

@@ -2,7 +2,7 @@ use std::hash::Hasher;
 
 use serde::{Serialize, Deserialize};
 
-use crate::game::Point;
+use crate::game::{GridPoint, PointUsize};
 
 type ValueInt = u64;
 
@@ -48,12 +48,12 @@ impl ZobristHash {
         }
     }
 
-    pub fn xor_body_direction(&mut self, point: Point, player: usize, direction: BodyDirections) {
-        self.value ^= BODY_DIRECTIONS[point.x as usize][point.y as usize][player][direction as usize];
+    pub fn xor_body_direction(&mut self, point: PointUsize, player: usize, direction: BodyDirections) {
+        self.value ^= BODY_DIRECTIONS[point.x][point.y][player][direction as usize];
     }
 
-    pub fn xor_food(&mut self, point: Point) {
-        self.value ^= FOOD[point.x as usize][point.y as usize];
+    pub fn xor_food(&mut self, point: PointUsize) {
+        self.value ^= FOOD[point.x][point.y];
     }
 
     pub fn xor_turn(&mut self, turn: i32) {
@@ -91,7 +91,7 @@ impl Default for ZobristHasher {
     }
 }
 
-pub fn body_direction(start: Point, target: Point) -> BodyDirections {
+pub fn body_direction(start: GridPoint, target: GridPoint) -> BodyDirections {
     // Fits wrapped rules
     let diff_x = target.x - start.x;
     let diff_y = target.y - start.y;
