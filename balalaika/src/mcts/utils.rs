@@ -1,12 +1,40 @@
+use std::env;
+use std::str::FromStr;
+use std::time::Duration;
+
 use arrayvec::ArrayVec;
 use rand::{seq::SliceRandom, Rng};
 
 use crate::{api::objects::Movement, game::GridPoint};
 use crate::engine::MOVEMENTS;
-use super::config::Config;
 use super::search::Search;
 use crate::game::{Board, Point, MAX_SNAKE_COUNT, HEIGHT, WIDTH};
 
+
+pub fn parse_env<Value>(key: &str) -> Option<Value>
+where
+    Value: FromStr,
+    <Value as FromStr>::Err: std::fmt::Debug
+{
+    env::var(key).map(|s| s.parse().expect("MCTSConfig: can't parse env variable")).ok()
+}
+
+#[derive(Clone, Copy)]
+pub struct SearchOptions {
+    pub iterations: Option<usize>,
+    pub search_time: Option<Duration>,
+}
+
+impl SearchOptions {
+    pub fn from_env() -> SearchOptions {
+        let config = SearchOptions {
+            iterations: parse_env("MCTS_ITERATIONS"),
+            search_time: parse_env("MCTS_SEARCH_TIME").map(Duration::from_millis),
+        };
+
+        config
+    }
+}
 
 pub fn get_masks(board: &Board) -> [[bool; 4]; MAX_SNAKE_COUNT] {
     // Returns movement masks for alive snakes
@@ -119,19 +147,18 @@ pub fn get_first_able_actions_from_masks(board: &Board) -> [usize; MAX_SNAKE_COU
     actions
 }
 
-pub fn search<C: Config, S: Search<C>>(searcher: &mut S, board: &Board) {
-    let config = searcher.get_config();
-    if let Some(search_time) = config.get_search_time() {
+pub fn search(searcher: &mut impl Search, board: &Board, options: SearchOptions) {
+    if let Some(search_time) = options.search_time {
         searcher.search_with_time(board, search_time);
-    } else if let Some(iterations) = config.get_search_iterations() {
+    } else if let Some(iterations) = options.iterations {
         searcher.search(board, iterations);
     } else {
         panic!("Provide MCTS_SEARCH_TIME or MCTS_ITERATIONS");
     }
 }
 
-pub fn get_best_movement<C: Config, S: Search<C>>(searcher: &mut S, board: &Board, agent: usize) -> Movement {
-    search(searcher, board);
+pub fn get_best_movement(searcher: &mut impl Search, board: &Board, agent: usize, options: SearchOptions) -> Movement {
+    search(searcher, board, options);
     searcher.get_final_movement(board, agent)
 }
 

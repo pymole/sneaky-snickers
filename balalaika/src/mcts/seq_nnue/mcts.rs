@@ -9,14 +9,15 @@ use crate::api::objects::Movement;
 use crate::engine::{EngineSettings, advance_one_step_with_settings, food_spawner, safe_zone_shrinker};
 use crate::game::{Board, MAX_SNAKE_COUNT};
 use crate::mcts::search::Search;
+use crate::nnue::{predict, rewards_from_tensor};
 use crate::zobrist::ZobristHasher;
 use crate::mcts::utils::{get_masks, get_random_actions_from_masks};
-use crate::mcts::heuristics::flood_fill::flood_fill;
 
-use super::config::SequentialMCTSConfig;
+use super::config::SequentialNNUEMCTSConfig;
 
 use super::ucb::UCB;
 type Strategy = UCB;
+
 
 struct Node {
     visits: f32,
@@ -39,14 +40,14 @@ impl Node {
 }
 
 pub struct SequentialMCTS {
-    config: SequentialMCTSConfig,
+    config: SequentialNNUEMCTSConfig,
     nodes: HashMap<u64, RefCell<Node>, BuildHasherDefault<ZobristHasher>>,
 }
 
 impl Search for SequentialMCTS {
     fn search(&mut self, board: &Board, iterations_count: usize) {
         for _i in 0..iterations_count {
-            // info!("iteration {}", i);
+            info!("iteration {}", _i);
             self.rollout(board);
         }
     }
@@ -77,7 +78,7 @@ impl Search for SequentialMCTS {
 }
 
 impl SequentialMCTS {
-    pub fn new(config: SequentialMCTSConfig) -> SequentialMCTS {
+    pub fn new(config: SequentialNNUEMCTSConfig) -> SequentialMCTS {
         SequentialMCTS {
             nodes: HashMap::with_capacity_and_hasher(config.table_capacity, BuildHasherDefault::<ZobristHasher>::default()),
             config,
@@ -212,14 +213,76 @@ impl SequentialMCTS {
             return [self.config.draw_reward; MAX_SNAKE_COUNT];
         }
 
-        let len_sum: f32 = board.snakes.iter().map(|snake| snake.body.len() as f32).sum();
+        let rewards = rewards_from_tensor(predict(&self.config.model, &board));
 
-        let mut rewards = flood_fill(&board);
-
-        for i in 0..board.snakes.len() {
-            rewards[i] *= board.snakes[i].body.len() as f32 / len_sum;
-        }
         // info!("Started at {} turn and rolled out with {} turns and rewards {:?}", start_turn, board.turn - start_turn, rewards);
         rewards
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use tch::CModule;
+
+    use crate::board_generator::generate_board;
+    use crate::engine::advance_one_step;
+    use crate::game::MAX_SNAKE_COUNT;
+    use crate::mcts::search::Search;
+    
+    use super::SequentialNNUEMCTSConfig as NNUEConfig;
+    use super::SequentialMCTS as NNUEMCTS;
+
+    use crate::mcts::seq::SequentialMCTSConfig;
+    use crate::mcts::seq::SequentialMCTS;
+
+    #[test]
+    fn test_load() {
+        let config = NNUEConfig {
+            table_capacity:         200000,
+            rollout_cutoff:         0,
+            draw_reward:            0.00001,
+            max_select_depth:       50,
+            model:                  CModule::load("../analysis/weights/main.pt").unwrap(),
+        };
+        let mut seq_nnue = NNUEMCTS::new(config);
+
+        let config = SequentialMCTSConfig {
+            table_capacity:         200000,
+            rollout_cutoff:         0,
+            draw_reward:            0.01,
+            max_select_depth:       50,
+        };
+        let mut seq = SequentialMCTS::new(config);
+        
+        let mut board = generate_board();
+        while !board.is_terminal() {
+            println!("NNUE {}", seq_nnue.search_with_time(&board, Duration::from_millis(600)));
+            println!("FLOOD {}", seq.search_with_time(&board, Duration::from_millis(600)));
+            
+            let mut actions = [0; MAX_SNAKE_COUNT];
+            seq_nnue.print_stats(&board);
+
+            let mut alive_i = 0;
+
+            for (i, snake) in board.snakes.iter().enumerate() {
+                if !snake.is_alive() {
+                    continue;
+                }
+                if alive_i == 0 {
+                    actions[0] = seq.get_final_movement(&board, 0) as usize;
+                } else {
+                    actions[i] = seq_nnue.get_final_movement(&board, alive_i) as usize;
+                }
+                alive_i += 1;
+            }
+            println!("{:?}", actions);
+            advance_one_step(&mut board, actions);
+            
+            println!("{}", board);
+        }
+        
     }
 }

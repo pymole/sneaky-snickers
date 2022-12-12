@@ -129,8 +129,8 @@ pub mod safe_zone_shrinker {
 #[allow(dead_code)]
 pub fn advance_one_step(board: &mut Board, actions: [usize; MAX_SNAKE_COUNT]) {
     let mut settings = EngineSettings {
-        food_spawner: &mut food_spawner::noop,
-        safe_zone_shrinker: &mut safe_zone_shrinker::noop,
+        food_spawner: &mut food_spawner::create_standard,
+        safe_zone_shrinker: &mut safe_zone_shrinker::standard,
     };
 
     advance_one_step_with_settings(board, &mut settings, actions)

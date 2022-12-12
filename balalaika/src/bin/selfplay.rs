@@ -1,25 +1,16 @@
 use std::env;
 
 use balalaika::board_generator::generate_board;
+use balalaika::mcts::utils::SearchOptions;
 use mongodb::sync::Client;
 use balalaika::engine::{food_spawner, EngineSettings, safe_zone_shrinker, advance_one_step_with_settings};
 use balalaika::game::MAX_SNAKE_COUNT;
 use balalaika::game_log::{save_game_log, GameLogBuilder};
-use mcts::config::Config;
 use mcts::search::Search;
 use mcts::utils::search;
 use balalaika::mcts;
-
-cfg_if::cfg_if! {
-    if #[cfg(feature = "par")] {
-        use mcts::parallel::ParallelMCTS as MCTS;
-        use mcts::parallel::ParallelMCTSConfig as MCTSConfig;
-    } else {
-        use mcts::seq::SequentialMCTS as MCTS;
-        use mcts::seq::SequentialMCTSConfig as MCTSConfig;
-    }
-}
-
+use mcts::seq::SequentialMCTS as MCTS;
+use mcts::seq::SequentialMCTSConfig as MCTSConfig;
 
 fn main() {
     let tag_option = env::var("SELFPLAY_TAG").ok();
@@ -28,6 +19,7 @@ fn main() {
     let client = Client::with_uri_str(uri).unwrap();
 
     let mcts_config = MCTSConfig::from_env();
+    let search_options = SearchOptions::from_env();
 
     let mut engine_settings = EngineSettings {
         food_spawner: &mut food_spawner::create_standard,
@@ -49,7 +41,7 @@ fn main() {
         println!("Starting new game");
         while !board.is_terminal() {
             let mut mcts = MCTS::new(mcts_config.clone());
-            search(&mut mcts, &board);
+            search(&mut mcts, &board, search_options);
 
             let mut actions = [0; MAX_SNAKE_COUNT];
 

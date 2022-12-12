@@ -2,7 +2,7 @@ use std::mem::{MaybeUninit, self};
 
 use tch;
 
-use crate::features::get_features_indices;
+use crate::features::{get_features_indices, TOTAL_FEATURES_SIZE};
 use crate::game::{MAX_SNAKE_COUNT, Board};
 
 
@@ -11,7 +11,12 @@ pub fn predict(model: &tch::CModule, board: &Board) -> tch::Tensor {
     let indices = tch::Tensor::of_slice(features.as_slice());
     let values = tch::Tensor::f_ones(indices.size().as_slice(), (tch::Kind::Float, tch::Device::Cpu)).unwrap();
 
-    let tensor = tch::Tensor::sparse_coo_tensor_indices(&indices.unsqueeze(0), &values, (tch::Kind::Float, tch::Device::Cpu));
+    let tensor = tch::Tensor::sparse_coo_tensor_indices_size(
+        &indices.unsqueeze(0), 
+        &values,
+        &[TOTAL_FEATURES_SIZE],
+        (tch::Kind::Float, tch::Device::Cpu),
+    );
     let x = model.forward_ts(&[tensor]).unwrap();
     x
 }

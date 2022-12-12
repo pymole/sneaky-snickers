@@ -11,7 +11,6 @@ use balalaika::mcts::utils::get_first_able_actions_from_masks;
 use balalaika::nnue::predict;
 use balalaika::mcts::seq::SequentialMCTS;
 use balalaika::mcts::seq::SequentialMCTSConfig;
-use balalaika::mcts::config::Config;
 use balalaika::mcts::search::Search;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 

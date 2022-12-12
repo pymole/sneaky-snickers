@@ -4,6 +4,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
 
+use balalaika::mcts::utils::SearchOptions;
 use rocket::{get, post, options, launch};
 use rocket::fairing::AdHoc;
 use rocket::http::Header;
@@ -24,16 +25,8 @@ use balalaika::{api, mcts};
 use balalaika::game::Board;
 use balalaika::game_log::GameLogBuilder;
 
-use mcts::config::Config as _;
-cfg_if::cfg_if! {
-    if #[cfg(feature = "par")] {
-        use balalaika::mcts::parallel::ParallelMCTS as MCTS;
-        use balalaika::mcts::parallel::ParallelMCTSConfig as MCTSConfig;
-    } else {
-        use mcts::seq::SequentialMCTS as MCTS;
-        use mcts::seq::SequentialMCTSConfig as MCTSConfig;
-    }
-}
+use mcts::seq::SequentialMCTS as MCTS;
+use mcts::seq::SequentialMCTSConfig as MCTSConfig;
 
 struct GameSession {
     mcts: Option<MCTS>,
@@ -43,6 +36,7 @@ struct GameSession {
 struct Storage {
     game_sessions: DashMap<String, Mutex<GameSession>>,
     client: Option<Client>,
+    search_options: SearchOptions,
 }
 
 #[get("/")]
@@ -122,13 +116,13 @@ fn movement(storage: &State<Storage>, body: String) -> Json<api::responses::Move
         }
 
         if let Some(mcts) = game_session.mcts.as_mut() {
-            let movement = get_best_movement(mcts, &board, our_snake_alive_index);
+            let movement = get_best_movement(mcts, &board, our_snake_alive_index, storage.search_options);
             return Json(api::responses::Move::new(movement));
         }
     }
 
     let mut mcts = MCTS::new(MCTSConfig::from_env());
-    let movement = get_best_movement(&mut mcts, &board, our_snake_alive_index);
+    let movement = get_best_movement(&mut mcts, &board, our_snake_alive_index, storage.search_options);
     mcts.shutdown();
     
     Json(api::responses::Move::new(movement))
@@ -195,6 +189,8 @@ fn rocket() -> _ {
         None
     };
 
+    let search_options = SearchOptions::from_env();
+
     rocket::build()
         .attach(AdHoc::on_response("Cors", |_, response| Box::pin(async move {
             response.set_header(Header::new("Access-Control-Allow-Origin", "*"));
@@ -204,7 +200,8 @@ fn rocket() -> _ {
         })))
         .manage(Storage {
             game_sessions: DashMap::new(),
-            client
+            client,
+            search_options,
         })
         .mount("/", routes![index, start, movement, movement_options, end, flood_fill, ff_options])
 }

@@ -48,13 +48,14 @@ impl UCB {
     }
 
     pub fn get_final_movement(&self) -> Movement {
-        let (best_movement, _) = self.visits
+        let action = self.visits
             .iter()
             .enumerate()
             .max_by_key(|(_, &visits)| visits as usize)
-            .unwrap_or((0, &0.0));
+            .map(|(action, _)| action)
+            .unwrap_or(0);
 
-        Movement::from_usize(best_movement)
+        Movement::from_usize(action)
     }
 
     pub fn backpropagate(&mut self, reward: f32, movement: usize) {
@@ -69,7 +70,7 @@ impl UCB {
     }
 
     pub fn print_stats(&self, node_visits: f32) {
-        let n = node_visits as f32;
+        let n = node_visits;
 
         println!("UCB");
         // let selecte_move = get_best_movement_from_movement_visits(ucb_instance.visits);
