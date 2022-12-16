@@ -303,7 +303,7 @@ impl ParallelMCTSWorker {
         self.nodes.insert(node_key, Mutex::new(node));
     }
 
-    fn simulation(&self, board: &Board) -> [f32; MAX_SNAKE_COUNT] {
+    fn simulation(&self, board: &Board) ->Rewards {
         let mut board = board.clone();
         let rollout_cutoff = self.config.rollout_cutoff;
 
@@ -354,7 +354,7 @@ impl ParallelMCTSWorker {
         rewards
     }
 
-    fn backpropagate(&self, path: Vec<(u64, [usize; MAX_SNAKE_COUNT])>, rewards: [f32; MAX_SNAKE_COUNT]) {
+    fn backpropagate(&self, path: Vec<(u64, [usize; MAX_SNAKE_COUNT])>, rewards: Rewards) {
         // let start = Instant::now();
         // info!("{:?}", self.nodes.keys());
         // info!("{:?}", path);

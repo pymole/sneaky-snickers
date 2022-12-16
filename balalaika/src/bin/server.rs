@@ -4,6 +4,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
 
+use balalaika::features::collector::Rewards;
 use balalaika::mcts::utils::SearchOptions;
 use rocket::{get, post, options, launch};
 use rocket::fairing::AdHoc;
@@ -135,7 +136,7 @@ fn ff_options() -> Status {
 }
 
 #[post("/flood_fill", data = "<body>")]
-fn flood_fill(body: String) -> Json<mcts::heuristics::flood_fill::FloodFill> {
+fn flood_fill(body: String) -> Json<Rewards> {
     info!("FLOOD - {}", body);
     let state = serde_json::from_str::<api::objects::State>(&body).unwrap();
     let board = Board::from_api(&state);

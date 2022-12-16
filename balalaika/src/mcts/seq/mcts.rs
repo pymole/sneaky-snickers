@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 
 use crate::api::objects::Movement;
 use crate::engine::{EngineSettings, advance_one_step_with_settings, food_spawner, safe_zone_shrinker};
+use crate::features::collector::Rewards;
 use crate::game::{Board, MAX_SNAKE_COUNT};
 use crate::mcts::search::Search;
 use crate::zobrist::ZobristHasher;
@@ -170,7 +171,7 @@ impl SequentialMCTS {
         self.nodes.insert(board.zobrist_hash.get_value(), RefCell::new(node));
     }
 
-    fn backpropagate(&self, path: Vec<(RefMut<Node>, [usize; MAX_SNAKE_COUNT])>, rewards: [f32; MAX_SNAKE_COUNT]) {
+    fn backpropagate(&self, path: Vec<(RefMut<Node>, [usize; MAX_SNAKE_COUNT])>, rewards: Rewards) {
         // let start = Instant::now();
         // info!("{:?}", self.nodes.keys());
         // info!("{:?}", path);
@@ -186,7 +187,7 @@ impl SequentialMCTS {
         }
     }
 
-    fn simulation(&self, board: &Board) -> [f32; MAX_SNAKE_COUNT] {
+    fn simulation(&self, board: &Board) -> Rewards {
         let mut board = board.clone();
         let rollout_cutoff = self.config.rollout_cutoff;
 

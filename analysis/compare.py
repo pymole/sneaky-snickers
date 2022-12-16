@@ -1,6 +1,6 @@
 import argparse
-import balalaika
 import torch
+import balalaika
 
 from model import NNUE
 import database
@@ -18,17 +18,22 @@ class NNUEPredictor:
         self.model = model
 
     def predict(self, board):
-        indices = balalaika.get_features(board)
-        features = dataset.prepare_feature_inidices(indices)
+        indices, values = balalaika.get_features(board, self.model.composite.feature_sets)
+        print(indices, values)
+        features = dataset.prepare_features(indices, values, self.model.composite.num_features)
+        
         x = self.model(features)
         return torch.round(x, decimals=2)
 
 
 def compare(model1, model2, game_log):
+    print(balalaika.inspect())
     _, boards, _ = balalaika.rewind(game_log)
 
     model1_name = type(model1).__name__
     model2_name = type(model2).__name__
+
+    *boards, terminal_board = boards
 
     for board in boards:
         pred1 = model1.predict(board)
@@ -42,6 +47,8 @@ def compare(model1, model2, game_log):
 
         input()
 
+    balalaika.draw_board(terminal_board)
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -52,24 +59,14 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
-    
-    # TODO: Why weren't gamma and lr saved?
-    model1 = NNUE.load_from_checkpoint(
-        args.model1,
-        gamma=0.0,
-        lr=1.0
-    )
+    model1 = NNUE.load_from_checkpoint(args.model1)
     model1.eval()
     model1 = NNUEPredictor(model1)
 
     if args.model2 is None:
         model2 = FloodFillPredictor()
     else:
-        model2 = NNUE.load_from_checkpoint(
-            args.model2,
-            gamma=0.0,
-            lr=1.0,
-        )
+        model2 = NNUE.load_from_checkpoint(args.model2)
         model2.eval()
         model2 = NNUEPredictor(model2)
 

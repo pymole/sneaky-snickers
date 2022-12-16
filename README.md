@@ -3,8 +3,7 @@ Environment:
 python3 -m venv venv
 source venv/bin/activate
 
-export LIBTORCH=~/Downloads/libtorch
-export LD_LIBRARY_PATH=${LIBTORCH}/lib:$LD_LIBRARY_PATH
+brew install libtorch
 
 ```
 
@@ -15,7 +14,7 @@ poetry install
 ```
 
 In order to update package you need to bump version in pyproject.toml.
-Alternetively you can update manually with maturin:
+Alternetively you can update manually with maturin (provide LIBTORCH and LD_LIBRARY_PATH):
 ```commandline
 maturin develop --release
 ```

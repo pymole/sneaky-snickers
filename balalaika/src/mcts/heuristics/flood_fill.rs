@@ -2,10 +2,8 @@ use crate::{
     game::{
         Board, MAX_SNAKE_COUNT, WIDTH, HEIGHT, SIZE, GridPoint
     },
-    mcts::utils::movement_positions_wrapped
+    mcts::utils::movement_positions_wrapped, features::collector::Rewards
 };
-
-pub type FloodFill = [f32; MAX_SNAKE_COUNT];
 
 #[derive(Clone)]
 struct ContendersInfo {
@@ -28,7 +26,7 @@ impl Default for ContendersInfo {
     }
 }
 
-pub fn flood_fill(board: &Board) -> FloodFill {
+pub fn flood_fill(board: &Board) -> Rewards {
     let mut sizes = [0; MAX_SNAKE_COUNT];
 
     let mut flood_fronts: [Vec<GridPoint>; MAX_SNAKE_COUNT] = Default::default();

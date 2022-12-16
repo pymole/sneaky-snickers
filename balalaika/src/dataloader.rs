@@ -8,8 +8,10 @@ use mongodb::bson::Bson;
 use mongodb::sync::Client;
 use rand::{thread_rng, Rng};
 
+use crate::features::collector::{collect_examples, Example, ExamplesHandler};
+use crate::features::composite::CompositeExamples;
+use crate::features::examples::ExamplesContext;
 use crate::game_log::{load_game_log, rewind};
-use crate::features::{collect_examples, get_rewards, Example};
 
 enum LoaderCommand {
     LoadGameLog,
@@ -22,12 +24,14 @@ pub struct Loader {
     loader_receiver: Receiver<LoaderCommand>,
     examples: Arc<(Mutex<Vec<Example>>, Condvar)>,
     loader_is_empty: Arc<Mutex<bool>>,
+    composite_examples: CompositeExamples,
 }
 
 impl Loader {
     fn new(
         client: Client,
         game_log_ids: Vec<String>,
+        feature_set_tags: Vec<String>,
         loader_receiver: Receiver<LoaderCommand>,
         examples: Arc<(Mutex<Vec<Example>>, Condvar)>,
         loader_is_empty: Arc<Mutex<bool>>,
@@ -36,6 +40,12 @@ impl Loader {
             .into_iter()
             .map(|x| ObjectId::from_str(x.as_str()).unwrap())
             .collect();
+        
+        let feature_set_tags = feature_set_tags.into_iter().map(|x| x.to_string()).collect();
+
+        // WARN: You can't use context and composite examples before you set some actual board data.
+        let context = ExamplesContext::new();
+        let composite_examples = CompositeExamples::new(feature_set_tags, context);
 
         Loader {
             client,
@@ -43,6 +53,7 @@ impl Loader {
             loader_receiver,
             examples,
             loader_is_empty,
+            composite_examples,
         }
     }
     
@@ -85,11 +96,25 @@ impl Loader {
         let id = self.game_log_ids.pop().unwrap();
         let option = load_game_log(&self.client, Bson::ObjectId(id));
         if let Some(game_log) = option {
-            let (_, boards) = rewind(&game_log);
-            let (rewards, _) = get_rewards(&boards[game_log.turns]);
+            let (_, mut boards) = rewind(&game_log);
+     
+            let terminal_board = boards.pop().unwrap();
+            self.composite_examples.examples_collector
+                .borrow_mut()
+                .context
+                .set_actual_rewards(&terminal_board);
+
             let mut examples = Vec::new();
             for board in boards {
-                examples.extend(collect_examples(&board, rewards));
+                // TODO: This ugly
+                {
+                    let mut examples_collector = self.composite_examples.examples_collector.borrow_mut();
+                    examples_collector.context.set_board(&board);
+                    examples_collector.refresh_collectors();    
+                }
+                
+                collect_examples(&board, &mut self.composite_examples);                
+                examples.extend(self.composite_examples.pop_examples());
             }
 
             Some(examples)
@@ -113,6 +138,7 @@ pub struct Mixer {
     loader_is_empty: Arc<Mutex<bool>>,
     mixer_receiver: Receiver<MixerCommand>,
     batch_sender: Sender<BatchResult>,
+    random_batch: bool,
 }
 
 impl Mixer {
@@ -123,6 +149,7 @@ impl Mixer {
         batch_sender: Sender<BatchResult>,
         mixer_receiver: Receiver<MixerCommand>,
         loader_is_empty: Arc<Mutex<bool>>,
+        random_batch: bool,
     ) -> Self {
         assert!(mixer_size >= batch_size);
         let examples = Arc::new((Mutex::new(Vec::new()), Condvar::new()));
@@ -138,6 +165,7 @@ impl Mixer {
             batch_sender,
             mixer_receiver,
             loader_is_empty,
+            random_batch,
         }
     }
 
@@ -197,15 +225,23 @@ impl Mixer {
             }
         }
 
-        // Construct batch of random examples
-        let mut batch = Vec::new();
-        let rng = &mut thread_rng();
-        for _ in 0..self.batch_size {
-            let i = rng.gen_range(0..examples.len());
-            let example = examples.swap_remove(i);
-            batch.push(example);
-        }
-
+        let batch = if self.random_batch {
+            // Construct batch of random examples
+            let mut batch = Vec::new();
+            let rng = &mut thread_rng();
+            for _ in 0..self.batch_size {
+                let i = rng.gen_range(0..examples.len());
+                let example = examples.swap_remove(i);
+                batch.push(example);
+            }
+            batch
+        } else {
+            let examples_count = examples.len();
+            // Or pick as it stored in examples
+            let batch = examples.drain(examples_count - self.batch_size..).collect();
+            batch
+        };
+        
         self.batch_sender.send(BatchResult::Batch(batch)).unwrap();
 
         if examples.len() < self.mixer_size && !self.is_loader_empty() {
@@ -237,7 +273,12 @@ impl DataLoader {
         prefetch_batches: usize,
         mixer_size: usize,
         game_log_ids: Vec<String>,
+        feature_set_tags: Vec<String>,
+        random_batch: bool,
     ) -> Self {
+        assert!(!game_log_ids.is_empty());
+        assert!(!feature_set_tags.is_empty());
+
         let client = Client::with_uri_str(mongo_uri).unwrap();
         let (loader_sender, loader_receiver) = channel();
         let (batch_sender, batch_receiver) = channel();
@@ -251,17 +292,22 @@ impl DataLoader {
             batch_sender,
             mixer_receiver,
             loader_is_empty.clone(),
+            random_batch,
         );
 
-        let loader = Loader::new(
-            client,
-            game_log_ids,
-            loader_receiver,
-            mixer.examples.clone(),
-            loader_is_empty.clone(),
-        );
+        let mixer_examples = mixer.examples.clone();
 
-        thread::spawn(move || loader.start());
+        thread::spawn(move || {
+            let loader = Loader::new(
+                client,
+                game_log_ids,
+                feature_set_tags,
+                loader_receiver,
+                mixer_examples,
+                loader_is_empty,
+            );    
+            loader.start()
+        });
         thread::spawn(move || mixer.start(prefetch_batches));
 
         DataLoader {

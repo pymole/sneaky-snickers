@@ -4,24 +4,29 @@ use balalaika::engine::Movement;
 use balalaika::engine::advance_one_step_with_settings;
 use balalaika::engine::food_spawner::get_food_spawn_spots;
 use balalaika::engine::safe_zone_shrinker::shrink;
+use balalaika::features::composite::CompositeFeatures;
 use balalaika::game::Board;
 use balalaika::game::GridPoint;
 use balalaika::game::HEIGHT;
 use balalaika::mcts::utils::get_first_able_actions_from_masks;
-use balalaika::nnue::predict;
 use balalaika::mcts::seq::SequentialMCTS;
 use balalaika::mcts::seq::SequentialMCTSConfig;
 use balalaika::mcts::search::Search;
+use balalaika::nnue::Model;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use tch::CModule;
 
 
 fn predict_benchmark(c: &mut Criterion) {
-    let model = tch::CModule::load("../analysis/weights/main.pt").unwrap();
+    let model = Model::new(
+        CModule::load("../analysis/weights/main.pt").unwrap(),
+        CompositeFeatures::new(vec![String::from("base")]),
+    );
     let board = static_board();
 
     let mut group = c.benchmark_group("predict");
     group.sample_size(1000);
-    group.bench_function("predict", |b| b.iter(|| predict(black_box(&model), black_box(&board))));
+    group.bench_function("predict", |b| b.iter(|| model.predict(black_box(&board))));
     group.finish();
 }
 

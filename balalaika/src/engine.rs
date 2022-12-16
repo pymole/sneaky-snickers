@@ -13,7 +13,8 @@ use crate::game::{
     SIZE,
     Object,
     FOOD,
-    BODY, PointUsize,
+    BODY,
+    PointUsize,
 };
 
 pub use crate::api::objects::Movement;
@@ -104,6 +105,8 @@ pub mod food_spawner {
 pub mod safe_zone_shrinker {
     use super::*;
 
+    pub const SHRINK_EVERY: i32 = 20;
+
     pub fn shrink(board: &mut Board, side: Movement) {
         match side {
             Movement::Left => board.safe_zone.p0.x += 1,
@@ -114,7 +117,7 @@ pub mod safe_zone_shrinker {
     }
 
     pub fn standard(board: &mut Board) {
-        if board.turn == 0 || board.turn % 20 != 0 || board.safe_zone.empty(){
+        if board.turn == 0 || board.turn % SHRINK_EVERY != 0 || board.safe_zone.empty(){
             return;
         }
         let side: Movement = rand::random();

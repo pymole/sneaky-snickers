@@ -7,9 +7,10 @@ use std::time::{Duration, Instant};
 
 use crate::api::objects::Movement;
 use crate::engine::{EngineSettings, advance_one_step_with_settings, food_spawner, safe_zone_shrinker};
+use crate::features::collector::Rewards;
 use crate::game::{Board, MAX_SNAKE_COUNT};
 use crate::mcts::search::Search;
-use crate::nnue::{predict, rewards_from_tensor};
+use crate::nnue::rewards_from_tensor;
 use crate::zobrist::ZobristHasher;
 use crate::mcts::utils::{get_masks, get_random_actions_from_masks};
 
@@ -171,7 +172,7 @@ impl SequentialMCTS {
         self.nodes.insert(board.zobrist_hash.get_value(), RefCell::new(node));
     }
 
-    fn backpropagate(&self, path: Vec<(RefMut<Node>, [usize; MAX_SNAKE_COUNT])>, rewards: [f32; MAX_SNAKE_COUNT]) {
+    fn backpropagate(&self, path: Vec<(RefMut<Node>, [usize; MAX_SNAKE_COUNT])>, rewards: Rewards) {
         // let start = Instant::now();
         // info!("{:?}", self.nodes.keys());
         // info!("{:?}", path);
@@ -187,7 +188,7 @@ impl SequentialMCTS {
         }
     }
 
-    fn simulation(&self, board: &Board) -> [f32; MAX_SNAKE_COUNT] {
+    fn simulation(&self, board: &Board) -> Rewards {
         let mut board = board.clone();
         let rollout_cutoff = self.config.rollout_cutoff;
 
@@ -213,7 +214,7 @@ impl SequentialMCTS {
             return [self.config.draw_reward; MAX_SNAKE_COUNT];
         }
 
-        let rewards = rewards_from_tensor(predict(&self.config.model, &board));
+        let rewards = rewards_from_tensor(self.config.model.predict(&board));
 
         // info!("Started at {} turn and rolled out with {} turns and rewards {:?}", start_turn, board.turn - start_turn, rewards);
         rewards
@@ -225,12 +226,12 @@ impl SequentialMCTS {
 mod tests {
     use std::time::Duration;
 
-    use tch::CModule;
-
     use crate::board_generator::generate_board;
     use crate::engine::advance_one_step;
+    use crate::features::composite::CompositeFeatures;
     use crate::game::MAX_SNAKE_COUNT;
     use crate::mcts::search::Search;
+    use crate::nnue::Model;
     
     use super::SequentialNNUEMCTSConfig as NNUEConfig;
     use super::SequentialMCTS as NNUEMCTS;
@@ -240,12 +241,17 @@ mod tests {
 
     #[test]
     fn test_load() {
+        let model = Model::new(
+            tch::CModule::load("../analysis/weights/main.pt").unwrap(),
+            CompositeFeatures::new(vec![String::from("base")]),
+        );
+
         let config = NNUEConfig {
             table_capacity:         200000,
             rollout_cutoff:         0,
             draw_reward:            0.00001,
             max_select_depth:       50,
-            model:                  CModule::load("../analysis/weights/main.pt").unwrap(),
+            model,
         };
         let mut seq_nnue = NNUEMCTS::new(config);
 

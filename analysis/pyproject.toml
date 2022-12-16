@@ -6,11 +6,12 @@ authors = ["Shevela Roman <goglbummm@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = "^3.10"
 balalaika = { path = "../balalaika/" }
 pymongo = "^4.3.2"
 numpy = "^1.23.4"
 torch = "^1.13.0"
+pytorch-lightning = "^1.8.5"
 
 [build-system]
 requires = ["poetry-core"]

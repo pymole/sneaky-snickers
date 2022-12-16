@@ -400,9 +400,7 @@ impl fmt::Display for Board {
             }
             let color = SNAKE_COLORS[i];
 
-            let health_count = (WIDTH as f32 * snake.health as f32 / 100.0) as usize;
-            output += &"-".repeat(health_count).truecolor(color.0, color.1, color.2);
-            output += " \n";
+            output += &format!("{}: health {}; length {}\n", i, snake.health, snake.body.len());
 
             for j in 1..snake.body.len() {
                 let back = snake.body[j];

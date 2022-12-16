@@ -1,7 +1,11 @@
+use std::collections::HashMap;
+
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
 use crate::api::objects::State;
-use crate::mcts::config::Config;
+use crate::features::base;
+use crate::features::collector::{IndexType, ValueType, collect_features, FeaturesHandler, Rewards, get_rewards};
+use crate::features::composite::feature_set_sizes;
 use crate::mcts::seq::{SequentialMCTS, SequentialMCTSConfig};
 use crate::mcts::search::Search;
 use crate::{features, mcts, dataloader};
@@ -17,10 +21,10 @@ use mcts::heuristics;
 fn rewind(
     py: Python<'_>,
     game_log: &PyDict
-) -> PyResult<(Vec<[usize; MAX_SNAKE_COUNT]>, PyObject, features::Rewards)> {
+) -> PyResult<(Vec<[usize; MAX_SNAKE_COUNT]>, PyObject, (Rewards, bool))> {
     let game_log: gl::GameLog = depythonize(game_log).unwrap();
     let (actions, boards) = gl::rewind(&game_log);
-    let rewards = features::get_rewards(&boards[game_log.turns]);
+    let rewards = get_rewards(&boards[game_log.turns]);
     let boards = pythonize(py, &boards).unwrap();
     Ok((actions, boards, rewards))
 }
@@ -28,7 +32,7 @@ fn rewind(
 #[pyfunction]
 fn flood_fill(
     board: &PyDict,
-) -> heuristics::flood_fill::FloodFill {
+) -> Rewards {
     let board: Board = depythonize(board).unwrap();
     heuristics::flood_fill::flood_fill(&board)
 }
@@ -42,39 +46,15 @@ fn draw_board(
 }
 
 #[pyfunction]
-fn get_examples_from_board(
-    board: &PyDict,
-    rewards: [f32; MAX_SNAKE_COUNT],
-) -> PyResult<Vec<features::Example>> {
-    let board: Board = depythonize(board).unwrap();
-    let examples = features::collect_examples(&board, rewards);
-    Ok(examples)
-}
-
-#[pyfunction]
-fn get_examples_from_game_log(
-    game_log: &PyDict,
-) -> PyResult<Vec<features::Example>> {
-    let game_log: gl::GameLog = depythonize(game_log).unwrap();
-    let (_, boards) = gl::rewind(&game_log);
-    let (terminal_board, boards) = boards.split_last().unwrap();
-    let (rewards, _) = features::get_rewards(terminal_board);
-    let mut examples = Vec::new();
-    // Do not use terminal board in examples
-    for board in boards {
-        examples.extend(features::collect_examples(&board, rewards));
-    }
-    
-    Ok(examples)
-}
-
-#[pyfunction]
 fn get_features(
     board: &PyDict,
-) -> PyResult<Vec<usize>> {
+    feature_set_tags: Vec<String>,
+) -> PyResult<(Vec<IndexType>, Vec<ValueType>)> {
     let board: Board = depythonize(board).unwrap();
-    let indices = features::get_features_indices(&board);
-    Ok(indices)
+    let mut features_handler = features::composite::CompositeFeatures::new(feature_set_tags);
+    collect_features(&board, &mut features_handler);
+    let features = features_handler.pop_features();
+    Ok(features)
 }
 
 #[pyfunction]
@@ -116,6 +96,11 @@ fn get_masks(
 }
 
 #[pyfunction]
+fn get_feature_set_sizes() -> PyResult<HashMap<&'static str, IndexType>> {
+    Ok(feature_set_sizes())
+}
+
+#[pyfunction]
 fn advance_one_step(
     py: Python<'_>,
     board: &PyDict,
@@ -125,6 +110,11 @@ fn advance_one_step(
     engine::advance_one_step(&mut board, actions);
     let board = pythonize(py, &board).unwrap();
     Ok(board)
+}
+
+#[pyfunction]
+fn inspect() -> PyResult<HashMap<&'static str, IndexType>> {
+    Ok(base::inspect())
 }
 
 #[pyclass]
@@ -141,6 +131,8 @@ impl DataLoader {
         prefetch_batches: usize,
         mixer_size: usize,
         game_log_ids: Vec<String>,
+        feature_set_tags: Vec<String>,
+        random_batch: bool,
     ) -> Self {
         let dataloader = dataloader::DataLoader::new(
             mongo_uri,
@@ -148,6 +140,8 @@ impl DataLoader {
             prefetch_batches,
             mixer_size,
             game_log_ids,
+            feature_set_tags,
+            random_batch,
         );
 
         Self {
@@ -169,13 +163,13 @@ fn balalaika(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(rewind, m)?)?;
     m.add_function(wrap_pyfunction!(flood_fill, m)?)?;
     m.add_function(wrap_pyfunction!(draw_board, m)?)?;
-    m.add_function(wrap_pyfunction!(get_examples_from_board, m)?)?;
-    m.add_function(wrap_pyfunction!(get_examples_from_game_log, m)?)?;
     m.add_function(wrap_pyfunction!(get_board_from_state, m)?)?;
     m.add_function(wrap_pyfunction!(get_features, m)?)?;
     m.add_function(wrap_pyfunction!(search, m)?)?;
     m.add_function(wrap_pyfunction!(get_masks, m)?)?;
+    m.add_function(wrap_pyfunction!(get_feature_set_sizes, m)?)?;
     m.add_function(wrap_pyfunction!(advance_one_step, m)?)?;
+    m.add_function(wrap_pyfunction!(inspect, m)?)?;
     m.add_class::<DataLoader>()?;
     Ok(())
 }
