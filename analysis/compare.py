@@ -70,5 +70,5 @@ if __name__ == "__main__":
         model2.eval()
         model2 = NNUEPredictor(model2)
 
-    (game_log, ) = database.SelfplayRepository(settings.MONGO_URI).load_random_game_logs(1)
+    (game_log, ) = database.get_default_repo().load_random_game_logs(1)
     compare(model1, model2, game_log)

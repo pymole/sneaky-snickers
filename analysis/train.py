@@ -20,10 +20,11 @@ def parse_args():
     parser.add_argument("--val-size", type=int, default=20, help="Number of game logs per validation step.")
     parser.add_argument("--prefetch-batches", type=int, default=20, help="Number of batches to prefetch.")
     parser.add_argument("--mixer-size", type=int, default=150000, help="Number of examples to store in memory.")
-    parser.add_argument("--mongo-uri", type=str, default="mongodb://battlesnake:battlesnake@localhost:27017/battlesnake?authSource=admin", help="MongoDB URI.")
     parser.add_argument("--tag", type=str, required=True, help="Fetch game logs with this tag.")
     parser.add_argument("--feature-set-tags", nargs="*", help="Tags of feature sets.")
     parser.add_argument("--random-batch", action='store_true', help="Mix examples from different game logs in one batch.")
+    parser.add_argument("--directory", type=str, required=False, help="Directory path to game logs. If provided use directory loader.")
+    parser.add_argument("--mongo-uri", type=str, default="mongodb://battlesnake:battlesnake@localhost:27017/battlesnake?authSource=admin", help="MongoDB URI.")
     args = parser.parse_args()
     return args
 
@@ -68,7 +69,6 @@ if __name__ == '__main__':
     print(trainer.accelerator)
 
     datamodule = SelfplayDataModule(
-        args.mongo_uri,
         args.tag,
         args.train_size,
         args.val_size,
@@ -77,7 +77,9 @@ if __name__ == '__main__':
         args.mixer_size,
         composite,
         args.random_batch,
-        pin_memory=isinstance(trainer.accelerator, pl.accelerators.CUDAAccelerator),
+        isinstance(trainer.accelerator, pl.accelerators.CUDAAccelerator),
+        args.mongo_uri,
+        args.directory,
     )
 
     trainer.fit(model, datamodule=datamodule)

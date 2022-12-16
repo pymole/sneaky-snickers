@@ -6,8 +6,8 @@ import database
 
 
 def test_get_features():
-    sp = database.SelfplayRepository(settings.MONGO_URI)
-    (game_log,) = sp.load_random_game_logs(1)
+    repo = database.get_default_repo()
+    (game_log,) = repo.load_random_game_logs(1)
     _, boards, _ = balalaika.rewind(game_log)
     balalaika.draw_board(boards[10])
     print(balalaika.get_features(boards[10], feature_set_tags=["flood_fill"]))
@@ -17,8 +17,8 @@ def test_dataloader():
     feature_set_sizes = balalaika.get_feature_set_sizes()
     print(feature_set_sizes)
 
-    sp = database.SelfplayRepository(settings.MONGO_URI)
-    game_log_ids = sp.get_game_log_ids(tag='poc', count=1)
+    repo = database.get_default_repo()
+    game_log_ids = repo.get_game_log_ids(tag='poc', count=1)
 
     dataloader = balalaika.DataLoader(
         mongo_uri=settings.MONGO_URI,

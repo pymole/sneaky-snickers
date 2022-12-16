@@ -1,10 +1,13 @@
 use std::collections::HashSet;
+use std::fs;
 use std::mem::{self, MaybeUninit};
+use std::path::Path;
 use arrayvec::ArrayVec;
 use mongodb::sync::Cursor;
 use mongodb::bson::{doc, Document, Bson};
 use mongodb::error::Error;
 use mongodb::results::InsertOneResult;
+use rocket::serde::json::serde_json;
 
 use crate::api::objects::{State, Movement};
 use crate::engine::safe_zone_shrinker::shrink;
@@ -313,6 +316,18 @@ pub fn load_game_log(client: &Client, id: Bson) -> Option<GameLog> {
     cursor.unwrap()
 }
 
+pub fn write_game_log_to_file<P: AsRef<Path>>(path: P, game_log: &GameLog) -> Result<(), Box<dyn std::error::Error>> {
+    let s = serde_json::to_string(game_log)?;
+    fs::write(path, s)?;
+    Ok(())
+}
+
+pub fn read_game_log_from_file<P: AsRef<Path>>(path: P) -> Result<GameLog, Box<dyn std::error::Error>> {
+    let data = fs::read_to_string(path)?;
+    let game_log: GameLog = serde_json::from_str(&data)?;
+    Ok(game_log)
+}
+
 
 pub fn rewind(game_log: &GameLog) -> (Vec<[usize; MAX_SNAKE_COUNT]>, Vec<Board>) {
     // println!("REWIND");
@@ -380,19 +395,16 @@ pub fn rewind(game_log: &GameLog) -> (Vec<[usize; MAX_SNAKE_COUNT]>, Vec<Board>)
 mod tests {
     use std::collections::HashSet;
     use std::collections::hash_map::RandomState;
-    use std::str::FromStr;
 
-    use mongodb::bson::Bson;
-    use mongodb::bson::oid::ObjectId;
     use mongodb::sync::Client;
     use rand::thread_rng;
-    use pretty_assertions::{assert_eq};
+    use pretty_assertions::assert_eq;
 
-    use super::{GameLogBuilder, rewind, GameLog};
+    use super::{GameLogBuilder, rewind, GameLog, load_game_logs, write_game_log_to_file};
     use crate::board_generator::generate_board;
     use crate::engine::food_spawner;
     use crate::game::PointUsize;
-    use crate::game_log::{save_game_log, load_game_log};
+    use crate::game_log::{save_game_log, load_game_log, read_game_log_from_file};
     use crate::mcts::utils::get_random_actions_from_masks;
     use crate::{
         engine::{advance_one_step_with_settings, EngineSettings, safe_zone_shrinker}
@@ -493,9 +505,20 @@ mod tests {
     }
 
     #[test]
-    fn test_aa() {
+    fn test_write_to_file() {
         let client = Client::with_uri_str("mongodb://battlesnake:battlesnake@localhost:27017/battlesnake?authSource=admin").unwrap();
-        let a = load_game_log(&client, Bson::ObjectId(ObjectId::from_str(String::from("6394717da6a3ebf9afdf5423").as_str()).unwrap()));
-        println!("{:?}", a);
+        let mut cursor = load_game_logs(&client, None).unwrap();
+        let mut i = 0;
+        while let Some(game_log) = cursor.next() {
+            let game_log = game_log.unwrap();
+            write_game_log_to_file(std::path::Path::new("../analysis/game_logs").join(i.to_string()), &game_log).unwrap();
+            i += 1;
+        }
     }
+
+    #[test]
+    fn test_read_from_file() {
+        let game_log = read_game_log_from_file(std::path::Path::new("../analysis/game_logs/0")).unwrap();
+        println!("{:?}", game_log);
+    }    
 }

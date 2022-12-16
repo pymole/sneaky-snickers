@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::str::FromStr;
 use std::sync::{Mutex, Arc, Condvar};
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -11,49 +12,135 @@ use rand::{thread_rng, Rng};
 use crate::features::collector::{collect_examples, Example, ExamplesHandler};
 use crate::features::composite::CompositeExamples;
 use crate::features::examples::ExamplesContext;
-use crate::game_log::{load_game_log, rewind};
+use crate::game_log::{load_game_log, rewind, read_game_log_from_file, GameLog};
+
+
+fn extract_examples(composite_examples: &mut CompositeExamples, game_log: &GameLog) -> Vec<Example> {
+    let (_, mut boards) = rewind(&game_log);
+    let terminal_board = boards.pop().unwrap();
+    composite_examples.examples_collector
+        .borrow_mut()
+        .context
+        .set_actual_rewards(&terminal_board);
+
+    let mut examples = Vec::new();
+    for board in boards {
+        // TODO: This ugly
+        {
+            let mut examples_collector = composite_examples.examples_collector.borrow_mut();
+            examples_collector.context.set_board(&board);
+            examples_collector.refresh_collectors();    
+        }
+        
+        collect_examples(&board, composite_examples);                
+        examples.extend(composite_examples.pop_examples());
+    }
+    examples
+}
 
 enum LoaderCommand {
     LoadGameLog,
     Close,
 }
 
-pub struct Loader {
+trait Provider {
+    fn next_examples(&mut self) -> Option<Vec<Example>>;
+}
+
+pub struct DatabaseProvider {
     client: Client,
     game_log_ids: Vec<ObjectId>,
-    loader_receiver: Receiver<LoaderCommand>,
-    examples: Arc<(Mutex<Vec<Example>>, Condvar)>,
-    loader_is_empty: Arc<Mutex<bool>>,
     composite_examples: CompositeExamples,
 }
 
-impl Loader {
+impl DatabaseProvider {
     fn new(
         client: Client,
         game_log_ids: Vec<String>,
-        feature_set_tags: Vec<String>,
-        loader_receiver: Receiver<LoaderCommand>,
-        examples: Arc<(Mutex<Vec<Example>>, Condvar)>,
-        loader_is_empty: Arc<Mutex<bool>>,
+        composite_examples: CompositeExamples,
     ) -> Self {
         let game_log_ids: Vec<ObjectId> = game_log_ids
             .into_iter()
             .map(|x| ObjectId::from_str(x.as_str()).unwrap())
             .collect();
-        
-        let feature_set_tags = feature_set_tags.into_iter().map(|x| x.to_string()).collect();
 
-        // WARN: You can't use context and composite examples before you set some actual board data.
-        let context = ExamplesContext::new();
-        let composite_examples = CompositeExamples::new(feature_set_tags, context);
-
-        Loader {
+        DatabaseProvider {
             client,
             game_log_ids,
+            composite_examples,
+        }
+    }
+}
+
+impl Provider for DatabaseProvider {
+    fn next_examples(&mut self) -> Option<Vec<Example>> {
+        if self.game_log_ids.is_empty() {
+            return None;
+        }
+
+        let id = self.game_log_ids.pop().unwrap();
+        let option = load_game_log(&self.client, Bson::ObjectId(id));
+        if let Some(game_log) = option {
+            Some(extract_examples(&mut self.composite_examples, &game_log))
+        } else {
+            None
+        }
+    }
+}
+
+pub struct DirectoryProvider {
+    directory: String,
+    filenames: Vec<String>,
+    composite_examples: CompositeExamples,
+}
+
+impl DirectoryProvider {
+    fn new(
+        directory: String,
+        filenames: Vec<String>,
+        composite_examples: CompositeExamples,
+    ) -> Self {
+        DirectoryProvider {
+            directory,
+            filenames,
+            composite_examples,
+        }
+    }
+}
+
+impl Provider for DirectoryProvider {
+    fn next_examples(&mut self) -> Option<Vec<Example>> {
+        let filename = self.filenames.pop()?;
+        let path = Path::new(&self.directory).join(filename);
+        let res = read_game_log_from_file(path);
+        if let Ok(game_log) = res {
+            let examples = extract_examples(&mut self.composite_examples, &game_log);
+            Some(examples)
+        } else {
+            None
+        }
+    }
+}
+
+pub struct Loader {
+    provider: Box<dyn Provider>,
+    loader_receiver: Receiver<LoaderCommand>,
+    examples: Arc<(Mutex<Vec<Example>>, Condvar)>,
+    loader_is_empty: Arc<Mutex<bool>>,
+}
+
+impl Loader {
+    fn new(
+        provider: Box<dyn Provider>,
+        loader_receiver: Receiver<LoaderCommand>,
+        examples: Arc<(Mutex<Vec<Example>>, Condvar)>,
+        loader_is_empty: Arc<Mutex<bool>>,
+    ) -> Self {
+        Loader {
+            provider,
             loader_receiver,
             examples,
             loader_is_empty,
-            composite_examples,
         }
     }
     
@@ -62,7 +149,7 @@ impl Loader {
             let command = self.loader_receiver.recv().unwrap();
             match command {
                 LoaderCommand::LoadGameLog => {
-                    let examples_option = self.next_examples();
+                    let examples_option = self.provider.next_examples();
                     let (examples_mutex, examples_waiting) = self.examples.as_ref();
                     // Lock examples even if no game logs left or error is occured
                     // because mixer mustn't get notification before it's waiting on condvar.
@@ -73,7 +160,7 @@ impl Loader {
                         examples_waiting.notify_one();
                         // println!("Game log");
                     } else {
-                        // No game logs or error in Loader and Mixer is waiting - release Mixer
+                        // No game logs or error in DatabaseLoader and Mixer is waiting - release Mixer
                         *self.loader_is_empty.lock().unwrap() = true;
                         examples_waiting.notify_one();
                         // println!("Error or no game logs");
@@ -81,48 +168,12 @@ impl Loader {
                     }
                 },
                 LoaderCommand::Close => {
-                    // println!("Loader is closing");
+                    // println!("DatabaseLoader is closing");
                     break;
                 }
             }
         }
     }
-
-    fn next_examples(&mut self) -> Option<Vec<Example>> {
-        if self.game_log_ids.is_empty() {
-            return None;
-        }
-
-        let id = self.game_log_ids.pop().unwrap();
-        let option = load_game_log(&self.client, Bson::ObjectId(id));
-        if let Some(game_log) = option {
-            let (_, mut boards) = rewind(&game_log);
-     
-            let terminal_board = boards.pop().unwrap();
-            self.composite_examples.examples_collector
-                .borrow_mut()
-                .context
-                .set_actual_rewards(&terminal_board);
-
-            let mut examples = Vec::new();
-            for board in boards {
-                // TODO: This ugly
-                {
-                    let mut examples_collector = self.composite_examples.examples_collector.borrow_mut();
-                    examples_collector.context.set_board(&board);
-                    examples_collector.refresh_collectors();    
-                }
-                
-                collect_examples(&board, &mut self.composite_examples);                
-                examples.extend(self.composite_examples.pop_examples());
-            }
-
-            Some(examples)
-        } else {
-            None
-        }
-    }
-
 }
 
 enum MixerCommand {
@@ -218,7 +269,7 @@ impl Mixer {
 
             if examples.len() < self.batch_size {
                 // TODO: Case when loader got less examples than batch needed
-                //  Potentialy control load flow in Loader, not in mixer.
+                //  Potentialy control load flow in DatabaseLoader, not in mixer.
                 self.loader_sender.send(LoaderCommand::Close).unwrap();
                 self.batch_sender.send(BatchResult::Empty).unwrap();
                 return Err(());
@@ -268,18 +319,18 @@ pub struct DataLoader {
 
 impl DataLoader {
     pub fn new(
-        mongo_uri: String,
+        mongo_uri: Option<String>,
         batch_size: usize,
         prefetch_batches: usize,
         mixer_size: usize,
+        directory: Option<String>,
         game_log_ids: Vec<String>,
         feature_set_tags: Vec<String>,
         random_batch: bool,
     ) -> Self {
-        assert!(!game_log_ids.is_empty());
+        
         assert!(!feature_set_tags.is_empty());
 
-        let client = Client::with_uri_str(mongo_uri).unwrap();
         let (loader_sender, loader_receiver) = channel();
         let (batch_sender, batch_receiver) = channel();
         let (mixer_sender, mixer_receiver) = channel();
@@ -298,10 +349,28 @@ impl DataLoader {
         let mixer_examples = mixer.examples.clone();
 
         thread::spawn(move || {
+            // WARN: You can't use context and composite examples before you set some actual board data.
+            let context = ExamplesContext::new();
+            let composite_examples = CompositeExamples::new(feature_set_tags, context);
+
+            let provider: Box<dyn Provider> = if let Some(directory) = directory {
+                Box::new(DirectoryProvider::new(
+                    directory,
+                    game_log_ids,
+                    composite_examples,
+                ))
+            } else {
+                assert!(!game_log_ids.is_empty());
+                let client = Client::with_uri_str(mongo_uri.unwrap()).unwrap();
+                Box::new(DatabaseProvider::new(
+                    client,
+                    game_log_ids,
+                    composite_examples,
+                ))
+            };
+            
             let loader = Loader::new(
-                client,
-                game_log_ids,
-                feature_set_tags,
+                provider,
                 loader_receiver,
                 mixer_examples,
                 loader_is_empty,

@@ -119,17 +119,18 @@ fn inspect() -> PyResult<HashMap<&'static str, IndexType>> {
 
 #[pyclass]
 pub struct DataLoader {
-    provider: dataloader::DataLoader,
+    dataloader: dataloader::DataLoader,
 }
 
 #[pymethods]
 impl DataLoader {
     #[new]
     pub fn new(
-        mongo_uri: String,
+        mongo_uri: Option<String>,
         batch_size: usize,
         prefetch_batches: usize,
         mixer_size: usize,
+        directory: Option<String>,
         game_log_ids: Vec<String>,
         feature_set_tags: Vec<String>,
         random_batch: bool,
@@ -139,13 +140,14 @@ impl DataLoader {
             batch_size,
             prefetch_batches,
             mixer_size,
+            directory,
             game_log_ids,
             feature_set_tags,
             random_batch,
         );
 
         Self {
-            provider: dataloader,
+            dataloader,
         }
     }
 
@@ -154,7 +156,7 @@ impl DataLoader {
     }
 
     fn __next__(mut slf: PyRefMut<'_, Self>) -> Option<Vec<features::Example>> {
-        slf.provider.next()
+        slf.dataloader.next()
     }
 }
 
