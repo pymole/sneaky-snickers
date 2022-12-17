@@ -3,13 +3,11 @@ Environment:
 python3 -m venv venv
 source venv/bin/activate
 
-sudo apt-get install ubuntu-drivers-common
-sudo ubuntu-drivers devices
-sudo apt-get install nvidia-384
-sudo nvidia-smi
+conda install pytorch-lightning pytorch pymongo -c pytorch -c conda-forge -c 
+
 
 export LIBTORCH=~/battlesnake/libtorch
-export LD_LIBRARY_PATH=~/battlesnake/libtorch
+export LD_LIBRARY_PATH=~/battlesnake/libtorch/lib
 
 curl https://repo.anaconda.com/archive/Anaconda3-2021.11-Linux-x86_64.sh --output anaconda.sh
 ```
