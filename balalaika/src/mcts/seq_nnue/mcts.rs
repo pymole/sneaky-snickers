@@ -46,14 +46,14 @@ pub struct SequentialMCTS {
 }
 
 impl Search for SequentialMCTS {
-    fn search(&mut self, board: &Board, iterations_count: usize) {
+    fn search(&mut self, board: &Board, iterations_count: usize, _verbose: bool) {
         for _i in 0..iterations_count {
             info!("iteration {}", _i);
             self.rollout(board);
         }
     }
 
-    fn search_with_time(&mut self, board: &Board, target_duration: Duration) -> usize {
+    fn search_with_time(&mut self, board: &Board, target_duration: Duration, verbose: bool) -> usize {
         let time_start = Instant::now();
         let time_end = time_start + target_duration;
 
@@ -69,7 +69,7 @@ impl Search for SequentialMCTS {
         i
     }
 
-    fn get_final_movement(&self, board: &Board, agent_index: usize) -> Movement {
+    fn get_final_movement(&self, board: &Board, agent_index: usize, _verbose: bool) -> Movement {
         let node = self.nodes[&board.zobrist_hash.get_value()].borrow();
         let strategy = &node.agents[agent_index].strategy;
         strategy.get_final_movement()
@@ -265,8 +265,8 @@ mod tests {
         
         let mut board = generate_board();
         while !board.is_terminal() {
-            println!("NNUE {}", seq_nnue.search_with_time(&board, Duration::from_millis(600)));
-            println!("FLOOD {}", seq.search_with_time(&board, Duration::from_millis(600)));
+            println!("NNUE {}", seq_nnue.search_with_time(&board, Duration::from_millis(600), true));
+            println!("FLOOD {}", seq.search_with_time(&board, Duration::from_millis(600), true));
             
             let mut actions = [0; MAX_SNAKE_COUNT];
             seq_nnue.print_stats(&board);
@@ -278,9 +278,9 @@ mod tests {
                     continue;
                 }
                 if alive_i == 0 {
-                    actions[0] = seq.get_final_movement(&board, 0) as usize;
+                    actions[0] = seq.get_final_movement(&board, 0, true) as usize;
                 } else {
-                    actions[i] = seq_nnue.get_final_movement(&board, alive_i) as usize;
+                    actions[i] = seq_nnue.get_final_movement(&board, alive_i, true) as usize;
                 }
                 alive_i += 1;
             }

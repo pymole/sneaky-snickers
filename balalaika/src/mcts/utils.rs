@@ -23,6 +23,7 @@ where
 pub struct SearchOptions {
     pub iterations: Option<usize>,
     pub search_time: Option<Duration>,
+    pub verbose: bool,
 }
 
 impl SearchOptions {
@@ -30,6 +31,7 @@ impl SearchOptions {
         let config = SearchOptions {
             iterations: parse_env("MCTS_ITERATIONS"),
             search_time: parse_env("MCTS_SEARCH_TIME").map(Duration::from_millis),
+            verbose: env::var("MCTS_VERBOSE").is_ok(),
         };
 
         config
@@ -149,9 +151,9 @@ pub fn get_first_able_actions_from_masks(board: &Board) -> [usize; MAX_SNAKE_COU
 
 pub fn search(searcher: &mut impl Search, board: &Board, options: SearchOptions) {
     if let Some(search_time) = options.search_time {
-        searcher.search_with_time(board, search_time);
+        searcher.search_with_time(board, search_time, options.verbose);
     } else if let Some(iterations) = options.iterations {
-        searcher.search(board, iterations);
+        searcher.search(board, iterations, options.verbose);
     } else {
         panic!("Provide MCTS_SEARCH_TIME or MCTS_ITERATIONS");
     }
@@ -159,7 +161,7 @@ pub fn search(searcher: &mut impl Search, board: &Board, options: SearchOptions)
 
 pub fn get_best_movement(searcher: &mut impl Search, board: &Board, agent: usize, options: SearchOptions) -> Movement {
     search(searcher, board, options);
-    searcher.get_final_movement(board, agent)
+    searcher.get_final_movement(board, agent, options.verbose)
 }
 
 

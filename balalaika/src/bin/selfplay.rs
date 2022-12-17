@@ -50,7 +50,7 @@ fn main() {
                 if !board.snakes[snake_i].is_alive() {
                     continue;
                 }
-                let action = mcts.get_final_movement(&board, alive_i);
+                let action = mcts.get_final_movement(&board, alive_i, true);
                 actions[snake_i] = action as usize;
                 alive_i += 1;
             }

@@ -38,7 +38,7 @@ fn mcts_benchmark(c: &mut Criterion) {
     group.sample_size(1000);
     group.bench_function("mcts 1000", |b| b.iter(|| {
         let mut mcts = SequentialMCTS::new(black_box(config));
-        mcts.search(black_box(&board), 1000);
+        mcts.search(black_box(&board), 1000, false);
     }));
     group.finish();
 }

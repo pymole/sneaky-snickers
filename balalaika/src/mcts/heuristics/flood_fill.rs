@@ -131,3 +131,14 @@ pub fn flood_fill(board: &Board) -> Rewards {
 
     seized_points
 }
+
+pub fn flavored_flood_fill(board: &Board) -> Rewards {
+    let len_sum: f32 = board.snakes.iter().map(|snake| snake.body.len() as f32).sum();
+
+    let mut rewards = flood_fill(&board);
+
+    for i in 0..board.snakes.len() {
+        rewards[i] *= board.snakes[i].body.len() as f32 / len_sum;
+    }
+    rewards
+}

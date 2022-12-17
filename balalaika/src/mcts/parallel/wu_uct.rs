@@ -1,9 +1,7 @@
 use crate::engine::Movement;
 
-use super::config::ParallelMCTSConfig;
-
 #[derive(Clone, Debug)]
-pub struct BUUCT {
+pub struct WUUCT {
     q: [f32; 4],
     variance: [f32; 4],
     rewards: [f32; 4],
@@ -13,9 +11,9 @@ pub struct BUUCT {
     unobserved_samples: [f32; 4],
 }
 
-impl BUUCT {
-    pub fn new(mask: [bool; 4]) -> BUUCT {
-        BUUCT {
+impl WUUCT {
+    pub fn new(mask: [bool; 4]) -> WUUCT {
+        WUUCT {
             q: [0.0; 4],
             rewards: [0.0; 4],
             visits: [0.0; 4],
@@ -27,8 +25,8 @@ impl BUUCT {
     }
 }
 
-impl BUUCT {
-    pub fn get_best_movement(&mut self, _config: &ParallelMCTSConfig, node_visits: f32, node_unobserved_samples: f32, iteration: usize) -> usize {
+impl WUUCT {
+    pub fn get_best_movement(&mut self, node_visits: f32, node_unobserved_samples: f32, iteration: usize) -> usize {
         let mut max_action = 0;
         let mut max_value = -1.0;
         let N = node_visits;
@@ -58,7 +56,8 @@ impl BUUCT {
         max_action
     }
 
-    pub fn get_final_movement(&self, _mcts_config: &ParallelMCTSConfig, _node_visits: f32) -> Movement {
+    pub fn get_final_movement(&self) -> Movement {
+        // TODO:
         let (best_movement, _) = self.visits
             .iter()
             .enumerate()
@@ -87,24 +86,24 @@ impl BUUCT {
         self.variance[movement] = avg_squared_reward - q * q;
     }
 
-    pub fn print_stats(&self, _mcts_config: &ParallelMCTSConfig, _node_visits: f32) {
-        info!("BU-UCT");
-        info!("{:?}", self.visits);
-        info!("{:?}", self.rewards);
-        info!("{:?}", self.unobserved_samples);
-        // info!("{:?}", self.unobserved_samples_avg);
-        info!("{:?}", self.q);
+    pub fn print_stats(&self) {
+        println!("WU-UCT");
+        println!("{:?}", self.visits);
+        println!("{:?}", self.rewards);
+        println!("{:?}", self.unobserved_samples);
+        // println!("{:?}", self.unobserved_samples_avg);
+        println!("{:?}", self.q);
 
         for action in 0..4 {
             let n_i = self.visits[action];
             if n_i > 0.0 {
-                info!(
+                println!(
                     "[{}] - {}",
                     Movement::from_usize(action),
                     n_i,
                 );
             } else {
-                info!(" {}", Movement::from_usize(action));
+                println!(" {}", Movement::from_usize(action));
             }
         }
     }

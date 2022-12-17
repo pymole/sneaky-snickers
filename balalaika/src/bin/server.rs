@@ -26,8 +26,16 @@ use balalaika::{api, mcts};
 use balalaika::game::Board;
 use balalaika::game_log::GameLogBuilder;
 
-use mcts::seq::SequentialMCTS as MCTS;
-use mcts::seq::SequentialMCTSConfig as MCTSConfig;
+
+cfg_if::cfg_if! {
+    if #[cfg(feature = "par")] {
+        use mcts::parallel::ParallelMCTS as MCTS;
+        use mcts::parallel::ParallelMCTSConfig as MCTSConfig;
+    } else {
+        use mcts::seq::SequentialMCTS as MCTS;
+        use mcts::seq::SequentialMCTSConfig as MCTSConfig;
+    }
+}
 
 struct GameSession {
     mcts: Option<MCTS>,
